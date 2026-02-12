@@ -99,6 +99,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             Dashboard
           </NavLink>
           <NavLink to="/users">Users</NavLink>
+          <NavLink to="/companies">Companies</NavLink>
           <NavLink to="/content">Content</NavLink>
           <NavLink to="/reports">Reports</NavLink>
           <NavLink to="/settings">Settings</NavLink>
@@ -210,6 +211,394 @@ function ContentPage() {
   );
 }
 
+type Company = {
+  id: string;
+  name: string;
+  domain: string;
+  street: string;
+  number: string;
+  city: string;
+  logoUrl?: string;
+};
+
+const IDB_NAME = "dg_admin";
+const IDB_STORE = "kv";
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(IDB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function idbGet(key: string): Promise<string | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const store = tx.objectStore(IDB_STORE);
+    const request = store.get(key);
+    request.onsuccess = () => resolve((request.result as string) ?? null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function idbSet(key: string, value: string): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    const store = tx.objectStore(IDB_STORE);
+    const request = store.put(value, key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function CompaniesPage() {
+  const STORAGE_KEY = "dg_admin_companies";
+  const MAX_LOGO_BYTES = 200 * 1024;
+  const [companies, setCompanies] = React.useState<Company[]>([]);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [showForm, setShowForm] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [domain, setDomain] = React.useState("");
+  const [street, setStreet] = React.useState("");
+  const [number, setNumber] = React.useState("");
+  const [city, setCity] = React.useState("");
+  const [logoUrl, setLogoUrl] = React.useState<string | undefined>(undefined);
+  const [logoError, setLogoError] = React.useState<string | null>(null);
+  const [storageError, setStorageError] = React.useState<string | null>(null);
+  const [storageStatus, setStorageStatus] = React.useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    const load = async () => {
+      let loadedFrom: string | null = null;
+      let stored: string | null = null;
+      try {
+        stored = window.localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          loadedFrom = "localStorage";
+        }
+      } catch {
+        // Ignore localStorage access errors.
+      }
+
+      if (!stored && "indexedDB" in window) {
+        try {
+          stored = await idbGet(STORAGE_KEY);
+          if (stored) {
+            loadedFrom = "IndexedDB";
+          }
+        } catch {
+          // Ignore IndexedDB errors.
+        }
+      }
+
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as Company[];
+          if (Array.isArray(parsed)) {
+            setCompanies(parsed);
+            setStorageStatus(null);
+          }
+        } catch {
+          // Ignore malformed data.
+        }
+      } else {
+        setStorageStatus(null);
+      }
+
+      setHasLoaded(true);
+    };
+
+    void load();
+  }, []);
+
+  React.useEffect(() => {
+    if (!hasLoaded) {
+      return;
+    }
+    const payload = JSON.stringify(companies);
+    let localOk = false;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, payload);
+      localOk = true;
+    } catch {
+      localOk = false;
+    }
+
+    if ("indexedDB" in window) {
+      void idbSet(STORAGE_KEY, payload)
+        .then(() => {
+          setStorageStatus(null);
+          if (storageError) {
+            setStorageError(null);
+          }
+        })
+        .catch(() => {
+          if (localOk) {
+            setStorageStatus(null);
+            setStorageError(null);
+          } else {
+            setStorageError("Could not save companies in this browser.");
+          }
+        });
+    } else if (localOk) {
+      setStorageStatus(null);
+      if (storageError) {
+        setStorageError(null);
+      }
+    } else {
+      setStorageError("Could not save companies in this browser.");
+    }
+  }, [companies]);
+
+  const resetForm = () => {
+    setName("");
+    setDomain("");
+    setStreet("");
+    setNumber("");
+    setCity("");
+    setLogoUrl(undefined);
+    setLogoError(null);
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setLogoUrl(undefined);
+      setLogoError(null);
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoUrl(undefined);
+      setLogoError("Logo must be under 200 KB.");
+      return;
+    }
+    setLogoError(null);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === "string") {
+        setLogoUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (
+      !name.trim() ||
+      !domain.trim() ||
+      !street.trim() ||
+      !number.trim() ||
+      !city.trim() ||
+      !logoUrl ||
+      logoError
+    ) {
+      return;
+    }
+
+    if (editingId) {
+      setCompanies((prev) =>
+        prev.map((company) =>
+          company.id === editingId
+            ? {
+                ...company,
+                name: name.trim(),
+                domain: domain.trim(),
+                street: street.trim(),
+                number: number.trim(),
+                city: city.trim(),
+                logoUrl
+              }
+            : company
+        )
+      );
+    } else {
+      const newCompany: Company = {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        domain: domain.trim(),
+        street: street.trim(),
+        number: number.trim(),
+        city: city.trim(),
+        logoUrl
+      };
+      setCompanies((prev) => [newCompany, ...prev]);
+    }
+
+    resetForm();
+  };
+
+  const handleEdit = (company: Company) => {
+    setEditingId(company.id);
+    setName(company.name);
+    setDomain(company.domain);
+    setStreet(company.street);
+    setNumber(company.number);
+    setCity(company.city);
+    setLogoUrl(company.logoUrl);
+    setShowForm(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setCompanies((prev) => prev.filter((company) => company.id !== id));
+    if (editingId === id) {
+      resetForm();
+    }
+  };
+
+  return (
+    <section className="panel">
+      <h2>Companies</h2>
+      <p className="muted">
+        Add and manage company profiles for accounts and partnerships.
+      </p>
+      {storageError && <div className="error">{storageError}</div>}
+      {!showForm && (
+        <button type="button" onClick={() => setShowForm(true)}>
+          New Company
+        </button>
+      )}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label className="field">
+            <span>Name</span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Acme Foods"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Domain</span>
+            <input
+              type="text"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="acmefoods.com"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Street</span>
+            <input
+              type="text"
+              value={street}
+              onChange={(e) => setStreet(e.target.value)}
+              placeholder="Main St"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Number</span>
+            <input
+              type="text"
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              placeholder="123"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>City</span>
+            <input
+              type="text"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Austin"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Logo</span>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleLogoChange}
+              required={!logoUrl}
+            />
+          </label>
+          {logoError && <div className="error">{logoError}</div>}
+          {logoUrl && (
+            <div className="logo-preview" aria-label="Logo preview">
+              <img src={logoUrl} alt="Company logo preview" />
+            </div>
+          )}
+          <div className="form-actions">
+            <button type="submit">{editingId ? "Update Company" : "Add Company"}</button>
+            <button type="button" className="ghost" onClick={resetForm}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      <div className="table">
+        <div className="row header">
+          <span>Name</span>
+          <span>Domain</span>
+          <span>Street</span>
+          <span>Number</span>
+          <span>City</span>
+          <span>Logo</span>
+          <span>Actions</span>
+        </div>
+        {companies.length === 0 && (
+          <div className="row">
+            <span>No companies yet.</span>
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+        {companies.map((company) => (
+          <div className="row" key={company.id}>
+            <span>{company.name}</span>
+            <span>{company.domain}</span>
+            <span>{company.street || "—"}</span>
+            <span>{company.number || "—"}</span>
+            <span>{company.city || "—"}</span>
+            <span>
+              {company.logoUrl ? (
+                <img
+                  className="logo-thumb"
+                  src={company.logoUrl}
+                  alt={`${company.name} logo`}
+                />
+              ) : (
+                "—"
+              )}
+            </span>
+            <span className="row-actions">
+              <button type="button" className="ghost" onClick={() => handleEdit(company)}>
+                Edit
+              </button>
+              <button type="button" className="ghost" onClick={() => handleDelete(company.id)}>
+                Delete
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ReportsPage() {
   return (
     <section className="panel">
@@ -269,6 +658,7 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/users" element={<UsersPage />} />
+                  <Route path="/companies" element={<CompaniesPage />} />
                   <Route path="/content" element={<ContentPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
