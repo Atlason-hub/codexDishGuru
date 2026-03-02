@@ -542,6 +542,7 @@ function ContentPage() {
 }
 
 function CompaniesPage() {
+  const { user, role } = useAuth();
   const MAX_LOGO_BYTES = 200 * 1024;
   const [companies, setCompanies] = React.useState<Company[]>([]);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -695,6 +696,11 @@ function CompaniesPage() {
       setDebugStatus("Blocked: missing required fields");
       return;
     }
+    if (!user) {
+      setFormError("You are not authenticated. Please log in again.");
+      setDebugStatus("Blocked: no auth session");
+      return;
+    }
     if (!cityId || !cityQuery.trim() || logoError) {
       if (!cityId) {
         setFormError("Select a city from the list.");
@@ -822,6 +828,10 @@ function CompaniesPage() {
       {formError && <div className="error">{formError}</div>}
       {debugStatus && <div className="muted">Debug: {debugStatus}</div>}
       {debugError && <div className="error">Debug error: {debugError}</div>}
+      <div className="muted">
+        Debug auth: {user ? `${user.email ?? "unknown"} (${user.id})` : "no session"}
+        {role ? ` • role: ${role}` : ""}
+      </div>
       {!showForm && (
         <button type="button" className="compact" onClick={() => setShowForm(true)}>
           New Company
