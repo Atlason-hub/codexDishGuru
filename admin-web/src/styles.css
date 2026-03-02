@@ -69,6 +69,15 @@ input {
   font-size: 0.95rem;
 }
 
+select {
+  background: #111118;
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -344,7 +353,7 @@ h1 {
 
 .row {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1.1fr 0.7fr 1fr 0.8fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 1rem;
   padding: 0.7rem 0.4rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);

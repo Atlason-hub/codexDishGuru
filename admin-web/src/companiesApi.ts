@@ -2,6 +2,7 @@ import type { CityOption, Company, CompanyRow } from "./companiesTypes";
 import { supabase } from "./supabaseClient";
 
 const TABLE = "companies";
+const BUCKET = "company-logos";
 
 export async function fetchCompanies(): Promise<Company[]> {
   const { data, error } = await supabase
@@ -65,6 +66,20 @@ export async function deleteCompany(id: string): Promise<Company[]> {
     throw new Error(error.message);
   }
   return fetchCompanies();
+}
+
+export async function uploadCompanyLogo(companyId: string, file: File): Promise<string> {
+  const fileExt = file.name.split(".").pop() || "png";
+  const path = `companies/${companyId}/logo.${fileExt}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    upsert: true,
+    contentType: file.type
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  return data.publicUrl;
 }
 
 export async function searchCities(query: string): Promise<CityOption[]> {

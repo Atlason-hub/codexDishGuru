@@ -8,20 +8,36 @@ import {
   useNavigate
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
-import { createCompany, deleteCompany, fetchCompanies, searchCities, updateCompany } from "./companiesApi";
+import {
+  createCompany,
+  deleteCompany,
+  fetchCompanies,
+  searchCities,
+  updateCompany,
+  uploadCompanyLogo
+} from "./companiesApi";
 import type { CityOption, Company } from "./companiesTypes";
+import { createUser, deleteUser, fetchUsers, updateUser } from "./usersApi";
+import type { AdminUser } from "./usersApi";
+import { createContent, deleteContent, fetchContent, updateContent } from "./contentApi";
+import type { ContentItem } from "./contentApi";
+import { createReport, deleteReport, fetchReports, updateReport } from "./reportsApi";
+import type { ReportItem } from "./reportsApi";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
-  if (!token) {
+  if (loading) {
+    return <div className="panel">Loading...</div>;
+  }
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   return <>{children}</>;
 }
 
 function LoginPage() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = React.useState("");
@@ -45,6 +61,15 @@ function LoginPage() {
       setLoading(false);
     }
   };
+
+  React.useEffect(() => {
+    if (user) {
+      const redirectTo =
+        (location.state as { from?: { pathname?: string } } | null)?.from
+          ?.pathname || "/";
+      navigate(redirectTo, { replace: true });
+    }
+  }, [location.state, navigate, user]);
 
   return (
     <div className="login-shell">
@@ -167,26 +192,172 @@ function DashboardPage() {
 }
 
 function UsersPage() {
+  const [users, setUsers] = React.useState<AdminUser[]>([]);
+  const [showForm, setShowForm] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [fullName, setFullName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [role, setRole] = React.useState<"admin" | "viewer">("viewer");
+  const [status, setStatus] = React.useState<"active" | "disabled">("active");
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await fetchUsers();
+        setUsers(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load users.");
+      }
+    };
+    void load();
+  }, []);
+
+  const resetForm = () => {
+    setFullName("");
+    setEmail("");
+    setRole("viewer");
+    setStatus("active");
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!fullName.trim() || !email.trim()) {
+      return;
+    }
+    try {
+      if (editingId) {
+        const next = await updateUser(editingId, {
+          full_name: fullName.trim(),
+          email: email.trim(),
+          role,
+          status
+        });
+        setUsers(next);
+      } else {
+        const newUser = {
+          id: crypto.randomUUID(),
+          full_name: fullName.trim(),
+          email: email.trim(),
+          role,
+          status
+        };
+        const next = await createUser(newUser);
+        setUsers(next);
+      }
+      setError(null);
+      resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save user.");
+    }
+  };
+
+  const handleEdit = (user: AdminUser) => {
+    setEditingId(user.id);
+    setFullName(user.full_name);
+    setEmail(user.email);
+    setRole(user.role);
+    setStatus(user.status);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const next = await deleteUser(id);
+      setUsers(next);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete user.");
+    }
+  };
+
   return (
     <section className="panel">
       <h2>Users</h2>
-      <p className="muted">List, suspend, or promote users once the API is ready.</p>
+      <p className="muted">Create and manage admin users.</p>
+      {error && <div className="error">{error}</div>}
+      {!showForm && (
+        <button type="button" onClick={() => setShowForm(true)}>
+          New User
+        </button>
+      )}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label className="field">
+            <span>Full name</span>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Avery James"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="avery@dishguru.com"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Role</span>
+            <select value={role} onChange={(e) => setRole(e.target.value as any)}>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </label>
+          <div className="form-actions">
+            <button type="submit">{editingId ? "Update User" : "Add User"}</button>
+            <button type="button" className="ghost" onClick={resetForm}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
       <div className="table">
         <div className="row header">
           <span>Name</span>
+          <span>Email</span>
           <span>Role</span>
           <span>Status</span>
-          <span>Last active</span>
+          <span>Actions</span>
         </div>
-        {[
-          ["Avery James", "Moderator", "Active", "2h ago"],
-          ["Sam Lee", "Admin", "Active", "10m ago"],
-          ["Riley Chen", "User", "Flagged", "1d ago"]
-        ].map((row) => (
-          <div className="row" key={row[0]}>
-            {row.map((cell) => (
-              <span key={cell}>{cell}</span>
-            ))}
+        {users.length === 0 && (
+          <div className="row">
+            <span>No users yet.</span>
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+        {users.map((user) => (
+          <div className="row" key={user.id}>
+            <span>{user.full_name}</span>
+            <span>{user.email}</span>
+            <span>{user.role}</span>
+            <span>{user.status}</span>
+            <span className="row-actions">
+              <button type="button" className="ghost" onClick={() => handleEdit(user)}>
+                Edit
+              </button>
+              <button type="button" className="ghost" onClick={() => handleDelete(user.id)}>
+                Delete
+              </button>
+            </span>
           </div>
         ))}
       </div>
@@ -195,19 +366,176 @@ function UsersPage() {
 }
 
 function ContentPage() {
+  const [items, setItems] = React.useState<ContentItem[]>([]);
+  const [showForm, setShowForm] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [title, setTitle] = React.useState("");
+  const [type, setType] = React.useState<ContentItem["type"]>("post");
+  const [status, setStatus] = React.useState<ContentItem["status"]>("draft");
+  const [author, setAuthor] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await fetchContent();
+        setItems(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load content.");
+      }
+    };
+    void load();
+  }, []);
+
+  const resetForm = () => {
+    setTitle("");
+    setType("post");
+    setStatus("draft");
+    setAuthor("");
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || !author.trim()) {
+      return;
+    }
+    try {
+      if (editingId) {
+        const next = await updateContent(editingId, {
+          title: title.trim(),
+          type,
+          status,
+          author: author.trim()
+        });
+        setItems(next);
+      } else {
+        const newItem: ContentItem = {
+          id: crypto.randomUUID(),
+          title: title.trim(),
+          type,
+          status,
+          author: author.trim()
+        };
+        const next = await createContent(newItem);
+        setItems(next);
+      }
+      setError(null);
+      resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save content.");
+    }
+  };
+
+  const handleEdit = (item: ContentItem) => {
+    setEditingId(item.id);
+    setTitle(item.title);
+    setType(item.type);
+    setStatus(item.status);
+    setAuthor(item.author);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const next = await deleteContent(id);
+      setItems(next);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete content.");
+    }
+  };
+
   return (
     <section className="panel">
       <h2>Content</h2>
-      <p className="muted">Approve, archive, or feature content here.</p>
-      <div className="pill-grid">
-        <div>
-          <div className="pill">24 pending approvals</div>
-          <div className="pill ghost">7 flagged items</div>
+      <p className="muted">Manage curated content across the platform.</p>
+      {error && <div className="error">{error}</div>}
+      {!showForm && (
+        <button type="button" onClick={() => setShowForm(true)}>
+          New Content
+        </button>
+      )}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label className="field">
+            <span>Title</span>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Summer Menu Highlights"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Author</span>
+            <input
+              type="text"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder="Chef Lina"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Type</span>
+            <select value={type} onChange={(e) => setType(e.target.value as any)}>
+              <option value="post">Post</option>
+              <option value="review">Review</option>
+              <option value="recipe">Recipe</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+          <div className="form-actions">
+            <button type="submit">{editingId ? "Update Content" : "Add Content"}</button>
+            <button type="button" className="ghost" onClick={resetForm}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      <div className="table">
+        <div className="row header">
+          <span>Title</span>
+          <span>Type</span>
+          <span>Status</span>
+          <span>Author</span>
+          <span>Actions</span>
         </div>
-        <div>
-          <div className="pill">3 scheduled promotions</div>
-          <div className="pill ghost">8 drafts in queue</div>
-        </div>
+        {items.length === 0 && (
+          <div className="row">
+            <span>No content yet.</span>
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+        {items.map((item) => (
+          <div className="row" key={item.id}>
+            <span>{item.title}</span>
+            <span>{item.type}</span>
+            <span>{item.status}</span>
+            <span>{item.author}</span>
+            <span className="row-actions">
+              <button type="button" className="ghost" onClick={() => handleEdit(item)}>
+                Edit
+              </button>
+              <button type="button" className="ghost" onClick={() => handleDelete(item.id)}>
+                Delete
+              </button>
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -225,8 +553,8 @@ function CompaniesPage() {
   const [cityQuery, setCityQuery] = React.useState("");
   const [cityId, setCityId] = React.useState<number | null>(null);
   const [logoUrl, setLogoUrl] = React.useState<string | undefined>(undefined);
+  const [logoFile, setLogoFile] = React.useState<File | null>(null);
   const [logoError, setLogoError] = React.useState<string | null>(null);
-  const [hasLoaded, setHasLoaded] = React.useState(false);
   const [apiError, setApiError] = React.useState<string | null>(null);
   const [cityOptions, setCityOptions] = React.useState<CityOption[]>([]);
   const [cityLoading, setCityLoading] = React.useState(false);
@@ -244,18 +572,11 @@ function CompaniesPage() {
       } catch (err) {
         setApiError(err instanceof Error ? err.message : "Failed to load companies.");
       }
-      setHasLoaded(true);
     };
 
     void load();
   }, []);
 
-  React.useEffect(() => {
-    if (!hasLoaded) {
-      return;
-    }
-    // No-op: persistence is handled by the local admin API server.
-  }, [companies]);
 
   const resetForm = () => {
     setName("");
@@ -265,6 +586,7 @@ function CompaniesPage() {
     setCityQuery("");
     setCityId(null);
     setLogoUrl(undefined);
+    setLogoFile(null);
     setLogoError(null);
     setEditingId(null);
     setShowForm(false);
@@ -320,15 +642,18 @@ function CompaniesPage() {
     const file = event.target.files?.[0];
     if (!file) {
       setLogoUrl(undefined);
+      setLogoFile(null);
       setLogoError(null);
       return;
     }
     if (file.size > MAX_LOGO_BYTES) {
       setLogoUrl(undefined);
+      setLogoFile(null);
       setLogoError("Logo must be under 200 KB.");
       return;
     }
     setLogoError(null);
+    setLogoFile(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === "string") {
@@ -348,6 +673,17 @@ function CompaniesPage() {
       return;
     }
 
+    let finalLogoUrl = logoUrl;
+    const newId = editingId ?? crypto.randomUUID();
+    if (logoFile) {
+      try {
+        finalLogoUrl = await uploadCompanyLogo(newId, logoFile);
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : "Logo upload failed.");
+        return;
+      }
+    }
+
     if (editingId) {
       const updatedCompany: Company = {
         id: editingId,
@@ -357,7 +693,7 @@ function CompaniesPage() {
         number: number.trim(),
         cityId,
         cityName: cityQuery.trim(),
-        logoUrl
+        logoUrl: finalLogoUrl
       };
       try {
         const next = await updateCompany(editingId, updatedCompany);
@@ -369,14 +705,14 @@ function CompaniesPage() {
       }
     } else {
       const newCompany: Company = {
-        id: crypto.randomUUID(),
+        id: newId,
         name: name.trim(),
         domain: domain.trim(),
         street: street.trim(),
         number: number.trim(),
         cityId,
         cityName: cityQuery.trim(),
-        logoUrl
+        logoUrl: finalLogoUrl
       };
       try {
         const next = await createCompany(newCompany);
@@ -605,24 +941,178 @@ function CompaniesPage() {
 }
 
 function ReportsPage() {
+  const [reports, setReports] = React.useState<ReportItem[]>([]);
+  const [showForm, setShowForm] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [title, setTitle] = React.useState("");
+  const [category, setCategory] = React.useState<ReportItem["category"]>("abuse");
+  const [status, setStatus] = React.useState<ReportItem["status"]>("open");
+  const [createdBy, setCreatedBy] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await fetchReports();
+        setReports(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load reports.");
+      }
+    };
+    void load();
+  }, []);
+
+  const resetForm = () => {
+    setTitle("");
+    setCategory("abuse");
+    setStatus("open");
+    setCreatedBy("");
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || !createdBy.trim()) {
+      return;
+    }
+    try {
+      if (editingId) {
+        const next = await updateReport(editingId, {
+          title: title.trim(),
+          category,
+          status,
+          created_by: createdBy.trim()
+        });
+        setReports(next);
+      } else {
+        const newReport: ReportItem = {
+          id: crypto.randomUUID(),
+          title: title.trim(),
+          category,
+          status,
+          created_by: createdBy.trim()
+        };
+        const next = await createReport(newReport);
+        setReports(next);
+      }
+      setError(null);
+      resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save report.");
+    }
+  };
+
+  const handleEdit = (report: ReportItem) => {
+    setEditingId(report.id);
+    setTitle(report.title);
+    setCategory(report.category);
+    setStatus(report.status);
+    setCreatedBy(report.created_by);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const next = await deleteReport(id);
+      setReports(next);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete report.");
+    }
+  };
+
   return (
     <section className="panel">
       <h2>Reports</h2>
-      <p className="muted">Monitor abuse, safety, and performance incidents.</p>
-      <ul className="report-list">
-        <li>
-          <strong>Abuse report</strong>
-          <span>Awaiting review • 12m ago</span>
-        </li>
-        <li>
-          <strong>Performance alert</strong>
-          <span>API latency spike • 3h ago</span>
-        </li>
-        <li>
-          <strong>Content dispute</strong>
-          <span>User appealed decision • 1d ago</span>
-        </li>
-      </ul>
+      <p className="muted">Track safety, performance, and content issues.</p>
+      {error && <div className="error">{error}</div>}
+      {!showForm && (
+        <button type="button" onClick={() => setShowForm(true)}>
+          New Report
+        </button>
+      )}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label className="field">
+            <span>Title</span>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="API latency spike"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Created by</span>
+            <input
+              type="text"
+              value={createdBy}
+              onChange={(e) => setCreatedBy(e.target.value)}
+              placeholder="System"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Category</span>
+            <select value={category} onChange={(e) => setCategory(e.target.value as any)}>
+              <option value="abuse">Abuse</option>
+              <option value="performance">Performance</option>
+              <option value="content">Content</option>
+              <option value="user">User</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+              <option value="open">Open</option>
+              <option value="in_review">In review</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </label>
+          <div className="form-actions">
+            <button type="submit">{editingId ? "Update Report" : "Add Report"}</button>
+            <button type="button" className="ghost" onClick={resetForm}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      <div className="table">
+        <div className="row header">
+          <span>Title</span>
+          <span>Category</span>
+          <span>Status</span>
+          <span>Created by</span>
+          <span>Actions</span>
+        </div>
+        {reports.length === 0 && (
+          <div className="row">
+            <span>No reports yet.</span>
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+        {reports.map((report) => (
+          <div className="row" key={report.id}>
+            <span>{report.title}</span>
+            <span>{report.category}</span>
+            <span>{report.status}</span>
+            <span>{report.created_by}</span>
+            <span className="row-actions">
+              <button type="button" className="ghost" onClick={() => handleEdit(report)}>
+                Edit
+              </button>
+              <button type="button" className="ghost" onClick={() => handleDelete(report.id)}>
+                Delete
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
