@@ -542,7 +542,7 @@ function ContentPage() {
 }
 
 function CompaniesPage() {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const MAX_LOGO_BYTES = 200 * 1024;
   const [companies, setCompanies] = React.useState<Company[]>([]);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -713,8 +713,7 @@ function CompaniesPage() {
           uploadCompanyLogo(newId, logoFile),
           "Logo upload"
         );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Logo upload failed.";
+      } catch (_err) {
         setApiError("Logo upload failed or timed out. Saving without logo.");
         // Fall back to saving without logo.
         finalLogoUrl = undefined;
