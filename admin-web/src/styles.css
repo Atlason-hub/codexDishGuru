@@ -59,6 +59,23 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(20, 20, 20, 0.25);
+  border-top-color: #141414;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 button.ghost {
   background: transparent;
   color: var(--text);

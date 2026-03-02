@@ -565,8 +565,6 @@ function CompaniesPage() {
   const cityRef = React.useRef<HTMLDivElement | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [debugStatus, setDebugStatus] = React.useState<string | null>(null);
-  const [debugError, setDebugError] = React.useState<string | null>(null);
 
   const withTimeout = async <T,>(promise: Promise<T>, label: string, ms = 12000) => {
     let timeoutId: number | undefined;
@@ -689,31 +687,24 @@ function CompaniesPage() {
     event.preventDefault();
     setSubmitAttempted(true);
     setFormError(null);
-    setDebugError(null);
-    setDebugStatus("Submit clicked");
     if (!name.trim() || !domain.trim() || !street.trim() || !number.trim()) {
       setFormError("Please fill all required fields.");
-      setDebugStatus("Blocked: missing required fields");
       return;
     }
     if (!user) {
       setFormError("You are not authenticated. Please log in again.");
-      setDebugStatus("Blocked: no auth session");
       return;
     }
     if (!cityId || !cityQuery.trim() || logoError) {
       if (!cityId) {
         setFormError("Select a city from the list.");
-        setDebugStatus("Blocked: city not selected");
       } else if (logoError) {
         setFormError(logoError);
-        setDebugStatus("Blocked: logo error");
       }
       return;
     }
 
     setIsSubmitting(true);
-    setDebugStatus("Uploading logo / saving...");
     let finalLogoUrl = logoUrl;
     const newId = editingId ?? crypto.randomUUID();
     if (logoFile) {
@@ -722,12 +713,9 @@ function CompaniesPage() {
           uploadCompanyLogo(newId, logoFile),
           "Logo upload"
         );
-        setDebugStatus("Logo uploaded");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Logo upload failed.";
         setApiError("Logo upload failed or timed out. Saving without logo.");
-        setDebugError(msg);
-        setDebugStatus("Logo upload failed, skipping logo");
         // Fall back to saving without logo.
         finalLogoUrl = undefined;
       }
@@ -751,12 +739,9 @@ function CompaniesPage() {
         );
         setCompanies(next);
         setApiError(null);
-        setDebugStatus("Company updated");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to update company.";
         setApiError(msg);
-        setDebugError(msg);
-        setDebugStatus("Update failed");
         setIsSubmitting(false);
         return;
       }
@@ -775,12 +760,9 @@ function CompaniesPage() {
         const next = await withTimeout(createCompany(newCompany), "Create company");
         setCompanies(next);
         setApiError(null);
-        setDebugStatus("Company created");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to create company.";
         setApiError(msg);
-        setDebugError(msg);
-        setDebugStatus("Create failed");
         setIsSubmitting(false);
         return;
       }
@@ -826,12 +808,6 @@ function CompaniesPage() {
       </p>
       {apiError && <div className="error">{apiError}</div>}
       {formError && <div className="error">{formError}</div>}
-      {debugStatus && <div className="muted">Debug: {debugStatus}</div>}
-      {debugError && <div className="error">Debug error: {debugError}</div>}
-      <div className="muted">
-        Debug auth: {user ? `${user.email ?? "unknown"} (${user.id})` : "no session"}
-        {role ? ` • role: ${role}` : ""}
-      </div>
       {!showForm && (
         <button type="button" className="compact" onClick={() => setShowForm(true)}>
           New Company
@@ -949,6 +925,7 @@ function CompaniesPage() {
           )}
           <div className="form-actions">
             <button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <span className="spinner" aria-hidden="true" />}
               {isSubmitting
                 ? "Saving..."
                 : editingId
