@@ -563,6 +563,7 @@ function CompaniesPage() {
   const [isCityOpen, setIsCityOpen] = React.useState(false);
   const cityRef = React.useRef<HTMLDivElement | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   React.useEffect(() => {
     const load = async () => {
@@ -684,6 +685,7 @@ function CompaniesPage() {
       return;
     }
 
+    setIsSubmitting(true);
     let finalLogoUrl = logoUrl;
     const newId = editingId ?? crypto.randomUUID();
     if (logoFile) {
@@ -691,6 +693,7 @@ function CompaniesPage() {
         finalLogoUrl = await uploadCompanyLogo(newId, logoFile);
       } catch (err) {
         setApiError(err instanceof Error ? err.message : "Logo upload failed.");
+        setIsSubmitting(false);
         return;
       }
     }
@@ -712,6 +715,7 @@ function CompaniesPage() {
         setApiError(null);
       } catch (err) {
         setApiError(err instanceof Error ? err.message : "Failed to update company.");
+        setIsSubmitting(false);
         return;
       }
     } else {
@@ -731,11 +735,13 @@ function CompaniesPage() {
         setApiError(null);
       } catch (err) {
         setApiError(err instanceof Error ? err.message : "Failed to create company.");
+        setIsSubmitting(false);
         return;
       }
     }
 
     resetForm();
+    setIsSubmitting(false);
   };
 
   const handleEdit = (company: Company) => {
@@ -891,7 +897,13 @@ function CompaniesPage() {
             </div>
           )}
           <div className="form-actions">
-            <button type="submit">{editingId ? "Update Company" : "Add Company"}</button>
+            <button type="submit" disabled={isSubmitting}>
+              {isSubmitting
+                ? "Saving..."
+                : editingId
+                ? "Update Company"
+                : "Add Company"}
+            </button>
             <button type="button" className="ghost" onClick={resetForm}>
               Cancel
             </button>

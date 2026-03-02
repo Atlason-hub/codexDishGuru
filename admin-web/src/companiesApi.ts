@@ -70,9 +70,10 @@ export async function deleteCompany(id: string): Promise<Company[]> {
 
 export async function uploadCompanyLogo(companyId: string, file: File): Promise<string> {
   const fileExt = file.name.split(".").pop() || "png";
-  const path = `companies/${companyId}/logo.${fileExt}`;
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const path = `companies/${companyId}/${unique}.${fileExt}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    upsert: true,
+    upsert: false,
     contentType: file.type
   });
   if (error) {
