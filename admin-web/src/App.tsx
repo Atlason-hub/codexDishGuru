@@ -564,6 +564,23 @@ function CompaniesPage() {
   const cityRef = React.useRef<HTMLDivElement | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [debugStatus, setDebugStatus] = React.useState<string | null>(null);
+
+  const withTimeout = async <T,>(promise: Promise<T>, label: string, ms = 12000) => {
+    let timeoutId: number | undefined;
+    const timeout = new Promise<T>((_resolve, reject) => {
+      timeoutId = window.setTimeout(() => {
+        reject(new Error(`${label} timed out. Check Supabase settings/RLS.`));
+      }, ms);
+    });
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+  };
 
   React.useEffect(() => {
     const load = async () => {
@@ -670,29 +687,40 @@ function CompaniesPage() {
     event.preventDefault();
     setSubmitAttempted(true);
     setFormError(null);
+    setDebugStatus("Submit clicked");
     if (!name.trim() || !domain.trim() || !street.trim() || !number.trim()) {
       setFormError("Please fill all required fields.");
+      setDebugStatus("Blocked: missing required fields");
       return;
     }
     if (!cityId || !cityQuery.trim() || !logoUrl || logoError) {
       if (!cityId) {
         setFormError("Select a city from the list.");
+        setDebugStatus("Blocked: city not selected");
       } else if (!logoUrl) {
         setFormError("Please upload a company logo.");
+        setDebugStatus("Blocked: logo missing");
       } else if (logoError) {
         setFormError(logoError);
+        setDebugStatus("Blocked: logo error");
       }
       return;
     }
 
     setIsSubmitting(true);
+    setDebugStatus("Uploading logo / saving...");
     let finalLogoUrl = logoUrl;
     const newId = editingId ?? crypto.randomUUID();
     if (logoFile) {
       try {
-        finalLogoUrl = await uploadCompanyLogo(newId, logoFile);
+        finalLogoUrl = await withTimeout(
+          uploadCompanyLogo(newId, logoFile),
+          "Logo upload"
+        );
+        setDebugStatus("Logo uploaded");
       } catch (err) {
         setApiError(err instanceof Error ? err.message : "Logo upload failed.");
+        setDebugStatus("Logo upload failed");
         setIsSubmitting(false);
         return;
       }
@@ -710,11 +738,16 @@ function CompaniesPage() {
         logoUrl: finalLogoUrl
       };
       try {
-        const next = await updateCompany(editingId, updatedCompany);
+        const next = await withTimeout(
+          updateCompany(editingId, updatedCompany),
+          "Update company"
+        );
         setCompanies(next);
         setApiError(null);
+        setDebugStatus("Company updated");
       } catch (err) {
         setApiError(err instanceof Error ? err.message : "Failed to update company.");
+        setDebugStatus("Update failed");
         setIsSubmitting(false);
         return;
       }
@@ -730,11 +763,13 @@ function CompaniesPage() {
         logoUrl: finalLogoUrl
       };
       try {
-        const next = await createCompany(newCompany);
+        const next = await withTimeout(createCompany(newCompany), "Create company");
         setCompanies(next);
         setApiError(null);
+        setDebugStatus("Company created");
       } catch (err) {
         setApiError(err instanceof Error ? err.message : "Failed to create company.");
+        setDebugStatus("Create failed");
         setIsSubmitting(false);
         return;
       }
@@ -780,6 +815,7 @@ function CompaniesPage() {
       </p>
       {apiError && <div className="error">{apiError}</div>}
       {formError && <div className="error">{formError}</div>}
+      {debugStatus && <div className="muted">Debug: {debugStatus}</div>}
       {!showForm && (
         <button type="button" className="compact" onClick={() => setShowForm(true)}>
           New Company
