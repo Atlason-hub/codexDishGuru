@@ -4,13 +4,13 @@
 
 1) Create a Supabase project.
 2) Create the `companies` table using the SQL below.
-3) Copy your project URL and anon key into `.env`.
+3) Copy your project URL and publishable (public) key into `.env`.
 
 ### .env
 
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SUPABASE_ANON_KEY=your-publishable-key
 ```
 
 ### SQL schema
@@ -55,4 +55,16 @@ Open the URL printed by Vite (typically `http://localhost:5174`).
 
 ## City autocomplete
 
-City search is proxied through Vite at `/cities` to avoid CORS during local dev.
+City search is proxied through Vite at `/api/cities` to avoid CORS during local dev.
+
+## Deploy to Vercel (free)
+
+1) Push this repo to GitHub.
+2) Create a new Vercel project and import the repo.
+3) Set **Root Directory** to `admin-web`.
+4) Add environment variables in Vercel:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+5) Deploy.
+
+The `/api/cities` serverless function will proxy 10bis for production.

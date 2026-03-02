@@ -6,11 +6,11 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      "/cities": {
+      "/api/cities": {
         target: "https://www.10bis.co.il",
         changeOrigin: true,
         secure: true,
-        rewrite: (path) => path.replace(/^\/cities/, "/api/CityNameAutoComplete")
+        rewrite: (path) => path.replace(/^\/api\/cities/, "/api/CityNameAutoComplete")
       }
     }
   }

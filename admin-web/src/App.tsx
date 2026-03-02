@@ -232,6 +232,8 @@ function CompaniesPage() {
   const [cityLoading, setCityLoading] = React.useState(false);
   const [cityApiError, setCityApiError] = React.useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = React.useState(false);
+  const [isCityOpen, setIsCityOpen] = React.useState(false);
+  const cityRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     const load = async () => {
@@ -267,14 +269,30 @@ function CompaniesPage() {
     setEditingId(null);
     setShowForm(false);
     setSubmitAttempted(false);
+    setIsCityOpen(false);
   };
 
   React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!cityRef.current) {
+        return;
+      }
+      if (!cityRef.current.contains(event.target as Node)) {
+        setIsCityOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  React.useEffect(() => {
     if (!showForm) {
+      setIsCityOpen(false);
       return;
     }
     if (!cityQuery.trim()) {
       setCityOptions([]);
+      setIsCityOpen(false);
       return;
     }
 
@@ -457,22 +475,29 @@ function CompaniesPage() {
           </label>
           <label className="field">
             <span>City</span>
-            <div className="autocomplete">
+            <div className="autocomplete" ref={cityRef}>
               <input
                 type="text"
                 value={cityQuery}
                 onChange={(e) => {
                   setCityQuery(e.target.value);
                   setCityId(null);
+                  setIsCityOpen(true);
                 }}
                 onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setIsCityOpen(false);
+                    return;
+                  }
                   if (e.key === "Enter" && cityOptions.length > 0) {
                     e.preventDefault();
                     setCityQuery(cityOptions[0].Name);
                     setCityId(cityOptions[0].Id);
                     setCityOptions([]);
+                    setIsCityOpen(false);
                   }
                 }}
+                onFocus={() => setIsCityOpen(true)}
                 placeholder="Start typing a city"
                 required
               />
@@ -481,7 +506,7 @@ function CompaniesPage() {
               {submitAttempted && !cityId && (
                 <div className="error">Select a city from the list.</div>
               )}
-              {cityOptions.length > 0 && (
+              {isCityOpen && cityOptions.length > 0 && (
                 <div className="dropdown">
                   {cityOptions.map((city) => (
                     <button
@@ -492,6 +517,7 @@ function CompaniesPage() {
                         setCityQuery(city.Name);
                         setCityId(city.Id);
                         setCityOptions([]);
+                        setIsCityOpen(false);
                       }}
                     >
                       {city.Name}

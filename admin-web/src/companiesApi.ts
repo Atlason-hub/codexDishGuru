@@ -69,7 +69,7 @@ export async function deleteCompany(id: string): Promise<Company[]> {
 
 export async function searchCities(query: string): Promise<CityOption[]> {
   const response = await fetch(
-    `/cities?` +
+    `/api/cities?` +
       new URLSearchParams({
         q: query,
         websiteID: "10bis",
