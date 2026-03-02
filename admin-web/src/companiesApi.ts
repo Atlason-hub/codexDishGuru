@@ -1,7 +1,6 @@
 import type { CityOption, Company, CompanyRow } from "./companiesTypes";
 import { supabase } from "./supabaseClient";
 
-const TABLE = "companies";
 const BUCKET = "company-logos";
 
 export async function fetchCompanies(): Promise<Company[]> {
