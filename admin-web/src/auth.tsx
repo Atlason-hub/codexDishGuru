@@ -33,15 +33,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     let mounted = true;
-    const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
-      if (mounted && session?.user) {
-        setUser({ id: session.user.id, email: session.user.email ?? null });
-        setRole(await fetchRole(session.user.id));
-      }
+    const safetyTimeout = window.setTimeout(() => {
       if (mounted) {
         setLoading(false);
+      }
+    }, 3000);
+    const init = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+        if (mounted && session?.user) {
+          setUser({ id: session.user.id, email: session.user.email ?? null });
+          setRole(await fetchRole(session.user.id));
+        }
+      } catch {
+        // Ignore session errors and allow app to render login.
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -56,11 +66,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
           setRole(null);
         }
+        if (mounted) {
+          setLoading(false);
+        }
       }
     );
 
     return () => {
       mounted = false;
+      window.clearTimeout(safetyTimeout);
       subscription.subscription.unsubscribe();
     };
   }, []);
