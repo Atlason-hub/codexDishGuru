@@ -562,6 +562,7 @@ function CompaniesPage() {
   const [submitAttempted, setSubmitAttempted] = React.useState(false);
   const [isCityOpen, setIsCityOpen] = React.useState(false);
   const cityRef = React.useRef<HTMLDivElement | null>(null);
+  const [formError, setFormError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const load = async () => {
@@ -592,6 +593,7 @@ function CompaniesPage() {
     setShowForm(false);
     setSubmitAttempted(false);
     setIsCityOpen(false);
+    setFormError(null);
   };
 
   React.useEffect(() => {
@@ -666,10 +668,19 @@ function CompaniesPage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitAttempted(true);
+    setFormError(null);
     if (!name.trim() || !domain.trim() || !street.trim() || !number.trim()) {
+      setFormError("Please fill all required fields.");
       return;
     }
     if (!cityId || !cityQuery.trim() || !logoUrl || logoError) {
+      if (!cityId) {
+        setFormError("Select a city from the list.");
+      } else if (!logoUrl) {
+        setFormError("Please upload a company logo.");
+      } else if (logoError) {
+        setFormError(logoError);
+      }
       return;
     }
 
@@ -762,6 +773,7 @@ function CompaniesPage() {
         Add and manage company profiles for accounts and partnerships.
       </p>
       {apiError && <div className="error">{apiError}</div>}
+      {formError && <div className="error">{formError}</div>}
       {!showForm && (
         <button type="button" className="compact" onClick={() => setShowForm(true)}>
           New Company
