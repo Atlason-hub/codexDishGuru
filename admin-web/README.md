@@ -6,8 +6,9 @@
 2) Run the SQL below to create tables + policies.
 3) Create a Storage bucket named `company-logos` (public).
 4) Copy your project URL and publishable (public) key into `.env`.
+5) Add `SUPABASE_SERVICE_ROLE_KEY` in Vercel (server-side) for secure API access.
 
-### .env
+### .env (local dev)
 
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
@@ -168,6 +169,7 @@ City search is proxied through Vite at `/api/cities` to avoid CORS during local 
 4) Add environment variables in Vercel:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (server-only)
 5) Deploy.
 
-The `/api/cities` serverless function will proxy 10bis for production.
+The `/api/cities` and `/api/companies` serverless functions will proxy 10bis and Supabase for production.
