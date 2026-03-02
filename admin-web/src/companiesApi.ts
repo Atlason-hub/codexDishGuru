@@ -81,16 +81,29 @@ export async function deleteCompany(id: string): Promise<Company[]> {
 export async function uploadCompanyLogo(companyId: string, file: File): Promise<string> {
   const fileExt = file.name.split(".").pop() || "png";
   const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const path = `companies/${companyId}/${unique}.${fileExt}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    upsert: false,
-    contentType: file.type
+  const filename = `${unique}.${fileExt}`;
+  const buffer = await file.arrayBuffer();
+  const dataBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+
+  const response = await fetch(`/api/logo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      companyId,
+      filename,
+      contentType: file.type,
+      dataBase64
+    })
   });
-  if (error) {
-    throw new Error(error.message);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Logo upload failed.");
   }
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  const payload = (await response.json()) as { url?: string };
+  if (!payload.url) {
+    throw new Error("Logo upload failed.");
+  }
+  return payload.url;
 }
 
 export async function searchCities(query: string): Promise<CityOption[]> {

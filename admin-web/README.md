@@ -172,4 +172,4 @@ City search is proxied through Vite at `/api/cities` to avoid CORS during local 
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only)
 5) Deploy.
 
-The `/api/cities` and `/api/companies` serverless functions will proxy 10bis and Supabase for production.
+The `/api/cities`, `/api/companies`, and `/api/logo` serverless functions proxy 10bis and Supabase for production (including logo uploads).
