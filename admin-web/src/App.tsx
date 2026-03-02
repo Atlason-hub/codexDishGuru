@@ -719,10 +719,12 @@ function CompaniesPage() {
         );
         setDebugStatus("Logo uploaded");
       } catch (err) {
-        setApiError(err instanceof Error ? err.message : "Logo upload failed.");
-        setDebugStatus("Logo upload failed");
-        setIsSubmitting(false);
-        return;
+        setApiError(
+          "Logo upload failed or timed out. Saving company with inline logo data."
+        );
+        setDebugStatus("Logo upload failed, using inline logo");
+        // Fall back to storing the data URL directly.
+        finalLogoUrl = logoUrl;
       }
     }
 
