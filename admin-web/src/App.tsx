@@ -695,13 +695,10 @@ function CompaniesPage() {
       setDebugStatus("Blocked: missing required fields");
       return;
     }
-    if (!cityId || !cityQuery.trim() || !logoUrl || logoError) {
+    if (!cityId || !cityQuery.trim() || logoError) {
       if (!cityId) {
         setFormError("Select a city from the list.");
         setDebugStatus("Blocked: city not selected");
-      } else if (!logoUrl) {
-        setFormError("Please upload a company logo.");
-        setDebugStatus("Blocked: logo missing");
       } else if (logoError) {
         setFormError(logoError);
         setDebugStatus("Blocked: logo error");
@@ -722,13 +719,11 @@ function CompaniesPage() {
         setDebugStatus("Logo uploaded");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Logo upload failed.";
-        setApiError(
-          "Logo upload failed or timed out. Saving company with inline logo data."
-        );
+        setApiError("Logo upload failed or timed out. Saving without logo.");
         setDebugError(msg);
-        setDebugStatus("Logo upload failed, using inline logo");
-        // Fall back to storing the data URL directly.
-        finalLogoUrl = logoUrl;
+        setDebugStatus("Logo upload failed, skipping logo");
+        // Fall back to saving without logo.
+        finalLogoUrl = undefined;
       }
     }
 
@@ -934,7 +929,6 @@ function CompaniesPage() {
               type="file"
               accept="image/*"
               onChange={handleLogoChange}
-              required={!logoUrl}
             />
           </label>
           {logoError && <div className="error">{logoError}</div>}
