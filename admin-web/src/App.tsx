@@ -763,7 +763,7 @@ function CompaniesPage() {
       </p>
       {apiError && <div className="error">{apiError}</div>}
       {!showForm && (
-        <button type="button" onClick={() => setShowForm(true)}>
+        <button type="button" className="compact" onClick={() => setShowForm(true)}>
           New Company
         </button>
       )}

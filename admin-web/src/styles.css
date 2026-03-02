@@ -44,6 +44,12 @@ button {
   box-shadow: 0 10px 20px rgba(248, 185, 10, 0.25);
 }
 
+button.compact {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  box-shadow: 0 6px 12px rgba(248, 185, 10, 0.18);
+}
+
 button:hover {
   transform: translateY(-1px);
 }
