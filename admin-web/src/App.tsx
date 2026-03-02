@@ -565,6 +565,7 @@ function CompaniesPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [debugStatus, setDebugStatus] = React.useState<string | null>(null);
+  const [debugError, setDebugError] = React.useState<string | null>(null);
 
   const withTimeout = async <T,>(promise: Promise<T>, label: string, ms = 12000) => {
     let timeoutId: number | undefined;
@@ -687,6 +688,7 @@ function CompaniesPage() {
     event.preventDefault();
     setSubmitAttempted(true);
     setFormError(null);
+    setDebugError(null);
     setDebugStatus("Submit clicked");
     if (!name.trim() || !domain.trim() || !street.trim() || !number.trim()) {
       setFormError("Please fill all required fields.");
@@ -719,9 +721,11 @@ function CompaniesPage() {
         );
         setDebugStatus("Logo uploaded");
       } catch (err) {
+        const msg = err instanceof Error ? err.message : "Logo upload failed.";
         setApiError(
           "Logo upload failed or timed out. Saving company with inline logo data."
         );
+        setDebugError(msg);
         setDebugStatus("Logo upload failed, using inline logo");
         // Fall back to storing the data URL directly.
         finalLogoUrl = logoUrl;
@@ -748,7 +752,9 @@ function CompaniesPage() {
         setApiError(null);
         setDebugStatus("Company updated");
       } catch (err) {
-        setApiError(err instanceof Error ? err.message : "Failed to update company.");
+        const msg = err instanceof Error ? err.message : "Failed to update company.";
+        setApiError(msg);
+        setDebugError(msg);
         setDebugStatus("Update failed");
         setIsSubmitting(false);
         return;
@@ -770,7 +776,9 @@ function CompaniesPage() {
         setApiError(null);
         setDebugStatus("Company created");
       } catch (err) {
-        setApiError(err instanceof Error ? err.message : "Failed to create company.");
+        const msg = err instanceof Error ? err.message : "Failed to create company.";
+        setApiError(msg);
+        setDebugError(msg);
         setDebugStatus("Create failed");
         setIsSubmitting(false);
         return;
@@ -818,6 +826,7 @@ function CompaniesPage() {
       {apiError && <div className="error">{apiError}</div>}
       {formError && <div className="error">{formError}</div>}
       {debugStatus && <div className="muted">Debug: {debugStatus}</div>}
+      {debugError && <div className="error">Debug error: {debugError}</div>}
       {!showForm && (
         <button type="button" className="compact" onClick={() => setShowForm(true)}>
           New Company
