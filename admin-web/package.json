@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.js",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint ."
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2"

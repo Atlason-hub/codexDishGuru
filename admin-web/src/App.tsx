@@ -8,6 +8,8 @@ import {
   useNavigate
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
+import { createCompany, deleteCompany, fetchCompanies, searchCities, updateCompany } from "./companiesApi";
+import type { CityOption, Company } from "./companiesTypes";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -211,57 +213,7 @@ function ContentPage() {
   );
 }
 
-type Company = {
-  id: string;
-  name: string;
-  domain: string;
-  street: string;
-  number: string;
-  city: string;
-  logoUrl?: string;
-};
-
-const IDB_NAME = "dg_admin";
-const IDB_STORE = "kv";
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(IDB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(IDB_STORE)) {
-        db.createObjectStore(IDB_STORE);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function idbGet(key: string): Promise<string | null> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, "readonly");
-    const store = tx.objectStore(IDB_STORE);
-    const request = store.get(key);
-    request.onsuccess = () => resolve((request.result as string) ?? null);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function idbSet(key: string, value: string): Promise<void> {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, "readwrite");
-    const store = tx.objectStore(IDB_STORE);
-    const request = store.put(value, key);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
 function CompaniesPage() {
-  const STORAGE_KEY = "dg_admin_companies";
   const MAX_LOGO_BYTES = 200 * 1024;
   const [companies, setCompanies] = React.useState<Company[]>([]);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -270,51 +222,26 @@ function CompaniesPage() {
   const [domain, setDomain] = React.useState("");
   const [street, setStreet] = React.useState("");
   const [number, setNumber] = React.useState("");
-  const [city, setCity] = React.useState("");
+  const [cityQuery, setCityQuery] = React.useState("");
+  const [cityId, setCityId] = React.useState<number | null>(null);
   const [logoUrl, setLogoUrl] = React.useState<string | undefined>(undefined);
   const [logoError, setLogoError] = React.useState<string | null>(null);
-  const [storageError, setStorageError] = React.useState<string | null>(null);
-  const [storageStatus, setStorageStatus] = React.useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = React.useState(false);
+  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [cityOptions, setCityOptions] = React.useState<CityOption[]>([]);
+  const [cityLoading, setCityLoading] = React.useState(false);
+  const [cityApiError, setCityApiError] = React.useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = React.useState(false);
 
   React.useEffect(() => {
     const load = async () => {
-      let loadedFrom: string | null = null;
-      let stored: string | null = null;
       try {
-        stored = window.localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          loadedFrom = "localStorage";
-        }
-      } catch {
-        // Ignore localStorage access errors.
+        const data = await fetchCompanies();
+        setCompanies(data);
+        setApiError(null);
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : "Failed to load companies.");
       }
-
-      if (!stored && "indexedDB" in window) {
-        try {
-          stored = await idbGet(STORAGE_KEY);
-          if (stored) {
-            loadedFrom = "IndexedDB";
-          }
-        } catch {
-          // Ignore IndexedDB errors.
-        }
-      }
-
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as Company[];
-          if (Array.isArray(parsed)) {
-            setCompanies(parsed);
-            setStorageStatus(null);
-          }
-        } catch {
-          // Ignore malformed data.
-        }
-      } else {
-        setStorageStatus(null);
-      }
-
       setHasLoaded(true);
     };
 
@@ -325,39 +252,7 @@ function CompaniesPage() {
     if (!hasLoaded) {
       return;
     }
-    const payload = JSON.stringify(companies);
-    let localOk = false;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, payload);
-      localOk = true;
-    } catch {
-      localOk = false;
-    }
-
-    if ("indexedDB" in window) {
-      void idbSet(STORAGE_KEY, payload)
-        .then(() => {
-          setStorageStatus(null);
-          if (storageError) {
-            setStorageError(null);
-          }
-        })
-        .catch(() => {
-          if (localOk) {
-            setStorageStatus(null);
-            setStorageError(null);
-          } else {
-            setStorageError("Could not save companies in this browser.");
-          }
-        });
-    } else if (localOk) {
-      setStorageStatus(null);
-      if (storageError) {
-        setStorageError(null);
-      }
-    } else {
-      setStorageError("Could not save companies in this browser.");
-    }
+    // No-op: persistence is handled by the local admin API server.
   }, [companies]);
 
   const resetForm = () => {
@@ -365,12 +260,43 @@ function CompaniesPage() {
     setDomain("");
     setStreet("");
     setNumber("");
-    setCity("");
+    setCityQuery("");
+    setCityId(null);
     setLogoUrl(undefined);
     setLogoError(null);
     setEditingId(null);
     setShowForm(false);
+    setSubmitAttempted(false);
   };
+
+  React.useEffect(() => {
+    if (!showForm) {
+      return;
+    }
+    if (!cityQuery.trim()) {
+      setCityOptions([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(async () => {
+      setCityLoading(true);
+      setCityApiError(null);
+      try {
+        const results = await searchCities(cityQuery.trim());
+        setCityOptions(results);
+      } catch (err) {
+        setCityApiError(err instanceof Error ? err.message : "City search failed.");
+      } finally {
+        setCityLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [cityQuery, showForm]);
 
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -394,36 +320,35 @@ function CompaniesPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (
-      !name.trim() ||
-      !domain.trim() ||
-      !street.trim() ||
-      !number.trim() ||
-      !city.trim() ||
-      !logoUrl ||
-      logoError
-    ) {
+    setSubmitAttempted(true);
+    if (!name.trim() || !domain.trim() || !street.trim() || !number.trim()) {
+      return;
+    }
+    if (!cityId || !cityQuery.trim() || !logoUrl || logoError) {
       return;
     }
 
     if (editingId) {
-      setCompanies((prev) =>
-        prev.map((company) =>
-          company.id === editingId
-            ? {
-                ...company,
-                name: name.trim(),
-                domain: domain.trim(),
-                street: street.trim(),
-                number: number.trim(),
-                city: city.trim(),
-                logoUrl
-              }
-            : company
-        )
-      );
+      const updatedCompany: Company = {
+        id: editingId,
+        name: name.trim(),
+        domain: domain.trim(),
+        street: street.trim(),
+        number: number.trim(),
+        cityId,
+        cityName: cityQuery.trim(),
+        logoUrl
+      };
+      try {
+        const next = await updateCompany(editingId, updatedCompany);
+        setCompanies(next);
+        setApiError(null);
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : "Failed to update company.");
+        return;
+      }
     } else {
       const newCompany: Company = {
         id: crypto.randomUUID(),
@@ -431,10 +356,18 @@ function CompaniesPage() {
         domain: domain.trim(),
         street: street.trim(),
         number: number.trim(),
-        city: city.trim(),
+        cityId,
+        cityName: cityQuery.trim(),
         logoUrl
       };
-      setCompanies((prev) => [newCompany, ...prev]);
+      try {
+        const next = await createCompany(newCompany);
+        setCompanies(next);
+        setApiError(null);
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : "Failed to create company.");
+        return;
+      }
     }
 
     resetForm();
@@ -446,13 +379,23 @@ function CompaniesPage() {
     setDomain(company.domain);
     setStreet(company.street);
     setNumber(company.number);
-    setCity(company.city);
+    setCityId(company.cityId);
+    setCityQuery(company.cityName);
     setLogoUrl(company.logoUrl);
     setShowForm(true);
   };
 
   const handleDelete = (id: string) => {
-    setCompanies((prev) => prev.filter((company) => company.id !== id));
+    const remove = async () => {
+      try {
+        const next = await deleteCompany(id);
+        setCompanies(next);
+        setApiError(null);
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : "Failed to delete company.");
+      }
+    };
+    void remove();
     if (editingId === id) {
       resetForm();
     }
@@ -464,7 +407,7 @@ function CompaniesPage() {
       <p className="muted">
         Add and manage company profiles for accounts and partnerships.
       </p>
-      {storageError && <div className="error">{storageError}</div>}
+      {apiError && <div className="error">{apiError}</div>}
       {!showForm && (
         <button type="button" onClick={() => setShowForm(true)}>
           New Company
@@ -514,13 +457,49 @@ function CompaniesPage() {
           </label>
           <label className="field">
             <span>City</span>
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Austin"
-              required
-            />
+            <div className="autocomplete">
+              <input
+                type="text"
+                value={cityQuery}
+                onChange={(e) => {
+                  setCityQuery(e.target.value);
+                  setCityId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && cityOptions.length > 0) {
+                    e.preventDefault();
+                    setCityQuery(cityOptions[0].Name);
+                    setCityId(cityOptions[0].Id);
+                    setCityOptions([]);
+                  }
+                }}
+                placeholder="Start typing a city"
+                required
+              />
+              {cityLoading && <div className="muted">Searching...</div>}
+              {cityApiError && <div className="error">{cityApiError}</div>}
+              {submitAttempted && !cityId && (
+                <div className="error">Select a city from the list.</div>
+              )}
+              {cityOptions.length > 0 && (
+                <div className="dropdown">
+                  {cityOptions.map((city) => (
+                    <button
+                      type="button"
+                      key={city.Id}
+                      className="dropdown-item"
+                      onClick={() => {
+                        setCityQuery(city.Name);
+                        setCityId(city.Id);
+                        setCityOptions([]);
+                      }}
+                    >
+                      {city.Name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </label>
           <label className="field">
             <span>Logo</span>
@@ -572,7 +551,7 @@ function CompaniesPage() {
             <span>{company.domain}</span>
             <span>{company.street || "—"}</span>
             <span>{company.number || "—"}</span>
-            <span>{company.city || "—"}</span>
+            <span>{company.cityName || "—"}</span>
             <span>
               {company.logoUrl ? (
                 <img

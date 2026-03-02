@@ -138,6 +138,42 @@ h1 {
   flex-wrap: wrap;
 }
 
+.autocomplete {
+  position: relative;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #111118;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 20;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+.dropdown-item:hover {
+  background: rgba(248, 185, 10, 0.12);
+}
+
 .field {
   display: grid;
   gap: 0.4rem;
