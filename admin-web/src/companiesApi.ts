@@ -1,5 +1,6 @@
 import type { CityOption, Company, CompanyRow } from "./companiesTypes";
 import { supabase } from "./supabaseClient";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config";
 
 const TABLE = "companies";
 const BUCKET = "company-logos";
@@ -36,9 +37,41 @@ export async function createCompany(company: Company): Promise<Company[]> {
     city_name: company.cityName,
     logo_url: company.logoUrl ?? null
   };
-  const { error } = await supabase.from(TABLE).insert(payload);
-  if (error) {
-    throw new Error(error.message);
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error("Supabase env vars missing.");
+  }
+  if (!token) {
+    throw new Error("No auth session token.");
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || "Supabase insert failed.");
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Create company timed out. Check Supabase settings/RLS.");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeout);
   }
   return fetchCompanies();
 }
