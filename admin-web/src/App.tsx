@@ -1029,32 +1029,15 @@ function CompaniesPage() {
           </div>
         </form>
       )}
-      <div className="table">
-        <div className="row header">
-          <span>Name</span>
-          <span>Domain</span>
-          <span>Address</span>
-          <span>City</span>
-          <span>Logo</span>
-          <span>Actions</span>
-        </div>
+      <div className="company-cards">
         {companies.length === 0 && (
-          <div className="row">
-            <span>No companies yet.</span>
-            <span />
-            <span />
-            <span />
-            <span />
-            <span />
+          <div className="company-card">
+            <div className="muted">No companies yet.</div>
           </div>
         )}
         {companies.map((company) => (
-          <div className="row" key={company.id}>
-            <span>{company.name}</span>
-            <span>{company.domain}</span>
-            <span>{`${company.street || ""} ${company.number || ""}`.trim() || "—"}</span>
-            <span>{company.cityName || "—"}</span>
-            <span>
+          <article className="company-card" key={company.id}>
+            <div className="company-head">
               {company.logoUrl ? (
                 <img
                   className="logo-thumb"
@@ -1062,18 +1045,26 @@ function CompaniesPage() {
                   alt={`${company.name} logo`}
                 />
               ) : (
-                "—"
+                <div className="logo-thumb company-logo-fallback">Logo</div>
               )}
-            </span>
-            <span className="row-actions">
+              <div className="company-title">
+                <strong>{company.name}</strong>
+                <span className="muted">{company.domain}</span>
+              </div>
+            </div>
+            <div className="company-fields">
+              <div><strong>Address:</strong> {`${company.street || ""} ${company.number || ""}`.trim() || "—"}</div>
+              <div dir="auto"><strong>City:</strong> {company.cityName || "—"}</div>
+            </div>
+            <div className="row-actions">
               <button type="button" className="ghost" onClick={() => handleEdit(company)}>
                 Edit
               </button>
               <button type="button" className="ghost" onClick={() => handleDelete(company.id)}>
                 Delete
               </button>
-            </span>
-          </div>
+            </div>
+          </article>
         ))}
       </div>
     </section>

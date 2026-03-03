@@ -388,6 +388,46 @@ h1 {
   gap: 0.6rem;
 }
 
+.company-cards {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.company-card {
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.company-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.company-title {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.company-fields {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+}
+
+.company-logo-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: rgba(252, 114, 114, 0.14);
+}
+
 .row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -503,6 +543,10 @@ h1 {
 @media (max-width: 640px) {
   .login-card {
     padding: 2rem 1.6rem;
+  }
+
+  .company-cards {
+    grid-template-columns: 1fr;
   }
 
   .row {
