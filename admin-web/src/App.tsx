@@ -729,10 +729,26 @@ function CompaniesPage() {
       setFormError("You are not authenticated. Please log in again.");
       return;
     }
-    if (!cityId || !cityQuery.trim() || !streetId || logoError) {
+    let resolvedStreetId = streetId;
+    if (!resolvedStreetId && cityId && street.trim()) {
+      try {
+        const candidates = await searchStreets(street.trim(), cityId);
+        const exact = candidates.find(
+          (s) => s.Name.trim().toLowerCase() === street.trim().toLowerCase()
+        );
+        if (exact) {
+          resolvedStreetId = exact.Id;
+          setStreetId(exact.Id);
+        }
+      } catch {
+        // Keep existing validation behavior below if lookup fails.
+      }
+    }
+
+    if (!cityId || !cityQuery.trim() || !resolvedStreetId || logoError) {
       if (!cityId) {
         setFormError("Select a city from the list.");
-      } else if (!streetId) {
+      } else if (!resolvedStreetId) {
         setFormError("Select a street from the list.");
       } else if (logoError) {
         setFormError(logoError);
@@ -761,7 +777,7 @@ function CompaniesPage() {
         id: editingId,
         name: name.trim(),
         domain: domain.trim(),
-        streetId,
+        streetId: resolvedStreetId,
         street: street.trim(),
         number: number.trim(),
         cityId,
@@ -786,7 +802,7 @@ function CompaniesPage() {
         id: newId,
         name: name.trim(),
         domain: domain.trim(),
-        streetId,
+        streetId: resolvedStreetId,
         street: street.trim(),
         number: number.trim(),
         cityId,
