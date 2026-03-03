@@ -26,3 +26,8 @@ export type CityOption = {
   Name: string;
   IsBigCity: boolean;
 };
+
+export type StreetOption = {
+  Id: number;
+  Name: string;
+};

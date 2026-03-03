@@ -1,13 +1,18 @@
-import type { CityOption, Company, CompanyRow } from "./companiesTypes";
+import type { CityOption, Company, CompanyRow, StreetOption } from "./companiesTypes";
 
 
 export async function fetchCompanies(): Promise<Company[]> {
   const response = await fetch(`/api/companies`);
+  const text = await response.text();
   if (!response.ok) {
-    const text = await response.text();
     throw new Error(text || "Failed to load companies");
   }
-  const rows = (await response.json()) as CompanyRow[];
+  let rows: CompanyRow[] = [];
+  try {
+    rows = JSON.parse(text) as CompanyRow[];
+  } catch {
+    throw new Error(text || "Invalid JSON response from /api/companies");
+  }
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -118,6 +123,30 @@ export async function searchCities(query: string): Promise<CityOption[]> {
     throw new Error("Failed to search cities");
   }
   const payload = (await response.json()) as { Data?: CityOption[] } | CityOption[];
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  return payload.Data ?? [];
+}
+
+export async function searchStreets(
+  query: string,
+  parentId: number
+): Promise<StreetOption[]> {
+  const response = await fetch(
+    `/api/streets?` +
+      new URLSearchParams({
+        q: query,
+        parentId: String(parentId),
+        websiteID: "10bis",
+        domainID: "10bis",
+        resId: "0"
+      }).toString()
+  );
+  if (!response.ok) {
+    throw new Error("Failed to search streets");
+  }
+  const payload = (await response.json()) as { Data?: StreetOption[] } | StreetOption[];
   if (Array.isArray(payload)) {
     return payload;
   }

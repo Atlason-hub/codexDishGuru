@@ -13,10 +13,11 @@ import {
   deleteCompany,
   fetchCompanies,
   searchCities,
+  searchStreets,
   updateCompany,
   uploadCompanyLogo
 } from "./companiesApi";
-import type { CityOption, Company } from "./companiesTypes";
+import type { CityOption, Company, StreetOption } from "./companiesTypes";
 import { createUser, deleteUser, fetchUsers, updateUser } from "./usersApi";
 import type { AdminUser } from "./usersApi";
 import { createContent, deleteContent, fetchContent, updateContent } from "./contentApi";
@@ -555,9 +556,14 @@ function CompaniesPage() {
   const [cityOptions, setCityOptions] = React.useState<CityOption[]>([]);
   const [cityLoading, setCityLoading] = React.useState(false);
   const [cityApiError, setCityApiError] = React.useState<string | null>(null);
+  const [streetOptions, setStreetOptions] = React.useState<StreetOption[]>([]);
+  const [streetLoading, setStreetLoading] = React.useState(false);
+  const [streetApiError, setStreetApiError] = React.useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = React.useState(false);
   const [isCityOpen, setIsCityOpen] = React.useState(false);
+  const [isStreetOpen, setIsStreetOpen] = React.useState(false);
   const cityRef = React.useRef<HTMLDivElement | null>(null);
+  const streetRef = React.useRef<HTMLDivElement | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -606,16 +612,18 @@ function CompaniesPage() {
     setShowForm(false);
     setSubmitAttempted(false);
     setIsCityOpen(false);
+    setIsStreetOpen(false);
+    setStreetOptions([]);
     setFormError(null);
   };
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (!cityRef.current) {
-        return;
-      }
-      if (!cityRef.current.contains(event.target as Node)) {
+      if (cityRef.current && !cityRef.current.contains(event.target as Node)) {
         setIsCityOpen(false);
+      }
+      if (streetRef.current && !streetRef.current.contains(event.target as Node)) {
+        setIsStreetOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -652,6 +660,35 @@ function CompaniesPage() {
       clearTimeout(timeout);
     };
   }, [cityQuery, showForm]);
+
+  React.useEffect(() => {
+    if (!showForm) {
+      setIsStreetOpen(false);
+      return;
+    }
+    if (!cityId || !street.trim()) {
+      setStreetOptions([]);
+      setIsStreetOpen(false);
+      return;
+    }
+
+    const timeout = setTimeout(async () => {
+      setStreetLoading(true);
+      setStreetApiError(null);
+      try {
+        const results = await searchStreets(street.trim(), cityId);
+        setStreetOptions(results);
+      } catch (err) {
+        setStreetApiError(err instanceof Error ? err.message : "Street search failed.");
+      } finally {
+        setStreetLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [cityId, showForm, street]);
 
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -841,13 +878,53 @@ function CompaniesPage() {
           </label>
           <label className="field">
             <span>Street</span>
-            <input
-              type="text"
-              value={street}
-              onChange={(e) => setStreet(e.target.value)}
-              placeholder="Main St"
-              required
-            />
+            <div className="autocomplete" ref={streetRef}>
+              <input
+                type="text"
+                value={street}
+                onChange={(e) => {
+                  setStreet(e.target.value);
+                  setIsStreetOpen(true);
+                }}
+                onFocus={() => setIsStreetOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setIsStreetOpen(false);
+                    return;
+                  }
+                  if (e.key === "Enter" && streetOptions.length > 0) {
+                    e.preventDefault();
+                    setStreet(streetOptions[0].Name);
+                    setStreetOptions([]);
+                    setIsStreetOpen(false);
+                  }
+                }}
+                placeholder={cityId ? "Start typing a street" : "Select a city first"}
+                disabled={!cityId}
+                required
+              />
+              {!cityId && <div className="muted">Select a city to search streets.</div>}
+              {streetLoading && cityId && <div className="muted">Searching streets...</div>}
+              {streetApiError && <div className="error">{streetApiError}</div>}
+              {isStreetOpen && streetOptions.length > 0 && (
+                <div className="dropdown">
+                  {streetOptions.map((streetOption) => (
+                    <button
+                      type="button"
+                      key={streetOption.Id}
+                      className="dropdown-item"
+                      onClick={() => {
+                        setStreet(streetOption.Name);
+                        setStreetOptions([]);
+                        setIsStreetOpen(false);
+                      }}
+                    >
+                      {streetOption.Name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </label>
           <label className="field">
             <span>Number</span>
@@ -868,6 +945,8 @@ function CompaniesPage() {
                 onChange={(e) => {
                   setCityQuery(e.target.value);
                   setCityId(null);
+                  setStreet("");
+                  setStreetOptions([]);
                   setIsCityOpen(true);
                 }}
                 onKeyDown={(e) => {
@@ -879,6 +958,8 @@ function CompaniesPage() {
                     e.preventDefault();
                     setCityQuery(cityOptions[0].Name);
                     setCityId(cityOptions[0].Id);
+                    setStreet("");
+                    setStreetOptions([]);
                     setCityOptions([]);
                     setIsCityOpen(false);
                   }
@@ -902,6 +983,8 @@ function CompaniesPage() {
                       onClick={() => {
                         setCityQuery(city.Name);
                         setCityId(city.Id);
+                        setStreet("");
+                        setStreetOptions([]);
                         setCityOptions([]);
                         setIsCityOpen(false);
                       }}

@@ -11,6 +11,13 @@ export default defineConfig({
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/api\/cities/, "/api/CityNameAutoComplete")
+      },
+      "/api/streets": {
+        target: "https://www.10bis.co.il",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) =>
+          path.replace(/^\/api\/streets/, "/api/StreetNameAutoComplete")
       }
     }
   }
