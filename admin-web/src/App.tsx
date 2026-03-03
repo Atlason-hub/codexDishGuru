@@ -546,6 +546,7 @@ function CompaniesPage() {
   const [name, setName] = React.useState("");
   const [domain, setDomain] = React.useState("");
   const [street, setStreet] = React.useState("");
+  const [streetId, setStreetId] = React.useState<number | null>(null);
   const [number, setNumber] = React.useState("");
   const [cityQuery, setCityQuery] = React.useState("");
   const [cityId, setCityId] = React.useState<number | null>(null);
@@ -602,6 +603,7 @@ function CompaniesPage() {
     setName("");
     setDomain("");
     setStreet("");
+    setStreetId(null);
     setNumber("");
     setCityQuery("");
     setCityId(null);
@@ -727,9 +729,11 @@ function CompaniesPage() {
       setFormError("You are not authenticated. Please log in again.");
       return;
     }
-    if (!cityId || !cityQuery.trim() || logoError) {
+    if (!cityId || !cityQuery.trim() || !streetId || logoError) {
       if (!cityId) {
         setFormError("Select a city from the list.");
+      } else if (!streetId) {
+        setFormError("Select a street from the list.");
       } else if (logoError) {
         setFormError(logoError);
       }
@@ -757,6 +761,7 @@ function CompaniesPage() {
         id: editingId,
         name: name.trim(),
         domain: domain.trim(),
+        streetId,
         street: street.trim(),
         number: number.trim(),
         cityId,
@@ -781,6 +786,7 @@ function CompaniesPage() {
         id: newId,
         name: name.trim(),
         domain: domain.trim(),
+        streetId,
         street: street.trim(),
         number: number.trim(),
         cityId,
@@ -807,6 +813,7 @@ function CompaniesPage() {
     setEditingId(company.id);
     setName(company.name);
     setDomain(company.domain);
+    setStreetId(company.streetId ?? null);
     setStreet(company.street);
     setNumber(company.number);
     setCityId(company.cityId);
@@ -887,6 +894,7 @@ function CompaniesPage() {
                   setCityQuery(e.target.value);
                   setCityId(null);
                   setStreet("");
+                  setStreetId(null);
                   setStreetOptions([]);
                   setIsCityOpen(true);
                 }}
@@ -900,6 +908,7 @@ function CompaniesPage() {
                     setCityQuery(cityOptions[0].Name);
                     setCityId(cityOptions[0].Id);
                     setStreet("");
+                    setStreetId(null);
                     setStreetOptions([]);
                     setCityOptions([]);
                     setIsCityOpen(false);
@@ -926,6 +935,7 @@ function CompaniesPage() {
                         setCityQuery(city.Name);
                         setCityId(city.Id);
                         setStreet("");
+                        setStreetId(null);
                         setStreetOptions([]);
                         setCityOptions([]);
                         setIsCityOpen(false);
@@ -947,6 +957,7 @@ function CompaniesPage() {
                 dir="auto"
                 onChange={(e) => {
                   setStreet(e.target.value);
+                  setStreetId(null);
                   setIsStreetOpen(true);
                 }}
                 onFocus={() => setIsStreetOpen(true)}
@@ -958,6 +969,7 @@ function CompaniesPage() {
                   if (e.key === "Enter" && streetOptions.length > 0) {
                     e.preventDefault();
                     setStreet(streetOptions[0].Name);
+                    setStreetId(streetOptions[0].Id);
                     setStreetOptions([]);
                     setIsStreetOpen(false);
                   }
@@ -979,6 +991,7 @@ function CompaniesPage() {
                       dir="auto"
                       onClick={() => {
                         setStreet(streetOption.Name);
+                        setStreetId(streetOption.Id);
                         setStreetOptions([]);
                         setIsStreetOpen(false);
                       }}
@@ -1055,6 +1068,8 @@ function CompaniesPage() {
             <div className="company-fields">
               <div><strong>Address:</strong> {`${company.street || ""} ${company.number || ""}`.trim() || "—"}</div>
               <div dir="auto"><strong>City:</strong> {company.cityName || "—"}</div>
+              <div><strong>City ID:</strong> {company.cityId ?? "—"}</div>
+              <div><strong>Street ID:</strong> {company.streetId ?? "—"}</div>
             </div>
             <div className="row-actions">
               <button type="button" className="ghost" onClick={() => handleEdit(company)}>

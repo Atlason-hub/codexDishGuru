@@ -17,6 +17,7 @@ export async function fetchCompanies(): Promise<Company[]> {
     id: row.id,
     name: row.name,
     domain: row.domain,
+    streetId: row.street_id ?? null,
     street: row.street,
     number: row.number,
     cityId: row.city_id,
@@ -30,6 +31,7 @@ export async function createCompany(company: Company): Promise<Company[]> {
     id: company.id,
     name: company.name,
     domain: company.domain,
+    street_id: company.streetId ?? null,
     street: company.street,
     number: company.number,
     city_id: company.cityId,
@@ -52,6 +54,7 @@ export async function updateCompany(id: string, updates: Company): Promise<Compa
   const payload: Partial<CompanyRow> = {
     name: updates.name,
     domain: updates.domain,
+    street_id: updates.streetId ?? null,
     street: updates.street,
     number: updates.number,
     city_id: updates.cityId,
