@@ -808,7 +808,11 @@ function CompaniesPage() {
       {apiError && <div className="error">{apiError}</div>}
       {formError && <div className="error">{formError}</div>}
       {!showForm && (
-        <button type="button" className="compact" onClick={() => setShowForm(true)}>
+        <button
+          type="button"
+          className="compact company-new-btn"
+          onClick={() => setShowForm(true)}
+        >
           New Company
         </button>
       )}
