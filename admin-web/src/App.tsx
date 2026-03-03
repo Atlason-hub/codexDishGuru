@@ -877,16 +877,6 @@ function CompaniesPage() {
             />
           </label>
           <label className="field">
-            <span>Number</span>
-            <input
-              type="text"
-              value={number}
-              onChange={(e) => setNumber(e.target.value)}
-              placeholder="123"
-              required
-            />
-          </label>
-          <label className="field">
             <span>City</span>
             <div className="autocomplete" ref={cityRef}>
               <input
@@ -1001,6 +991,16 @@ function CompaniesPage() {
             </div>
           </label>
           <label className="field">
+            <span>Number</span>
+            <input
+              type="text"
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              placeholder="123"
+              required
+            />
+          </label>
+          <label className="field">
             <span>Logo</span>
             <input
               type="file"
@@ -1033,8 +1033,7 @@ function CompaniesPage() {
         <div className="row header">
           <span>Name</span>
           <span>Domain</span>
-          <span>Street</span>
-          <span>Number</span>
+          <span>Address</span>
           <span>City</span>
           <span>Logo</span>
           <span>Actions</span>
@@ -1047,15 +1046,13 @@ function CompaniesPage() {
             <span />
             <span />
             <span />
-            <span />
           </div>
         )}
         {companies.map((company) => (
           <div className="row" key={company.id}>
             <span>{company.name}</span>
             <span>{company.domain}</span>
-            <span>{company.street || "—"}</span>
-            <span>{company.number || "—"}</span>
+            <span>{`${company.street || ""} ${company.number || ""}`.trim() || "—"}</span>
             <span>{company.cityName || "—"}</span>
             <span>
               {company.logoUrl ? (
