@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DishGuru favicon">
+  <rect width="64" height="64" rx="12" fill="#000"/>
+  <g stroke="#fff" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.2">
+    <path d="M32 8c-5.6 0-10 4.4-10 10 0 7.1 8.3 13.8 9.2 14.5.5.4 1.2.4 1.7 0 .9-.7 9.2-7.4 9.2-14.5 0-5.6-4.4-10-10-10z"/>
+    <circle cx="32" cy="18" r="3.8"/>
+    <path d="M20 46l13-18"/>
+    <path d="M44 46L31 28"/>
+    <path d="M41 24v8"/>
+    <path d="M45 24v8"/>
+    <path d="M49 24v8"/>
+    <path d="M18 31h7"/>
+    <path d="M17 46c3-3 8-3 11 0 3-3 8-3 11 0 3-3 8-3 11 0"/>
+  </g>
+</svg>
