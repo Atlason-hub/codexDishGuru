@@ -115,7 +115,9 @@ function Layout({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-mark">DG</div>
+          <div className="brand-mark">
+            <img src="/dishguru-logo.svg" alt="DishGuru logo" />
+          </div>
           <div>
             <div className="brand-name">DishGuru</div>
             <div className="brand-sub">Admin Console</div>
