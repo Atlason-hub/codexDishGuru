@@ -777,6 +777,12 @@ function CompaniesPage() {
   };
 
   const handleDelete = (id: string) => {
+    const confirmed = window.confirm(
+      "Delete this company? This action cannot be undone."
+    );
+    if (!confirmed) {
+      return;
+    }
     const remove = async () => {
       try {
         const next = await deleteCompany(id);
