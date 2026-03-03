@@ -877,56 +877,6 @@ function CompaniesPage() {
             />
           </label>
           <label className="field">
-            <span>Street</span>
-            <div className="autocomplete" ref={streetRef}>
-              <input
-                type="text"
-                value={street}
-                onChange={(e) => {
-                  setStreet(e.target.value);
-                  setIsStreetOpen(true);
-                }}
-                onFocus={() => setIsStreetOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setIsStreetOpen(false);
-                    return;
-                  }
-                  if (e.key === "Enter" && streetOptions.length > 0) {
-                    e.preventDefault();
-                    setStreet(streetOptions[0].Name);
-                    setStreetOptions([]);
-                    setIsStreetOpen(false);
-                  }
-                }}
-                placeholder={cityId ? "Start typing a street" : "Select a city first"}
-                disabled={!cityId}
-                required
-              />
-              {!cityId && <div className="muted">Select a city to search streets.</div>}
-              {streetLoading && cityId && <div className="muted">Searching streets...</div>}
-              {streetApiError && <div className="error">{streetApiError}</div>}
-              {isStreetOpen && streetOptions.length > 0 && (
-                <div className="dropdown">
-                  {streetOptions.map((streetOption) => (
-                    <button
-                      type="button"
-                      key={streetOption.Id}
-                      className="dropdown-item"
-                      onClick={() => {
-                        setStreet(streetOption.Name);
-                        setStreetOptions([]);
-                        setIsStreetOpen(false);
-                      }}
-                    >
-                      {streetOption.Name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </label>
-          <label className="field">
             <span>Number</span>
             <input
               type="text"
@@ -942,6 +892,7 @@ function CompaniesPage() {
               <input
                 type="text"
                 value={cityQuery}
+                dir="auto"
                 onChange={(e) => {
                   setCityQuery(e.target.value);
                   setCityId(null);
@@ -980,6 +931,7 @@ function CompaniesPage() {
                       type="button"
                       key={city.Id}
                       className="dropdown-item"
+                      dir="auto"
                       onClick={() => {
                         setCityQuery(city.Name);
                         setCityId(city.Id);
@@ -990,6 +942,58 @@ function CompaniesPage() {
                       }}
                     >
                       {city.Name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </label>
+          <label className="field">
+            <span>Street</span>
+            <div className="autocomplete" ref={streetRef}>
+              <input
+                type="text"
+                value={street}
+                dir="auto"
+                onChange={(e) => {
+                  setStreet(e.target.value);
+                  setIsStreetOpen(true);
+                }}
+                onFocus={() => setIsStreetOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setIsStreetOpen(false);
+                    return;
+                  }
+                  if (e.key === "Enter" && streetOptions.length > 0) {
+                    e.preventDefault();
+                    setStreet(streetOptions[0].Name);
+                    setStreetOptions([]);
+                    setIsStreetOpen(false);
+                  }
+                }}
+                placeholder={cityId ? "Start typing a street" : "Select a city first"}
+                disabled={!cityId}
+                required
+              />
+              {!cityId && <div className="muted">Select a city to search streets.</div>}
+              {streetLoading && cityId && <div className="muted">Searching streets...</div>}
+              {streetApiError && <div className="error">{streetApiError}</div>}
+              {isStreetOpen && streetOptions.length > 0 && (
+                <div className="dropdown">
+                  {streetOptions.map((streetOption) => (
+                    <button
+                      type="button"
+                      key={streetOption.Id}
+                      className="dropdown-item"
+                      dir="auto"
+                      onClick={() => {
+                        setStreet(streetOption.Name);
+                        setStreetOptions([]);
+                        setIsStreetOpen(false);
+                      }}
+                    >
+                      {streetOption.Name}
                     </button>
                   ))}
                 </div>
