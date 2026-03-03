@@ -122,14 +122,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="nav">
-          <NavLink to="/" end>
-            Dashboard
-          </NavLink>
-          <NavLink to="/users">Users</NavLink>
           <NavLink to="/companies">Companies</NavLink>
-          <NavLink to="/content">Content</NavLink>
-          <NavLink to="/reports">Reports</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
         </nav>
         <button className="ghost" onClick={logout}>
           Sign out
@@ -1206,7 +1199,8 @@ export default function App() {
             <ProtectedRoute>
               <Layout>
                 <Routes>
-                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/" element={<Navigate to="/companies" replace />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/companies" element={<CompaniesPage />} />
                   <Route path="/content" element={<ContentPage />} />
