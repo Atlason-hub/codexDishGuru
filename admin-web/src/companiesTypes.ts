@@ -1,5 +1,6 @@
 export type Company = {
   id: string;
+  companyKey: string;
   name: string;
   domain: string;
   streetId?: number | null;
@@ -12,6 +13,7 @@ export type Company = {
 
 export type CompanyRow = {
   id: string;
+  company_key: string;
   name: string;
   domain: string;
   street_id?: number | null;

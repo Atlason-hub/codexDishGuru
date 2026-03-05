@@ -15,6 +15,7 @@ export async function fetchCompanies(): Promise<Company[]> {
   }
   return rows.map((row) => ({
     id: row.id,
+    companyKey: row.company_key,
     name: row.name,
     domain: row.domain,
     streetId: row.street_id ?? null,
@@ -29,6 +30,7 @@ export async function fetchCompanies(): Promise<Company[]> {
 export async function createCompany(company: Company): Promise<Company[]> {
   const payload: CompanyRow = {
     id: company.id,
+    company_key: company.companyKey,
     name: company.name,
     domain: company.domain,
     street_id: company.streetId ?? null,
@@ -52,6 +54,7 @@ export async function createCompany(company: Company): Promise<Company[]> {
 
 export async function updateCompany(id: string, updates: Company): Promise<Company[]> {
   const payload: Partial<CompanyRow> = {
+    company_key: updates.companyKey,
     name: updates.name,
     domain: updates.domain,
     street_id: updates.streetId ?? null,

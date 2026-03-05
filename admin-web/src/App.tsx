@@ -548,6 +548,7 @@ function CompaniesPage() {
   const [street, setStreet] = React.useState("");
   const [streetId, setStreetId] = React.useState<number | null>(null);
   const [number, setNumber] = React.useState("");
+  const [companyKey, setCompanyKey] = React.useState<string>("");
   const [cityQuery, setCityQuery] = React.useState("");
   const [cityId, setCityId] = React.useState<number | null>(null);
   const [logoUrl, setLogoUrl] = React.useState<string | undefined>(undefined);
@@ -605,6 +606,7 @@ function CompaniesPage() {
     setStreet("");
     setStreetId(null);
     setNumber("");
+    setCompanyKey("");
     setCityQuery("");
     setCityId(null);
     setLogoUrl(undefined);
@@ -775,6 +777,7 @@ function CompaniesPage() {
     if (editingId) {
       const updatedCompany: Company = {
         id: editingId,
+        companyKey,
         name: name.trim(),
         domain: domain.trim(),
         streetId: resolvedStreetId,
@@ -800,6 +803,7 @@ function CompaniesPage() {
     } else {
       const newCompany: Company = {
         id: newId,
+        companyKey: crypto.randomUUID(),
         name: name.trim(),
         domain: domain.trim(),
         streetId: resolvedStreetId,
@@ -827,6 +831,7 @@ function CompaniesPage() {
 
   const handleEdit = (company: Company) => {
     setEditingId(company.id);
+    setCompanyKey(company.companyKey);
     setName(company.name);
     setDomain(company.domain);
     setStreetId(company.streetId ?? null);
@@ -1082,6 +1087,7 @@ function CompaniesPage() {
               </div>
             </div>
             <div className="company-fields">
+              <div><strong>Company Key:</strong> {company.companyKey}</div>
               <div><strong>Address:</strong> {`${company.street || ""} ${company.number || ""}`.trim() || "—"}</div>
               <div dir="auto"><strong>City:</strong> {company.cityName || "—"}</div>
               <div><strong>City ID:</strong> {company.cityId ?? "—"}</div>
