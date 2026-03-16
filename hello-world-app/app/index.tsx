@@ -2,8 +2,10 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +16,8 @@ import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
+
+const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
 type Restaurant = {
   RestaurantId: number;
@@ -45,15 +49,14 @@ export default function HomeScreen() {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [debugEmailDomain, setDebugEmailDomain] = useState<string | null>(null);
-  const [debugCompanyDomain, setDebugCompanyDomain] = useState<string | null>(null);
-  const [debugCompanyId, setDebugCompanyId] = useState<string | null>(null);
-  const [debugAuthError, setDebugAuthError] = useState<string | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   const runApi = async () => {
     try {
@@ -97,6 +100,50 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchCompanyLogoForUser = async (userId: string) => {
+    try {
+      const { data: profile } = await supabase
+        .from('AppUsers')
+        .select('company_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const companyId = profile?.company_id;
+      if (!companyId) {
+        setCompanyLogoUrl(null);
+        return;
+      }
+      const { data: company, error } = await supabase
+        .from('companies')
+        .select('logo_url,logoUrl,logo,logoUrlSmall')
+        .eq('id', companyId)
+        .maybeSingle();
+      if (error) {
+        throw error;
+      }
+      const rawLogo =
+        company?.logo_url ?? company?.logoUrl ?? company?.logo ?? company?.logoUrlSmall ?? null;
+      setCompanyLogoUrl(getAbsoluteLogoUrl(rawLogo));
+    } catch {
+      setCompanyLogoUrl(null);
+    }
+  };
+
+  const getAbsoluteLogoUrl = (url: string | null | undefined) => {
+    if (!url) {
+      return null;
+    }
+    if (url.startsWith('http')) {
+      return url;
+    }
+    if (url.startsWith('//')) {
+      return `https:${url}`;
+    }
+    if (url.startsWith('/')) {
+      return `${SUPABASE_URL}${url}`;
+    }
+    return `${SUPABASE_URL}/${url}`;
+  };
+
   const openCamera = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
@@ -115,9 +162,19 @@ export default function HomeScreen() {
       if (!mounted) return;
       setIsAuthenticated(Boolean(data.session));
       setSessionChecked(true);
+      setUserEmail(data.session?.user?.email ?? null);
+      if (data.session?.user?.id) {
+        fetchCompanyLogoForUser(data.session.user.id);
+      }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
+      setUserEmail(session?.user?.email ?? null);
+      if (session?.user?.id) {
+        fetchCompanyLogoForUser(session.user.id);
+      } else {
+        setCompanyLogoUrl(null);
+      }
     });
     return () => {
       mounted = false;
@@ -163,26 +220,21 @@ export default function HomeScreen() {
       const domainPart = trimmedEmail.includes('@')
         ? trimmedEmail.split('@').pop()?.trim().toLowerCase() ?? ''
         : '';
-      setDebugEmailDomain(domainPart || null);
-      setDebugCompanyDomain(null);
-      setDebugCompanyId(null);
       if (!domainPart) {
         throw new Error('Email domain missing');
       }
       const { data: companyMatch, error: companyError } = await supabase
         .from('companies')
-        .select('id, domain')
+        .select('id')
         .ilike('domain', domainPart)
         .limit(1)
         .maybeSingle();
       if (companyError) {
         throw companyError;
       }
-      if (!companyMatch) {
+      if (!companyMatch?.id) {
         throw new Error('No company matches email domain');
       }
-      setDebugCompanyDomain(companyMatch.domain ?? null);
-      setDebugCompanyId(companyMatch.id ?? null);
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password: pass,
@@ -191,17 +243,17 @@ export default function HomeScreen() {
         throw error;
       }
       const supabaseUserId = data.user?.id;
-      if (supabaseUserId && companyMatch.id) {
-        const { error: profileError } = await supabase.from('AppUsers').insert({
-          user_id: supabaseUserId,
-          email: trimmedEmail,
-          company_id: companyMatch.id,
-        });
-        if (profileError) {
-          throw profileError;
-        }
+      if (supabaseUserId) {
+      const { error: profileError } = await supabase.from('AppUsers').insert({
+        user_id: supabaseUserId,
+        email: trimmedEmail,
+        company_id: companyMatch.id,
+      });
+      if (profileError) {
+        throw profileError;
       }
-      Alert.alert('Check your email', 'Confirm your email to complete signup.');
+      await fetchCompanyLogoForUser(supabaseUserId);
+    }
       setShowSignup(false);
       setPass('');
       setConfirmPass('');
@@ -209,19 +261,6 @@ export default function HomeScreen() {
       const authApiError =
         err && typeof err === 'object' && 'name' in err ? (err as { [k: string]: any }) : null;
       const message = authApiError?.message ?? (err instanceof Error ? err.message : 'Signup failed.');
-      setDebugAuthError(
-        JSON.stringify(
-          {
-            message: authApiError?.message ?? 'n/a',
-            details: authApiError?.details ?? null,
-            hint: authApiError?.hint ?? null,
-            status: authApiError?.status ?? null,
-            code: authApiError?.code ?? null,
-          },
-          null,
-          2
-        )
-      );
       const lower = message.toLowerCase();
       if (lower.includes('no company matches email domain')) {
         setAuthError('Signup blocked: your email domain is not associated with a company.');
@@ -237,168 +276,174 @@ export default function HomeScreen() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setMenuVisible(false);
+    setUserEmail(null);
+    setCompanyLogoUrl(null);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable style={styles.iconButton} onPress={() => {}}>
-          <Ionicons name="menu" size={24} color="#111111" />
+        <Pressable style={styles.userButton} onPress={() => setMenuVisible((prev) => !prev)}>
+          <Ionicons name="person-circle-outline" size={32} color="#111111" />
         </Pressable>
         <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>DishGuru</Text>
+          {companyLogoUrl ? (
+            <Image source={{ uri: companyLogoUrl }} style={styles.logoImage} />
+          ) : (
+            <Text style={styles.logoText}>DishGuru</Text>
+          )}
         </View>
         <Pressable style={styles.iconButton} onPress={openCamera}>
           <Ionicons name="camera" size={24} color="#111111" />
         </Pressable>
       </View>
-      {!sessionChecked ? (
-        <View style={styles.results}>
-          <ActivityIndicator size="large" />
-        </View>
-      ) : !isAuthenticated ? (
-        <View style={styles.authCard}>
-          <Text style={styles.authTitle}>{showSignup ? 'Create account' : 'Sign in'}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.inputField}
-              placeholder="Password"
-              secureTextEntry={!showPass}
-              value={pass}
-              onChangeText={setPass}
-            />
-            <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
-              <Ionicons name={showPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
+      {menuVisible && (
+        <View style={styles.menuContainer}>
+          <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)} />
+          <View style={styles.menuOverlay}>
+            <Pressable style={styles.menuClose} onPress={() => setMenuVisible(false)}>
+              <Ionicons name="close" size={20} color="#333333" />
+            </Pressable>
+            <Text style={styles.menuLabel}>user: {userEmail ?? '—'}</Text>
+            <Text style={styles.menuOption}>Terms</Text>
+            <Text style={styles.menuOption}>Privacy</Text>
+            <Pressable style={styles.signOutMenuButton} onPress={signOut}>
+              <Text style={styles.signOutMenuText}>Sign out</Text>
             </Pressable>
           </View>
-          {showSignup && (
+        </View>
+      )}
+      <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
+        {!sessionChecked ? (
+          <View style={styles.results}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : !isAuthenticated ? (
+          <View style={styles.authCard}>
+            <Text style={styles.authTitle}>{showSignup ? 'Create account' : 'Sign in'}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.inputField}
-                placeholder="Confirm password"
-                secureTextEntry={!showConfirmPass}
-                value={confirmPass}
-                onChangeText={setConfirmPass}
+                placeholder="Password"
+                secureTextEntry={!showPass}
+                value={pass}
+                onChangeText={setPass}
               />
-              <Pressable
-                style={styles.eyeButton}
-                onPress={() => setShowConfirmPass((v) => !v)}
-              >
-                <Ionicons name={showConfirmPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
+              <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
+                <Ionicons name={showPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
               </Pressable>
             </View>
-          )}
-          {authError && <Text style={styles.errorText}>{authError}</Text>}
-          {(debugEmailDomain !== null || debugCompanyDomain !== null) && (
-            <View style={styles.debugCard}>
-              <Text style={styles.debugLabel}>Email domain</Text>
-              <Text style={styles.debugValue}>{debugEmailDomain ?? 'not provided'}</Text>
-              <Text style={styles.debugLabel}>Matched company domain</Text>
-              <Text style={styles.debugValue}>
-                {debugCompanyDomain ?? 'no matching company domain found'}
-              </Text>
-              {debugCompanyId && (
-                <>
-                  <Text style={styles.debugLabel}>Company ID</Text>
-                  <Text style={styles.debugValue}>{debugCompanyId}</Text>
-                </>
-              )}
-            </View>
-          )}
-          {debugAuthError && (
-            <View style={styles.debugCard}>
-              <Text style={styles.debugLabel}>Raw Supabase error</Text>
-              <Text style={styles.debugValue}>{debugAuthError}</Text>
-            </View>
-          )}
-          {showSignup ? (
-            <>
-              <Pressable style={styles.loginButton} onPress={signUp} disabled={authLoading}>
-                {authLoading ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.loginButtonText}>Create account</Text>
-                )}
-              </Pressable>
-              <Pressable
-                style={styles.signupButton}
-                onPress={() => {
-                  setShowSignup(false);
-                  setAuthError(null);
-                }}
-                disabled={authLoading}
-              >
-                <Text style={styles.signupButtonText}>Back to login</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Pressable style={styles.loginButton} onPress={signIn} disabled={authLoading}>
-                {authLoading ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.loginButtonText}>Login</Text>
-                )}
-              </Pressable>
-              <Pressable
-                style={styles.signupButton}
-                onPress={() => {
-                  setShowSignup(true);
-                  setAuthError(null);
-                }}
-                disabled={authLoading}
-              >
-                <Text style={styles.signupButtonText}>Create account</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-      ) : (
-        <View style={styles.results}>
-          <Pressable style={styles.signOutButton} onPress={signOut}>
-            <Text style={styles.signOutText}>Sign out</Text>
-          </Pressable>
-          {loading && <ActivityIndicator size="large" />}
-          {!loading && error && <Text style={styles.errorText}>{error}</Text>}
-          {!loading && !error && restaurants.length > 0 && (
-          <FlatList
-            data={restaurants}
-            keyExtractor={(item) => String(item.RestaurantId)}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.card}
-                onPress={() => {
-                  if (item.StartOrderURL) {
-                    Linking.openURL(item.StartOrderURL);
-                  } else {
-                    Alert.alert('Menu link not available', 'This restaurant did not include a menu URL.');
-                  }
-                }}
-              >
-                <Text style={styles.cardTitle}>{item.RestaurantName}</Text>
-                {item.StartOrderURL ? (
-                  <Text style={styles.cardSubtitle}>Open menu</Text>
-                ) : (
-                  <Text style={styles.cardSubtitleMuted}>Menu link not available</Text>
-                )}
-              </Pressable>
+            {showSignup && (
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="Confirm password"
+                  secureTextEntry={!showConfirmPass}
+                  value={confirmPass}
+                  onChangeText={setConfirmPass}
+                />
+                <Pressable
+                  style={styles.eyeButton}
+                  onPress={() => setShowConfirmPass((v) => !v)}
+                >
+                  <Ionicons name={showConfirmPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
+                </Pressable>
+              </View>
             )}
-          />
+            {authError && <Text style={styles.errorText}>{authError}</Text>}
+            {showSignup ? (
+              <>
+                <Pressable style={styles.loginButton} onPress={signUp} disabled={authLoading}>
+                  {authLoading ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Text style={styles.loginButtonText}>Create account</Text>
+                  )}
+                </Pressable>
+                <Pressable
+                  style={styles.signupButton}
+                  onPress={() => {
+                    setShowSignup(false);
+                    setAuthError(null);
+                  }}
+                  disabled={authLoading}
+                >
+                  <Text style={styles.signupButtonText}>Back to login</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable style={styles.loginButton} onPress={signIn} disabled={authLoading}>
+                  {authLoading ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Text style={styles.loginButtonText}>Login</Text>
+                  )}
+                </Pressable>
+                <Pressable
+                  style={styles.signupButton}
+                  onPress={() => {
+                    setShowSignup(true);
+                    setAuthError(null);
+                  }}
+                  disabled={authLoading}
+                >
+                  <Text style={styles.signupButtonText}>Create account</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        ) : (
+          <View style={styles.results}>
+            <Pressable style={styles.signOutButton} onPress={signOut}>
+              <Text style={styles.signOutText}>Sign out</Text>
+            </Pressable>
+            {loading && <ActivityIndicator size="large" />}
+            {!loading && error && <Text style={styles.errorText}>{error}</Text>}
+            {!loading && !error && restaurants.length > 0 && (
+              <FlatList
+                data={restaurants}
+                keyExtractor={(item) => String(item.RestaurantId)}
+                contentContainerStyle={styles.listContent}
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={styles.card}
+                    onPress={() => {
+                      if (item.StartOrderURL) {
+                        Linking.openURL(item.StartOrderURL);
+                      } else {
+                        Alert.alert(
+                          'Menu link not available',
+                          'This restaurant did not include a menu URL.'
+                        );
+                      }
+                    }}
+                  >
+                    <Text style={styles.cardTitle}>{item.RestaurantName}</Text>
+                    {item.StartOrderURL ? (
+                      <Text style={styles.cardSubtitle}>Open menu</Text>
+                    ) : (
+                      <Text style={styles.cardSubtitleMuted}>Menu link not available</Text>
+                    )}
+                  </Pressable>
+                )}
+              />
+            )}
+            {!loading && !error && restaurants.length === 0 && (
+              <Text style={styles.placeholderText}>Tap “Run API” to load data.</Text>
+            )}
+          </View>
         )}
-        {!loading && !error && restaurants.length === 0 && (
-          <Text style={styles.placeholderText}>Tap “Run API” to load data.</Text>
-        )}
-      </View>
-      )}
+      </ScrollView>
       {isAuthenticated && (
         <>
           <Pressable style={[styles.button, styles.runApiButton]} onPress={runApi}>
@@ -449,6 +494,84 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#111111',
+  },
+  logoImage: {
+    width: 160,
+    height: 40,
+    resizeMode: 'contain',
+  },
+  userButton: {
+    height: 40,
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  menuContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 18,
+  },
+  menuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  menuOverlay: {
+    position: 'absolute',
+    top: 64,
+    left: 16,
+    right: 16,
+    zIndex: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#dddddd',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  menuClose: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    height: 32,
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111111',
+    marginBottom: 8,
+  },
+  menuOption: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 4,
+  },
+  signOutMenuButton: {
+    marginTop: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  signOutMenuText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   results: {
     alignSelf: 'stretch',
@@ -528,22 +651,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  debugCard: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 4,
-  },
-  debugLabel: {
-    fontSize: 12,
-    color: '#888888',
-    textTransform: 'uppercase',
-  },
-  debugValue: {
-    fontSize: 14,
-    color: '#111111',
-    marginBottom: 6,
-  },
   signOutButton: {
     alignSelf: 'flex-end',
     paddingHorizontal: 12,
@@ -611,5 +718,11 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 200,
   },
 });
