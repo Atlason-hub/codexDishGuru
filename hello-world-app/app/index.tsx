@@ -14,8 +14,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
+import { useRouter } from 'expo-router';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
@@ -41,6 +41,7 @@ const extractNamesFromXml = (xml: string): Restaurant[] => {
 };
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -263,16 +264,8 @@ export default function HomeScreen() {
     return `${SUPABASE_URL}/${url}`;
   };
 
-  const openCamera = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Camera access needed', 'Please allow camera access to take a photo.');
-      return;
-    }
-    await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
+  const openCamera = () => {
+    router.push('/camera');
   };
 
   useEffect(() => {
@@ -414,9 +407,14 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable style={styles.userButton} onPress={() => setMenuVisible((prev) => !prev)}>
-          <Ionicons name="person-circle-outline" size={32} color="#111111" />
-        </Pressable>
+        <View style={styles.leftIcons}>
+          <Pressable style={styles.iconButton} onPress={openCamera}>
+            <Ionicons name="camera" size={24} color="#111111" />
+          </Pressable>
+          <Pressable style={styles.iconButton} onPress={() => {}}>
+            <Ionicons name="search" size={24} color="#111111" />
+          </Pressable>
+        </View>
         <View style={styles.logoContainer}>
           {companyLogoUrl ? (
             <Image source={{ uri: companyLogoUrl }} style={styles.logoImage} />
@@ -424,9 +422,11 @@ export default function HomeScreen() {
             <Text style={styles.logoText}>DishGuru</Text>
           )}
         </View>
-        <Pressable style={styles.iconButton} onPress={openCamera}>
-          <Ionicons name="camera" size={24} color="#111111" />
-        </Pressable>
+        <View style={styles.rightIcons}>
+          <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
+            <Ionicons name="menu" size={28} color="#111111" />
+          </Pressable>
+        </View>
       </View>
       {menuVisible && (
         <View style={styles.menuContainer}>
@@ -435,9 +435,18 @@ export default function HomeScreen() {
             <Pressable style={styles.menuClose} onPress={() => setMenuVisible(false)}>
               <Ionicons name="close" size={20} color="#333333" />
             </Pressable>
-            <Text style={styles.menuLabel}>user: {userEmail ?? '—'}</Text>
-            <Text style={styles.menuOption}>Terms</Text>
-            <Text style={styles.menuOption}>Privacy</Text>
+            <View style={styles.menuUserRow}>
+              <Ionicons name="person-circle-outline" size={36} color="#111111" />
+              <View style={{ marginLeft: 8 }}>
+                <Text style={styles.menuLabel}>{userEmail ?? 'User'}</Text>
+              </View>
+            </View>
+            <Pressable style={styles.menuOptionRow}>
+              <Text style={styles.menuOption}>Privacy</Text>
+            </Pressable>
+            <Pressable style={styles.menuOptionRow}>
+              <Text style={styles.menuOption}>Terms</Text>
+            </Pressable>
             <Pressable style={styles.signOutMenuButton} onPress={signOut}>
               <Text style={styles.signOutMenuText}>Sign out</Text>
             </Pressable>
@@ -608,6 +617,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eeeeee',
     marginBottom: 12,
+    marginTop: 6,
+  },
+  leftIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: 96,
+  },
+  rightIcons: {
+    width: 96,
+    alignItems: 'flex-end',
   },
   iconButton: {
     height: 40,
@@ -629,13 +649,6 @@ const styles = StyleSheet.create({
     width: 160,
     height: 40,
     resizeMode: 'contain',
-  },
-  userButton: {
-    height: 40,
-    width: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
   },
   menuContainer: {
     position: 'absolute',
@@ -682,7 +695,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#111111',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   menuOption: {
     fontSize: 14,
@@ -702,6 +715,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  menuUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  menuOptionRow: {
+    paddingVertical: 4,
   },
   results: {
     alignSelf: 'stretch',
