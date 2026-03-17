@@ -62,11 +62,53 @@ export default function HomeScreen() {
   const [logoDebugUrl, setLogoDebugUrl] = useState<string | null>(null);
   const [companyFetchError, setCompanyFetchError] = useState<string | null>(null);
   const [companyDebugJson, setCompanyDebugJson] = useState<string | null>(null);
-  const [testLogoUrl, setTestLogoUrl] = useState<string | null>(null);
-  const [testLogoRaw, setTestLogoRaw] = useState<string | null>(null);
-  const [testLogoError, setTestLogoError] = useState<string | null>(null);
-  const [testLogoLoadError, setTestLogoLoadError] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+
+  const resolveLogoUrl = async (url: string | null | undefined) => {
+    if (!url) return null;
+    if (url.startsWith('data:')) return url;
+
+    // Handle /api/logo?path=... where assets are in companies bucket
+    if (url.includes('/api/logo?path=')) {
+      const pathParam = url.split('path=').pop();
+      if (pathParam) {
+        const decodedPath = decodeURIComponent(pathParam);
+        const { data, error } = await supabase.storage
+          .from('companies')
+          .createSignedUrl(decodedPath, 3600);
+        if (!error && data?.signedUrl) return data.signedUrl;
+      }
+      // fallback to host prefix
+      return url.startsWith('http') ? url : `${SUPABASE_URL}${url}`;
+    }
+
+    // Handle storage public URLs
+    if (url.includes('/storage/v1/object/')) {
+      const split = url.split('/storage/v1/object/');
+      if (split.length === 2) {
+        const pathPart = split[1];
+        // pathPart may start with public/<bucket>/<path>
+        const pathSegments = pathPart.split('/');
+        if (pathSegments.length >= 3) {
+          const bucket = pathSegments[1];
+          const objectPath = pathSegments.slice(2).join('/');
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .createSignedUrl(objectPath, 3600);
+          if (!error && data?.signedUrl) return data.signedUrl;
+        }
+      }
+      return url;
+    }
+
+    // Absolute HTTP(S)
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')) {
+      return url.startsWith('//') ? `https:${url}` : url;
+    }
+
+    // Relative: prefix host
+    return `${SUPABASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
+  };
 
   const getEmailDomain = (value: string | null | undefined) => {
     if (!value) return null;
@@ -176,7 +218,7 @@ export default function HomeScreen() {
       }
       setCompanyDebugJson(JSON.stringify(company, null, 2));
       const rawLogo = company.logo_url ?? company.logo ?? null;
-      const absoluteLogo = getAbsoluteLogoUrl(rawLogo);
+      const absoluteLogo = await resolveLogoUrl(rawLogo);
       setCompanyLogoUrl(absoluteLogo);
       setLogoDebugUrl(absoluteLogo);
       const domainValue =
@@ -221,34 +263,6 @@ export default function HomeScreen() {
     return `${SUPABASE_URL}/${url}`;
   };
 
-  const fetchTestLogoByCompanyId = async (companyId: string) => {
-    try {
-      setTestLogoError(null);
-      setTestLogoRaw(null);
-      setTestLogoLoadError(null);
-      const { data, error } = await supabase
-        .from('companies')
-        .select('logo_url, domain')
-        .eq('id', companyId)
-        .maybeSingle();
-      if (error || !data) {
-        setTestLogoUrl(null);
-        setTestLogoError(error?.message ?? 'Test company not found');
-        return;
-      }
-      const rawLogo = data.logo_url ?? null;
-      setTestLogoRaw(rawLogo);
-      const absolute = getAbsoluteLogoUrl(rawLogo);
-      setTestLogoUrl(absolute);
-      if (!absolute) {
-        setTestLogoError('Test company has no logo_url');
-      }
-    } catch (err) {
-      setTestLogoUrl(null);
-      setTestLogoError(err instanceof Error ? err.message : 'Unknown error fetching test logo');
-    }
-  };
-
   const openCamera = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
@@ -272,7 +286,6 @@ export default function HomeScreen() {
       setUserEmailDomain(getEmailDomain(sessionEmail));
       if (data.session?.user?.id) {
         fetchCompanyLogoForUser(data.session.user.id, getEmailDomain(sessionEmail));
-        fetchTestLogoByCompanyId('3d14caa9-5d50-4eaa-9dff-611d8cfc8bd9');
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -282,7 +295,6 @@ export default function HomeScreen() {
       setUserEmailDomain(getEmailDomain(sessionEmail));
       if (session?.user?.id) {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
-        fetchTestLogoByCompanyId('3d14caa9-5d50-4eaa-9dff-611d8cfc8bd9');
       } else {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
@@ -525,35 +537,6 @@ export default function HomeScreen() {
             <Pressable style={styles.signOutButton} onPress={signOut}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
-            {/* Test company logo display */}
-            <View style={[styles.card, { marginBottom: 12 }]}>
-              <Text style={styles.cardSubtitle}>Test company logo (babytv)</Text>
-              <Text style={styles.cardSubtitleMuted}>raw logo_url</Text>
-              <Text style={styles.cardTitle} numberOfLines={2}>
-                {testLogoRaw ?? '—'}
-              </Text>
-              <Text style={styles.cardSubtitleMuted}>resolved URL</Text>
-              <Text style={styles.cardTitle} numberOfLines={2}>
-                {testLogoUrl ?? '—'}
-              </Text>
-              {testLogoUrl ? (
-                <Image
-                  source={{ uri: testLogoUrl }}
-                  style={{ width: '100%', height: 100, resizeMode: 'contain', marginTop: 8 }}
-                  onError={(e) =>
-                    setTestLogoLoadError(
-                      e?.nativeEvent?.error ?? 'Image load error (test logo)'
-                    )
-                  }
-                />
-              ) : (
-                <Text style={styles.errorText}>{testLogoError ?? 'No logo loaded'}</Text>
-              )}
-              {testLogoLoadError && (
-                <Text style={styles.errorText}>{testLogoLoadError}</Text>
-              )}
-            </View>
-
             {loading && <ActivityIndicator size="large" />}
             {!loading && error && <Text style={styles.errorText}>{error}</Text>}
             {!loading && !error && restaurants.length > 0 && (
