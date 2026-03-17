@@ -55,8 +55,26 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userEmailDomain, setUserEmailDomain] = useState<string | null>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const [companyDomain, setCompanyDomain] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [logoDebugUrl, setLogoDebugUrl] = useState<string | null>(null);
+  const [companyFetchError, setCompanyFetchError] = useState<string | null>(null);
+  const [companyDebugJson, setCompanyDebugJson] = useState<string | null>(null);
+  const [testLogoUrl, setTestLogoUrl] = useState<string | null>(null);
+  const [testLogoRaw, setTestLogoRaw] = useState<string | null>(null);
+  const [testLogoError, setTestLogoError] = useState<string | null>(null);
+  const [testLogoLoadError, setTestLogoLoadError] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+
+  const getEmailDomain = (value: string | null | undefined) => {
+    if (!value) return null;
+    const atIndex = value.lastIndexOf('@');
+    if (atIndex === -1) return null;
+    const domain = value.slice(atIndex + 1).trim().toLowerCase();
+    return domain.length > 0 ? domain : null;
+  };
 
   const runApi = async () => {
     try {
@@ -100,37 +118,96 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchCompanyLogoForUser = async (userId: string) => {
+  const fetchCompanyLogoForUser = async (userId: string, fallbackDomain?: string | null) => {
     try {
-      const { data: profile } = await supabase
+      setCompanyFetchError(null);
+      const { data: profile, error: profileError } = await supabase
         .from('AppUsers')
         .select('company_id')
         .eq('user_id', userId)
+        .limit(1)
         .maybeSingle();
-      const companyId = profile?.company_id;
-      if (!companyId) {
+      if (profileError) {
         setCompanyLogoUrl(null);
+        setCompanyDomain(null);
+        setCompanyId(null);
+        setLogoDebugUrl(null);
+        setCompanyDebugJson(null);
+        setCompanyFetchError(profileError.message ?? 'AppUsers fetch error');
         return;
       }
-      const { data: company, error } = await supabase
-        .from('companies')
-        .select('logo_url,logoUrl,logo,logoUrlSmall')
-        .eq('id', companyId)
-        .maybeSingle();
-      if (error) {
-        throw error;
+      let companyIdValue: string | null = profile?.company_id ?? null;
+
+      // Fallback: if no company_id on AppUsers, try matching companies by email domain
+      if (!companyIdValue && fallbackDomain) {
+        const { data: companyFromDomain, error: companyDomainError } = await supabase
+          .from('companies')
+          .select('id')
+          .ilike('domain', fallbackDomain)
+          .limit(1)
+          .maybeSingle();
+        if (companyDomainError) {
+          setCompanyFetchError(companyDomainError.message ?? 'companies domain fetch error');
+        }
+        companyIdValue = companyFromDomain?.id ?? null;
       }
-      const rawLogo =
-        company?.logo_url ?? company?.logoUrl ?? company?.logo ?? company?.logoUrlSmall ?? null;
-      setCompanyLogoUrl(getAbsoluteLogoUrl(rawLogo));
-    } catch {
+
+      if (!companyIdValue) {
+        setCompanyLogoUrl(null);
+        setCompanyDomain(null);
+        setCompanyId(null);
+        setLogoDebugUrl(null);
+        setCompanyDebugJson(null);
+        return;
+      }
+      setCompanyId(companyIdValue);
+      const { data: company, error: companyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', companyIdValue)
+        .maybeSingle();
+      if (companyError || !company) {
+        setCompanyLogoUrl(null);
+        setCompanyDomain(null);
+        setLogoDebugUrl(null);
+        setCompanyDebugJson(null);
+        if (companyError) setCompanyFetchError(companyError.message ?? 'companies fetch error');
+        return;
+      }
+      setCompanyDebugJson(JSON.stringify(company, null, 2));
+      const rawLogo = company.logo_url ?? company.logo ?? null;
+      const absoluteLogo = getAbsoluteLogoUrl(rawLogo);
+      setCompanyLogoUrl(absoluteLogo);
+      setLogoDebugUrl(absoluteLogo);
+      const domainValue =
+        typeof company.domain === 'string'
+          ? company.domain
+          : typeof (company as any).normalized === 'string'
+          ? (company as any).normalized
+          : null;
+      setCompanyDomain(domainValue);
+    } catch (err) {
       setCompanyLogoUrl(null);
+      setCompanyDomain(null);
+      setCompanyId(null);
+      setLogoDebugUrl(null);
+      setCompanyDebugJson(null);
+      setCompanyFetchError(err instanceof Error ? err.message : 'Unknown company lookup error');
     }
   };
 
   const getAbsoluteLogoUrl = (url: string | null | undefined) => {
     if (!url) {
       return null;
+    }
+    if (url.startsWith('data:')) {
+      return url;
+    }
+    // If this is the Supabase proxy /api/logo?path=... just prefix host
+    if (url.startsWith('/api/logo?') || url.includes('/api/logo?path=')) {
+      if (url.startsWith('http')) return url;
+      if (url.startsWith('/')) return `${SUPABASE_URL}${url}`;
+      return `${SUPABASE_URL}/${url}`;
     }
     if (url.startsWith('http')) {
       return url;
@@ -142,6 +219,34 @@ export default function HomeScreen() {
       return `${SUPABASE_URL}${url}`;
     }
     return `${SUPABASE_URL}/${url}`;
+  };
+
+  const fetchTestLogoByCompanyId = async (companyId: string) => {
+    try {
+      setTestLogoError(null);
+      setTestLogoRaw(null);
+      setTestLogoLoadError(null);
+      const { data, error } = await supabase
+        .from('companies')
+        .select('logo_url, domain')
+        .eq('id', companyId)
+        .maybeSingle();
+      if (error || !data) {
+        setTestLogoUrl(null);
+        setTestLogoError(error?.message ?? 'Test company not found');
+        return;
+      }
+      const rawLogo = data.logo_url ?? null;
+      setTestLogoRaw(rawLogo);
+      const absolute = getAbsoluteLogoUrl(rawLogo);
+      setTestLogoUrl(absolute);
+      if (!absolute) {
+        setTestLogoError('Test company has no logo_url');
+      }
+    } catch (err) {
+      setTestLogoUrl(null);
+      setTestLogoError(err instanceof Error ? err.message : 'Unknown error fetching test logo');
+    }
   };
 
   const openCamera = async () => {
@@ -162,18 +267,25 @@ export default function HomeScreen() {
       if (!mounted) return;
       setIsAuthenticated(Boolean(data.session));
       setSessionChecked(true);
-      setUserEmail(data.session?.user?.email ?? null);
+      const sessionEmail = data.session?.user?.email ?? null;
+      setUserEmail(sessionEmail);
+      setUserEmailDomain(getEmailDomain(sessionEmail));
       if (data.session?.user?.id) {
-        fetchCompanyLogoForUser(data.session.user.id);
+        fetchCompanyLogoForUser(data.session.user.id, getEmailDomain(sessionEmail));
+        fetchTestLogoByCompanyId('3d14caa9-5d50-4eaa-9dff-611d8cfc8bd9');
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
-      setUserEmail(session?.user?.email ?? null);
+      const sessionEmail = session?.user?.email ?? null;
+      setUserEmail(sessionEmail);
+      setUserEmailDomain(getEmailDomain(sessionEmail));
       if (session?.user?.id) {
-        fetchCompanyLogoForUser(session.user.id);
+        fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
+        fetchTestLogoByCompanyId('3d14caa9-5d50-4eaa-9dff-611d8cfc8bd9');
       } else {
         setCompanyLogoUrl(null);
+        setCompanyDomain(null);
       }
     });
     return () => {
@@ -278,7 +390,13 @@ export default function HomeScreen() {
     await supabase.auth.signOut();
     setMenuVisible(false);
     setUserEmail(null);
+    setUserEmailDomain(null);
     setCompanyLogoUrl(null);
+    setCompanyDomain(null);
+    setCompanyId(null);
+    setLogoDebugUrl(null);
+    setCompanyFetchError(null);
+    setCompanyDebugJson(null);
   };
 
   return (
@@ -407,6 +525,35 @@ export default function HomeScreen() {
             <Pressable style={styles.signOutButton} onPress={signOut}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
+            {/* Test company logo display */}
+            <View style={[styles.card, { marginBottom: 12 }]}>
+              <Text style={styles.cardSubtitle}>Test company logo (babytv)</Text>
+              <Text style={styles.cardSubtitleMuted}>raw logo_url</Text>
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {testLogoRaw ?? '—'}
+              </Text>
+              <Text style={styles.cardSubtitleMuted}>resolved URL</Text>
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {testLogoUrl ?? '—'}
+              </Text>
+              {testLogoUrl ? (
+                <Image
+                  source={{ uri: testLogoUrl }}
+                  style={{ width: '100%', height: 100, resizeMode: 'contain', marginTop: 8 }}
+                  onError={(e) =>
+                    setTestLogoLoadError(
+                      e?.nativeEvent?.error ?? 'Image load error (test logo)'
+                    )
+                  }
+                />
+              ) : (
+                <Text style={styles.errorText}>{testLogoError ?? 'No logo loaded'}</Text>
+              )}
+              {testLogoLoadError && (
+                <Text style={styles.errorText}>{testLogoLoadError}</Text>
+              )}
+            </View>
+
             {loading && <ActivityIndicator size="large" />}
             {!loading && error && <Text style={styles.errorText}>{error}</Text>}
             {!loading && !error && restaurants.length > 0 && (
@@ -676,6 +823,26 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#b00020',
     fontSize: 14,
+  },
+  domainCard: {
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  domainLabel: {
+    fontSize: 12,
+    color: '#777777',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  domainValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111111',
+    marginBottom: 8,
   },
   card: {
     backgroundColor: '#ffffff',
