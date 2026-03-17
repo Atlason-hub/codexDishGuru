@@ -60,7 +60,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(response.status).send(text);
       }
 
-      return res.status(200).json({ url: `/api/logo?path=${encodeURIComponent(path)}` });
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+      return res.status(200).json({ url: publicUrl, path });
     } catch (err) {
       return res.status(500).json({ error: err instanceof Error ? err.message : "Upload failed" });
     }
