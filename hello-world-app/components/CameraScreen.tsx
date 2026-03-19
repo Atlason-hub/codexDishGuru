@@ -18,16 +18,19 @@ export default function CameraScreen() {
       }
       const photo = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.9,
+        quality: 0.7,
+        base64: true,
       });
-      if (photo.canceled || !photo.assets || !photo.assets[0]?.uri) {
+      if (photo.canceled || !photo.assets) return;
+      if (!photo.assets[0]?.uri) {
         router.back();
         return;
       }
       const uri = photo.assets[0].uri;
+      const base64 = photo.assets[0].base64 ?? null;
       router.push({
         pathname: '/camera/details',
-        params: { photoUri: encodeURIComponent(uri) },
+        params: { photoUri: encodeURIComponent(uri), photoBase64: base64 ?? '' },
       });
     } catch (err) {
       Alert.alert('Camera error', err instanceof Error ? err.message : 'Failed to take photo');
