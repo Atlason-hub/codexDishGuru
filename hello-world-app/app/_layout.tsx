@@ -4,17 +4,18 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from 'react-native';
+import AppHeader from '../components/AppHeader';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="camera" options={{ headerShown: false }} />
-        <Stack.Screen name="camera/result" options={{ headerShown: false }} />
-        <Stack.Screen name="camera/details" options={{ headerShown: false }} />
+      <Stack screenOptions={{ header: () => <AppHeader /> }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="camera" />
+        <Stack.Screen name="camera/result" />
+        <Stack.Screen name="camera/details" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

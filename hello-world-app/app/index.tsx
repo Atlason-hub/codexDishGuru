@@ -2,7 +2,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -11,12 +10,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import CachedLogo from '../components/CachedLogo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { fetchCompanyLogoForCurrentUser, loadCachedLogo } from '../lib/logo';
-import { useRouter } from 'expo-router';
+import { loadCachedLogo } from '../lib/logo';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
@@ -42,7 +41,6 @@ const extractNamesFromXml = (xml: string): Restaurant[] => {
 };
 
 export default function HomeScreen() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -62,16 +60,21 @@ export default function HomeScreen() {
   const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
   const [companyDomain, setCompanyDomain] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
-  const [logoDebugUrl, setLogoDebugUrl] = useState<string | null>(null);
   const [companyFetchError, setCompanyFetchError] = useState<string | null>(null);
   const [companyDebugJson, setCompanyDebugJson] = useState<string | null>(null);
-  const [menuVisible, setMenuVisible] = useState(false);
 
-  const resolveLogoUrl = (path: string | null | undefined) => {
-    if (!path) return null;
-    if (path.startsWith('http')) return path;
-    const bucket = 'companies';
-    return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path.replace(/^\/+/, '')}`;
+  const resolveLogoUrl = (raw: string | null | undefined) => {
+    if (!raw) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    if (raw.startsWith('//')) return `https:${raw}`;
+    if (raw.includes('/storage/v1/object/public/')) return raw;
+
+    const trimmed = raw.replace(/^\/+/, '');
+    const objectPath = trimmed.startsWith('companies/')
+      ? trimmed.replace(/^companies\//, '')
+      : trimmed;
+    const { data } = supabase.storage.from('companies').getPublicUrl(objectPath);
+    return data?.publicUrl ?? `${SUPABASE_URL}/storage/v1/object/public/companies/${objectPath}`;
   };
 
   const getEmailDomain = (value: string | null | undefined) => {
@@ -137,7 +140,6 @@ export default function HomeScreen() {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
         setCompanyId(null);
-        setLogoDebugUrl(null);
         setCompanyDebugJson(null);
         setCompanyFetchError(profileError.message ?? 'AppUsers fetch error');
         return;
@@ -162,7 +164,6 @@ export default function HomeScreen() {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
         setCompanyId(null);
-        setLogoDebugUrl(null);
         setCompanyDebugJson(null);
         return;
       }
@@ -175,16 +176,14 @@ export default function HomeScreen() {
       if (companyError || !company) {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
-        setLogoDebugUrl(null);
         setCompanyDebugJson(null);
         if (companyError) setCompanyFetchError(companyError.message ?? 'companies fetch error');
         return;
       }
       setCompanyDebugJson(JSON.stringify(company, null, 2));
-      const rawLogo = company.logo_url ?? company.logo ?? null;
+      const rawLogo = company.logo_url ?? null;
       const absoluteLogo = resolveLogoUrl(rawLogo);
       setCompanyLogoUrl(absoluteLogo);
-      setLogoDebugUrl(absoluteLogo);
       const domainValue =
         typeof company.domain === 'string'
           ? company.domain
@@ -196,7 +195,6 @@ export default function HomeScreen() {
       setCompanyLogoUrl(null);
       setCompanyDomain(null);
       setCompanyId(null);
-      setLogoDebugUrl(null);
       setCompanyDebugJson(null);
       setCompanyFetchError(err instanceof Error ? err.message : 'Unknown company lookup error');
     }
@@ -227,10 +225,6 @@ export default function HomeScreen() {
     return `${SUPABASE_URL}/${url}`;
   };
 
-  const openCamera = () => {
-    router.push('/camera');
-  };
-
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
@@ -242,14 +236,15 @@ export default function HomeScreen() {
       setUserEmailDomain(getEmailDomain(sessionEmail));
       const cached = await loadCachedLogo();
       if (cached.logoUrl || cached.logoPath) {
-        setCompanyLogoUrl(cached.logoUrl);
+        const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
+        setCompanyLogoUrl(resolved);
         setCompanyLogoPath(cached.logoPath);
       }
       if (data.session?.user?.id) {
-        const res = await fetchCompanyLogoForCurrentUser();
-        setCompanyLogoUrl(res.logoUrl);
-        setCompanyLogoPath(res.logoPath);
-        setCompanyDomain(res.domain);
+        await fetchCompanyLogoForUser(
+          data.session.user.id,
+          getEmailDomain(data.session.user.email ?? null)
+        );
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -258,11 +253,7 @@ export default function HomeScreen() {
       setUserEmail(sessionEmail);
       setUserEmailDomain(getEmailDomain(sessionEmail));
       if (session?.user?.id) {
-        fetchCompanyLogoForCurrentUser().then((res) => {
-          setCompanyLogoUrl(res.logoUrl);
-          setCompanyLogoPath(res.logoPath);
-          setCompanyDomain(res.domain);
-        });
+        fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
       } else {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
@@ -368,66 +359,17 @@ export default function HomeScreen() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setMenuVisible(false);
     setUserEmail(null);
     setUserEmailDomain(null);
     setCompanyLogoUrl(null);
     setCompanyDomain(null);
     setCompanyId(null);
-    setLogoDebugUrl(null);
     setCompanyFetchError(null);
     setCompanyDebugJson(null);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.leftIcons}>
-          <Pressable style={styles.iconButton} onPress={openCamera}>
-            <Ionicons name="camera" size={24} color="#111111" />
-          </Pressable>
-          <Pressable style={styles.iconButton} onPress={() => {}}>
-            <Ionicons name="search" size={24} color="#111111" />
-          </Pressable>
-        </View>
-        <Pressable style={styles.logoContainer} onPress={() => router.push('/')}>
-          {companyLogoUrl ? (
-            <Image source={{ uri: companyLogoUrl }} style={styles.logoImage} />
-          ) : (
-            <Text style={styles.logoText}>DishGuru</Text>
-          )}
-        </Pressable>
-        <View style={styles.rightIcons}>
-          <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
-            <Ionicons name="menu" size={28} color="#111111" />
-          </Pressable>
-        </View>
-      </View>
-      {menuVisible && (
-        <View style={styles.menuContainer}>
-          <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)} />
-          <View style={styles.menuOverlay}>
-            <Pressable style={styles.menuClose} onPress={() => setMenuVisible(false)}>
-              <Ionicons name="close" size={20} color="#333333" />
-            </Pressable>
-            <View style={styles.menuUserRow}>
-              <Ionicons name="person-circle-outline" size={36} color="#111111" />
-              <View style={{ marginLeft: 8 }}>
-                <Text style={styles.menuLabel}>{userEmail ?? 'User'}</Text>
-              </View>
-            </View>
-            <Pressable style={styles.menuOptionRow}>
-              <Text style={styles.menuOption}>Privacy</Text>
-            </Pressable>
-            <Pressable style={styles.menuOptionRow}>
-              <Text style={styles.menuOption}>Terms</Text>
-            </Pressable>
-            <Pressable style={styles.signOutMenuButton} onPress={signOut}>
-              <Text style={styles.signOutMenuText}>Sign out</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
       <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
         {!sessionChecked ? (
           <View style={styles.results}>
@@ -523,7 +465,7 @@ export default function HomeScreen() {
             </Pressable>
             {(companyLogoUrl || companyLogoPath) && (
               <View style={styles.logoCenterBox}>
-                {companyLogoUrl && <Image source={{ uri: companyLogoUrl }} style={styles.logoCenterImage} />}
+                {companyLogoUrl && <CachedLogo uri={companyLogoUrl} style={styles.logoCenterImage} />}
                 <Text style={styles.logoUrlText} numberOfLines={1} ellipsizeMode="middle">
                   {companyLogoPath ?? companyLogoUrl}
                 </Text>

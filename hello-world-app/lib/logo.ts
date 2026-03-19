@@ -44,8 +44,8 @@ const transformLogoUrl200 = (raw: string | null | undefined): LogoResult => {
     if (parts.length === 2) {
       const tail = parts[1];
       const segments = tail.split('/');
-      const bucket = segments[1];
-      const objectPath = segments.slice(2).join('/');
+      const bucket = segments[0];
+      const objectPath = segments.slice(1).join('/');
       const { data } = supabase.storage
         .from(bucket)
         .getPublicUrl(objectPath, { transform: { width: 200, height: 200 } });
@@ -53,6 +53,18 @@ const transformLogoUrl200 = (raw: string | null | undefined): LogoResult => {
       const fallback = supabase.storage.from(bucket).getPublicUrl(objectPath);
       return { logoUrl: fallback.data?.publicUrl ?? null, logoPath: objectPath };
     }
+  }
+
+  if (!raw.startsWith('http') && !raw.startsWith('//') && !raw.startsWith('/')) {
+    const segments = raw.split('/');
+    const bucket = segments[0] === 'companies' ? 'companies' : 'companies';
+    const objectPath = segments[0] === 'companies' ? segments.slice(1).join('/') : raw;
+    const { data } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(objectPath, { transform: { width: 200, height: 200 } });
+    if (data?.publicUrl) return { logoUrl: data.publicUrl, logoPath: objectPath };
+    const fallback = supabase.storage.from(bucket).getPublicUrl(objectPath);
+    return { logoUrl: fallback.data?.publicUrl ?? null, logoPath: objectPath };
   }
 
   return normalizeLogo(raw);
