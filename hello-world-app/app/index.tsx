@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { fetchCompanyLogoForCurrentUser, loadCachedLogo } from '../lib/logo';
 import { useRouter } from 'expo-router';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
@@ -58,6 +59,7 @@ export default function HomeScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userEmailDomain, setUserEmailDomain] = useState<string | null>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
   const [companyDomain, setCompanyDomain] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [logoDebugUrl, setLogoDebugUrl] = useState<string | null>(null);
@@ -65,50 +67,11 @@ export default function HomeScreen() {
   const [companyDebugJson, setCompanyDebugJson] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const resolveLogoUrl = async (url: string | null | undefined) => {
-    if (!url) return null;
-    if (url.startsWith('data:')) return url;
-
-    // Handle /api/logo?path=... where assets are in companies bucket
-    if (url.includes('/api/logo?path=')) {
-      const pathParam = url.split('path=').pop();
-      if (pathParam) {
-        const decodedPath = decodeURIComponent(pathParam);
-        const { data, error } = await supabase.storage
-          .from('companies')
-          .createSignedUrl(decodedPath, 3600);
-        if (!error && data?.signedUrl) return data.signedUrl;
-      }
-      // fallback to host prefix
-      return url.startsWith('http') ? url : `${SUPABASE_URL}${url}`;
-    }
-
-    // Handle storage public URLs
-    if (url.includes('/storage/v1/object/')) {
-      const split = url.split('/storage/v1/object/');
-      if (split.length === 2) {
-        const pathPart = split[1];
-        // pathPart may start with public/<bucket>/<path>
-        const pathSegments = pathPart.split('/');
-        if (pathSegments.length >= 3) {
-          const bucket = pathSegments[1];
-          const objectPath = pathSegments.slice(2).join('/');
-          const { data, error } = await supabase.storage
-            .from(bucket)
-            .createSignedUrl(objectPath, 3600);
-          if (!error && data?.signedUrl) return data.signedUrl;
-        }
-      }
-      return url;
-    }
-
-    // Absolute HTTP(S)
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')) {
-      return url.startsWith('//') ? `https:${url}` : url;
-    }
-
-    // Relative: prefix host
-    return `${SUPABASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
+  const resolveLogoUrl = (path: string | null | undefined) => {
+    if (!path) return null;
+    if (path.startsWith('http')) return path;
+    const bucket = 'companies';
+    return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path.replace(/^\/+/, '')}`;
   };
 
   const getEmailDomain = (value: string | null | undefined) => {
@@ -219,7 +182,7 @@ export default function HomeScreen() {
       }
       setCompanyDebugJson(JSON.stringify(company, null, 2));
       const rawLogo = company.logo_url ?? company.logo ?? null;
-      const absoluteLogo = await resolveLogoUrl(rawLogo);
+      const absoluteLogo = resolveLogoUrl(rawLogo);
       setCompanyLogoUrl(absoluteLogo);
       setLogoDebugUrl(absoluteLogo);
       const domainValue =
@@ -270,15 +233,23 @@ export default function HomeScreen() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
       setIsAuthenticated(Boolean(data.session));
       setSessionChecked(true);
       const sessionEmail = data.session?.user?.email ?? null;
       setUserEmail(sessionEmail);
       setUserEmailDomain(getEmailDomain(sessionEmail));
+      const cached = await loadCachedLogo();
+      if (cached.logoUrl || cached.logoPath) {
+        setCompanyLogoUrl(cached.logoUrl);
+        setCompanyLogoPath(cached.logoPath);
+      }
       if (data.session?.user?.id) {
-        fetchCompanyLogoForUser(data.session.user.id, getEmailDomain(sessionEmail));
+        const res = await fetchCompanyLogoForCurrentUser();
+        setCompanyLogoUrl(res.logoUrl);
+        setCompanyLogoPath(res.logoPath);
+        setCompanyDomain(res.domain);
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -287,7 +258,11 @@ export default function HomeScreen() {
       setUserEmail(sessionEmail);
       setUserEmailDomain(getEmailDomain(sessionEmail));
       if (session?.user?.id) {
-        fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
+        fetchCompanyLogoForCurrentUser().then((res) => {
+          setCompanyLogoUrl(res.logoUrl);
+          setCompanyLogoPath(res.logoPath);
+          setCompanyDomain(res.domain);
+        });
       } else {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
@@ -415,13 +390,13 @@ export default function HomeScreen() {
             <Ionicons name="search" size={24} color="#111111" />
           </Pressable>
         </View>
-        <View style={styles.logoContainer}>
+        <Pressable style={styles.logoContainer} onPress={() => router.push('/')}>
           {companyLogoUrl ? (
             <Image source={{ uri: companyLogoUrl }} style={styles.logoImage} />
           ) : (
             <Text style={styles.logoText}>DishGuru</Text>
           )}
-        </View>
+        </Pressable>
         <View style={styles.rightIcons}>
           <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
             <Ionicons name="menu" size={28} color="#111111" />
@@ -546,6 +521,14 @@ export default function HomeScreen() {
             <Pressable style={styles.signOutButton} onPress={signOut}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
+            {(companyLogoUrl || companyLogoPath) && (
+              <View style={styles.logoCenterBox}>
+                {companyLogoUrl && <Image source={{ uri: companyLogoUrl }} style={styles.logoCenterImage} />}
+                <Text style={styles.logoUrlText} numberOfLines={1} ellipsizeMode="middle">
+                  {companyLogoPath ?? companyLogoUrl}
+                </Text>
+              </View>
+            )}
             {loading && <ActivityIndicator size="large" />}
             {!loading && error && <Text style={styles.errorText}>{error}</Text>}
             {!loading && !error && restaurants.length > 0 && (
@@ -628,6 +611,20 @@ const styles = StyleSheet.create({
   rightIcons: {
     width: 96,
     alignItems: 'flex-end',
+  },
+  logoCenterBox: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  logoCenterImage: {
+    width: 180,
+    height: 60,
+    resizeMode: 'contain',
+    marginBottom: 4,
+  },
+  logoUrlText: {
+    fontSize: 12,
+    color: '#6B7280',
   },
   iconButton: {
     height: 40,

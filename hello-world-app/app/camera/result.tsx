@@ -1,8 +1,8 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { fetchCompanyLogoForCurrentUser, loadCachedLogo } from '../../lib/logo';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
@@ -15,75 +15,29 @@ export default function CameraResultScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [companyDomain, setCompanyDomain] = useState<string | null>(null);
 
-  const resolveLogoUrl = async (url: string | null | undefined) => {
-    if (!url) return null;
-    if (url.startsWith('data:')) return url;
-    if (url.includes('/api/logo?path=')) {
-      const pathParam = url.split('path=').pop();
-      if (pathParam) {
-        const decodedPath = decodeURIComponent(pathParam);
-        const { data, error } = await supabase.storage
-          .from('companies')
-          .createSignedUrl(decodedPath, 3600);
-        if (!error && data?.signedUrl) return data.signedUrl;
-      }
-      return url.startsWith('http') ? url : `${SUPABASE_URL}${url}`;
-    }
-    if (url.includes('/storage/v1/object/')) {
-      const split = url.split('/storage/v1/object/');
-      if (split.length === 2) {
-        const pathPart = split[1];
-        const pathSegments = pathPart.split('/');
-        if (pathSegments.length >= 3) {
-          const bucket = pathSegments[1];
-          const objectPath = pathSegments.slice(2).join('/');
-          const { data, error } = await supabase.storage
-            .from(bucket)
-            .createSignedUrl(objectPath, 3600);
-          if (!error && data?.signedUrl) return data.signedUrl;
-        }
-      }
-      return url;
-    }
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')) {
-      return url.startsWith('//') ? `https:${url}` : url;
-    }
-    return `${SUPABASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
+  const resolveLogoUrl = (path: string | null | undefined) => {
+    if (!path) return null;
+    if (path.startsWith('http')) return path;
+    const bucket = 'companies';
+    return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path.replace(/^\/+/, '')}`;
   };
 
   const fetchCompanyLogoForUser = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData.session?.user?.id;
-    const email = sessionData.session?.user?.email ?? null;
-    setUserEmail(email);
-    if (!userId) {
-      setCompanyLogoUrl(null);
-      return;
-    }
-    const { data: profile } = await supabase
-      .from('AppUsers')
-      .select('company_id')
-      .eq('user_id', userId)
-      .limit(1)
-      .maybeSingle();
-    const companyId = profile?.company_id;
-    if (!companyId) {
-      setCompanyLogoUrl(null);
-      return;
-    }
-    const { data: company } = await supabase
-      .from('companies')
-      .select('logo_url, logo, domain')
-      .eq('id', companyId)
-      .maybeSingle();
-    const rawLogo = company?.logo_url ?? company?.logo ?? null;
-    const absolute = await resolveLogoUrl(rawLogo);
-    setCompanyLogoUrl(absolute);
-    setCompanyDomain(company?.domain ?? null);
+    const cached = await loadCachedLogo();
+    if (cached.logoUrl) setCompanyLogoUrl(cached.logoUrl);
+    const res = await fetchCompanyLogoForCurrentUser();
+    setCompanyLogoUrl(res.logoUrl);
+    setCompanyDomain(res.domain);
+    setUserEmail(res.email);
   };
 
   useEffect(() => {
-    fetchCompanyLogoForUser();
+    const primeLogo = async () => {
+      const cached = await loadCachedLogo();
+      if (cached.logoUrl) setCompanyLogoUrl(cached.logoUrl);
+      fetchCompanyLogoForUser();
+    };
+    primeLogo();
   }, []);
 
   return (
@@ -97,13 +51,13 @@ export default function CameraResultScreen() {
             <Ionicons name="search" size={24} color="#111111" />
           </TouchableOpacity>
         </View>
-        <View style={styles.logoContainer}>
+        <Pressable style={styles.logoContainer} onPress={() => router.push('/')}>
           {companyLogoUrl ? (
             <Image source={{ uri: companyLogoUrl }} style={styles.logoImage} />
           ) : (
             <Text style={styles.logoText}>DishGuru</Text>
           )}
-        </View>
+        </Pressable>
         <View style={styles.rightIcons}>
           <TouchableOpacity style={styles.iconButton} onPress={() => setMenuVisible((p) => !p)}>
             <Ionicons name="menu" size={28} color="#111111" />
@@ -137,49 +91,21 @@ export default function CameraResultScreen() {
             <Text style={styles.placeholder}>No photo available yet</Text>
           )}
         </View>
-        <TouchableOpacity style={styles.saveButton}>
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={() => {
+            router.push({
+              pathname: '/camera/details',
+              params: { photoUri: params.photoUri ?? '' },
+            });
+          }}
+        >
           <Text style={styles.saveText}>Save</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
-
-const resolveLogoUrl = async (url: string | null | undefined) => {
-  if (!url) return null;
-  if (url.startsWith('data:')) return url;
-  if (url.includes('/api/logo?path=')) {
-    const pathParam = url.split('path=').pop();
-    if (pathParam) {
-      const decodedPath = decodeURIComponent(pathParam);
-      const { data, error } = await supabase.storage
-        .from('companies')
-        .createSignedUrl(decodedPath, 3600);
-      if (!error && data?.signedUrl) return data.signedUrl;
-    }
-    return url.startsWith('http') ? url : `${SUPABASE_URL}${url}`;
-  }
-  if (url.includes('/storage/v1/object/')) {
-    const split = url.split('/storage/v1/object/');
-    if (split.length === 2) {
-      const pathPart = split[1];
-      const pathSegments = pathPart.split('/');
-      if (pathSegments.length >= 3) {
-        const bucket = pathSegments[1];
-        const objectPath = pathSegments.slice(2).join('/');
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .createSignedUrl(objectPath, 3600);
-        if (!error && data?.signedUrl) return data.signedUrl;
-      }
-    }
-    return url;
-  }
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')) {
-    return url.startsWith('//') ? `https:${url}` : url;
-  }
-  return `${SUPABASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
-};
 
 const styles = StyleSheet.create({
   screen: {
