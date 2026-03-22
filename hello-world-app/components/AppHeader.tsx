@@ -140,20 +140,37 @@ export default function AppHeader() {
             <Pressable style={styles.menuClose} onPress={() => setMenuVisible(false)}>
               <Ionicons name="close" size={20} color="#333333" />
             </Pressable>
-            <View style={styles.menuUserRow}>
-              <Ionicons name="person-circle-outline" size={36} color="#111111" />
-              <View style={{ marginLeft: 8 }}>
-                <Text style={styles.menuLabel}>{userEmail ?? 'User'}</Text>
-              </View>
-            </View>
-            <Pressable style={styles.menuOptionRow}>
-              <Text style={styles.menuOption}>Privacy</Text>
+            <Pressable
+              style={styles.menuOptionRow}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push('/account');
+              }}
+            >
+              <Text style={styles.menuOption}>החשבון שלי</Text>
+              <Ionicons name="person-circle-outline" size={20} color="#F87171" />
+            </Pressable>
+            <Pressable
+              style={styles.menuOptionRow}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push('/?favorites=1');
+              }}
+            >
+              <Text style={styles.menuOption}>המועדפים שלי</Text>
+              <Ionicons name="heart-outline" size={20} color="#F87171" />
             </Pressable>
             <Pressable style={styles.menuOptionRow}>
-              <Text style={styles.menuOption}>Terms</Text>
+              <Text style={styles.menuOption}>מדיניות פרטיות</Text>
+              <Ionicons name="megaphone-outline" size={20} color="#F87171" />
             </Pressable>
-            <Pressable style={styles.signOutMenuButton} onPress={signOut}>
-              <Text style={styles.signOutMenuText}>Sign out</Text>
+            <Pressable style={styles.menuOptionRow}>
+              <Text style={styles.menuOption}>תנאים</Text>
+              <Ionicons name="document-text-outline" size={20} color="#F87171" />
+            </Pressable>
+            <Pressable style={styles.menuOptionRow} onPress={signOut}>
+              <Text style={[styles.menuOption, styles.menuOptionDanger]}>התנתקות</Text>
+              <Ionicons name="log-out-outline" size={20} color="#F87171" />
             </Pressable>
           </View>
         </View>
@@ -223,12 +240,13 @@ const styles = StyleSheet.create({
   menuOverlay: {
     position: 'absolute',
     top: 64,
-    left: 16,
     right: 16,
+    width: 220,
     zIndex: 20,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 12,
+    paddingTop: 32,
     borderWidth: 1,
     borderColor: '#dddddd',
     shadowColor: '#000',
@@ -246,16 +264,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111111',
-    marginBottom: 4,
-  },
   menuOption: {
     fontSize: 14,
     color: '#666666',
-    marginBottom: 4,
+    flex: 1,
+    textAlign: 'right',
   },
   signOutMenuButton: {
     marginTop: 12,
@@ -271,12 +284,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  menuUserRow: {
+  menuOptionRow: {
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  menuOptionRow: {
-    paddingVertical: 4,
+    justifyContent: 'flex-end',
+    gap: 12,
   },
 });

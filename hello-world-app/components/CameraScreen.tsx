@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, Alert, ActivityIndicator, Pressable } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 export default function CameraScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const restaurantId = typeof params.restaurantId === 'string' ? params.restaurantId : '';
+  const restaurantName = typeof params.restaurantName === 'string' ? params.restaurantName : '';
+  const dishId = typeof params.dishId === 'string' ? params.dishId : '';
+  const dishName = typeof params.dishName === 'string' ? params.dishName : '';
   const [opening, setOpening] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
 
@@ -30,7 +35,14 @@ export default function CameraScreen() {
       const base64 = photo.assets[0].base64 ?? null;
       router.push({
         pathname: '/camera/details',
-        params: { photoUri: encodeURIComponent(uri), photoBase64: base64 ?? '' },
+        params: {
+          photoUri: encodeURIComponent(uri),
+          photoBase64: base64 ?? '',
+          restaurantId,
+          restaurantName,
+          dishId,
+          dishName,
+        },
       });
     } catch (err) {
       Alert.alert('Camera error', err instanceof Error ? err.message : 'Failed to take photo');

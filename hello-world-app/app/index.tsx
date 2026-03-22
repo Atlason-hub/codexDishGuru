@@ -1,10 +1,7 @@
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
-  Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,33 +11,31 @@ import CachedLogo from '../components/CachedLogo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
 import { loadCachedLogo } from '../lib/logo';
+import { useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
-type Restaurant = {
-  RestaurantId: number;
-  RestaurantName: string;
-  StartOrderURL?: string;
-};
-
-const extractNamesFromXml = (xml: string): Restaurant[] => {
-  const results: Restaurant[] = [];
-  const pattern = /<RestaurantName>([\s\S]*?)<\/RestaurantName>/g;
-  let match: RegExpExecArray | null;
-  let index = 0;
-  while ((match = pattern.exec(xml)) !== null) {
-    const raw = match[1].trim();
-    if (raw.length > 0) {
-      results.push({ RestaurantId: index + 1, RestaurantName: raw });
-      index += 1;
-    }
-  }
-  return results;
+type DishAssociation = {
+  id: string;
+  dish_id: number | null;
+  image_url: string | null;
+  dish_name: string | null;
+  restaurant_name: string | null;
+  restaurant_id: number | null;
+  tasty_score: number | null;
+  fast_score: number | null;
+  filling_score: number | null;
+  created_at: string | null;
 };
 
 export default function HomeScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -53,7 +48,9 @@ export default function HomeScreen() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [dishAssociations, setDishAssociations] = useState<DishAssociation[]>([]);
+  const [favorites, setFavorites] = useState<Record<string, boolean>>({});
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userEmailDomain, setUserEmailDomain] = useState<string | null>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
@@ -62,6 +59,7 @@ export default function HomeScreen() {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companyFetchError, setCompanyFetchError] = useState<string | null>(null);
   const [companyDebugJson, setCompanyDebugJson] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const resolveLogoUrl = (raw: string | null | undefined) => {
     if (!raw) return null;
@@ -85,45 +83,70 @@ export default function HomeScreen() {
     return domain.length > 0 ? domain : null;
   };
 
-  const runApi = async () => {
+  const loadDishAssociations = async () => {
     try {
       setLoading(true);
       setError(null);
-      setRestaurants([]);
-      const response = await fetch(
-        'https://www.10bis.co.il/api/SearchResListWithOrderHistoryAndPopularDishesAndRes?cityId=14&streetId=54730',
-        {
-          headers: {
-            Accept: 'application/json',
-          },
-        }
-      );
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
-      }
-      const text = await response.text();
-      try {
-        const data = JSON.parse(text);
-        const list: Restaurant[] = Array.isArray(data?.Data?.ResList)
-          ? data.Data.ResList
-              .map((item: any) => ({
-                RestaurantId: item?.RestaurantId,
-                RestaurantName: item?.RestaurantName,
-                StartOrderURL: item?.StartOrderURL,
-              }))
-              .filter(
-                (item: Restaurant) =>
-                  typeof item.RestaurantName === 'string' && item.RestaurantName.length > 0
-              )
-          : [];
-        setRestaurants(list);
-      } catch {
-        setRestaurants(extractNamesFromXml(text));
-      }
+      const { data, error: fetchError } = await supabase
+        .from('dish_associations')
+        .select(
+          'id, dish_id, image_url, dish_name, restaurant_name, restaurant_id, tasty_score, fast_score, filling_score, created_at'
+        )
+        .order('created_at', { ascending: false });
+      if (fetchError) throw fetchError;
+      setDishAssociations((data as DishAssociation[]) ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFavorites = async (userId: string) => {
+    try {
+      setFavoritesLoading(true);
+      const { data, error: favError } = await supabase
+        .from('dish_favorites')
+        .select('dish_association_id')
+        .eq('user_id', userId);
+      if (favError) throw favError;
+      const map: Record<string, boolean> = {};
+      (data ?? []).forEach((row: any) => {
+        if (row?.dish_association_id) map[String(row.dish_association_id)] = true;
+      });
+      setFavorites(map);
+    } catch (err) {
+      console.log('[FAVORITES_LOAD_ERROR]:', err);
+    } finally {
+      setFavoritesLoading(false);
+    }
+  };
+
+  const toggleFavorite = async (dishAssociationId: string) => {
+    const { data } = await supabase.auth.getSession();
+    const userId = data.session?.user?.id;
+    if (!userId) return;
+    const isFav = Boolean(favorites[dishAssociationId]);
+    setFavorites((prev) => ({ ...prev, [dishAssociationId]: !isFav }));
+    try {
+      if (isFav) {
+        const { error } = await supabase
+          .from('dish_favorites')
+          .delete()
+          .eq('user_id', userId)
+          .eq('dish_association_id', dishAssociationId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('dish_favorites').insert({
+          user_id: userId,
+          dish_association_id: dishAssociationId,
+          created_at: new Date().toISOString(),
+        });
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.log('[FAVORITE_TOGGLE_ERROR]:', err);
+      setFavorites((prev) => ({ ...prev, [dishAssociationId]: isFav }));
     }
   };
 
@@ -234,6 +257,13 @@ export default function HomeScreen() {
       const sessionEmail = data.session?.user?.email ?? null;
       setUserEmail(sessionEmail);
       setUserEmailDomain(getEmailDomain(sessionEmail));
+      const cachedAvatar = await loadCachedAvatar();
+      if (cachedAvatar) setAvatarUrl(cachedAvatar);
+      const metaAvatar = await fetchAvatarFromAuth();
+      if (metaAvatar) {
+        setAvatarUrl(metaAvatar);
+        await cacheAvatar(metaAvatar);
+      }
       const cached = await loadCachedLogo();
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
@@ -245,6 +275,8 @@ export default function HomeScreen() {
           data.session.user.id,
           getEmailDomain(data.session.user.email ?? null)
         );
+        await loadDishAssociations();
+        await loadFavorites(data.session.user.id);
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -252,8 +284,15 @@ export default function HomeScreen() {
       const sessionEmail = session?.user?.email ?? null;
       setUserEmail(sessionEmail);
       setUserEmailDomain(getEmailDomain(sessionEmail));
+      const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
+      if (metaAvatar) {
+        setAvatarUrl(metaAvatar);
+        cacheAvatar(metaAvatar);
+      }
       if (session?.user?.id) {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
+        loadDishAssociations();
+        loadFavorites(session.user.id);
       } else {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
@@ -368,160 +407,221 @@ export default function HomeScreen() {
     setCompanyDebugJson(null);
   };
 
+  const showFavoritesOnly =
+    typeof params.favorites === 'string' ? params.favorites === '1' : false;
+  const visibleAssociations = showFavoritesOnly
+    ? dishAssociations.filter((item) => favorites[item.id])
+    : dishAssociations;
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-        {!sessionChecked ? (
-          <View style={styles.results}>
-            <ActivityIndicator size="large" />
-          </View>
-        ) : !isAuthenticated ? (
-          <View style={styles.authCard}>
-            <Text style={styles.authTitle}>{showSignup ? 'Create account' : 'Sign in'}</Text>
+      {!sessionChecked ? (
+        <View style={styles.results}>
+          <ActivityIndicator size="large" />
+        </View>
+      ) : !isAuthenticated ? (
+        <View style={styles.authCard}>
+          <Text style={styles.authTitle}>{showSignup ? 'Create account' : 'Sign in'}</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
+          <View style={styles.inputRow}>
             <TextInput
-              style={styles.input}
-              placeholder="Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
+              style={styles.inputField}
+              placeholder="Password"
+              secureTextEntry={!showPass}
+              value={pass}
+              onChangeText={setPass}
             />
+            <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
+              <Ionicons name={showPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
+            </Pressable>
+          </View>
+          {showSignup && (
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.inputField}
-                placeholder="Password"
-                secureTextEntry={!showPass}
-                value={pass}
-                onChangeText={setPass}
+                placeholder="Confirm password"
+                secureTextEntry={!showConfirmPass}
+                value={confirmPass}
+                onChangeText={setConfirmPass}
               />
-              <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
-                <Ionicons name={showPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
+              <Pressable
+                style={styles.eyeButton}
+                onPress={() => setShowConfirmPass((v) => !v)}
+              >
+                <Ionicons name={showConfirmPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
               </Pressable>
             </View>
-            {showSignup && (
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={styles.inputField}
-                  placeholder="Confirm password"
-                  secureTextEntry={!showConfirmPass}
-                  value={confirmPass}
-                  onChangeText={setConfirmPass}
-                />
-                <Pressable
-                  style={styles.eyeButton}
-                  onPress={() => setShowConfirmPass((v) => !v)}
-                >
-                  <Ionicons name={showConfirmPass ? 'eye-off' : 'eye'} size={18} color="#666666" />
-                </Pressable>
-              </View>
-            )}
-            {authError && <Text style={styles.errorText}>{authError}</Text>}
-            {showSignup ? (
-              <>
-                <Pressable style={styles.loginButton} onPress={signUp} disabled={authLoading}>
-                  {authLoading ? (
-                    <ActivityIndicator />
-                  ) : (
-                    <Text style={styles.loginButtonText}>Create account</Text>
-                  )}
-                </Pressable>
-                <Pressable
-                  style={styles.signupButton}
-                  onPress={() => {
-                    setShowSignup(false);
-                    setAuthError(null);
-                  }}
-                  disabled={authLoading}
-                >
-                  <Text style={styles.signupButtonText}>Back to login</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Pressable style={styles.loginButton} onPress={signIn} disabled={authLoading}>
-                  {authLoading ? (
-                    <ActivityIndicator />
-                  ) : (
-                    <Text style={styles.loginButtonText}>Login</Text>
-                  )}
-                </Pressable>
-                <Pressable
-                  style={styles.signupButton}
-                  onPress={() => {
-                    setShowSignup(true);
-                    setAuthError(null);
-                  }}
-                  disabled={authLoading}
-                >
-                  <Text style={styles.signupButtonText}>Create account</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        ) : (
-          <View style={styles.results}>
-            <Pressable style={styles.signOutButton} onPress={signOut}>
-              <Text style={styles.signOutText}>Sign out</Text>
-            </Pressable>
-            {(companyLogoUrl || companyLogoPath) && (
-              <View style={styles.logoCenterBox}>
-                {companyLogoUrl && <CachedLogo uri={companyLogoUrl} style={styles.logoCenterImage} />}
-                <Text style={styles.logoUrlText} numberOfLines={1} ellipsizeMode="middle">
-                  {companyLogoPath ?? companyLogoUrl}
+          )}
+          {authError && <Text style={styles.errorText}>{authError}</Text>}
+          {showSignup ? (
+            <>
+              <Pressable style={styles.loginButton} onPress={signUp} disabled={authLoading}>
+                {authLoading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.loginButtonText}>Create account</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={styles.signupButton}
+                onPress={() => {
+                  setShowSignup(false);
+                  setAuthError(null);
+                }}
+                disabled={authLoading}
+              >
+                <Text style={styles.signupButtonText}>Back to login</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Pressable style={styles.loginButton} onPress={signIn} disabled={authLoading}>
+                {authLoading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.loginButtonText}>Login</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={styles.signupButton}
+                onPress={() => {
+                  setShowSignup(true);
+                  setAuthError(null);
+                }}
+                disabled={authLoading}
+              >
+                <Text style={styles.signupButtonText}>Create account</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={visibleAssociations}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.feedContent}
+          ListHeaderComponent={
+            <>
+              {showFavoritesOnly && (
+                <View style={styles.favoritesHeader}>
+                  <Text style={styles.favoritesHeaderText}>המועדפים שלי</Text>
+                </View>
+              )}
+              {loading ? (
+                <View style={styles.results}>
+                  <ActivityIndicator size="large" />
+                </View>
+              ) : error ? (
+                <View style={styles.results}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+            </>
+          }
+          ListEmptyComponent={
+            !loading && !error ? (
+              <View style={styles.results}>
+                <Text style={styles.placeholderText}>
+                  {showFavoritesOnly ? 'אין מנות במועדפים' : 'אין מנות להצגה'}
                 </Text>
               </View>
-            )}
-            {loading && <ActivityIndicator size="large" />}
-            {!loading && error && <Text style={styles.errorText}>{error}</Text>}
-            {!loading && !error && restaurants.length > 0 && (
-              <FlatList
-                data={restaurants}
-                keyExtractor={(item) => String(item.RestaurantId)}
-                contentContainerStyle={styles.listContent}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={styles.card}
-                    onPress={() => {
-                      if (item.StartOrderURL) {
-                        Linking.openURL(item.StartOrderURL);
-                      } else {
-                        Alert.alert(
-                          'Menu link not available',
-                          'This restaurant did not include a menu URL.'
-                        );
-                      }
-                    }}
-                  >
-                    <Text style={styles.cardTitle}>{item.RestaurantName}</Text>
-                    {item.StartOrderURL ? (
-                      <Text style={styles.cardSubtitle}>Open menu</Text>
-                    ) : (
-                      <Text style={styles.cardSubtitleMuted}>Menu link not available</Text>
-                    )}
-                  </Pressable>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <View style={styles.feedCard}>
+              <View style={styles.feedImageWrap}>
+                {item.image_url ? (
+                  <CachedLogo uri={item.image_url} style={styles.feedImage} />
+                ) : (
+                  <View style={styles.feedImagePlaceholder} />
                 )}
-              />
-            )}
-            {!loading && !error && restaurants.length === 0 && (
-              <Text style={styles.placeholderText}>Tap “Run API” to load data.</Text>
-            )}
-          </View>
-        )}
-      </ScrollView>
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.7)', 'rgba(0,0,0,0.0)']}
+                  style={styles.imageGradient}
+                />
+                <Pressable
+                  style={styles.cameraBadge}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/camera',
+                      params: {
+                        restaurantId: item.restaurant_id ? String(item.restaurant_id) : '',
+                        restaurantName: item.restaurant_name ?? '',
+                        dishId: item.dish_id !== null ? String(item.dish_id) : '',
+                        dishName: item.dish_name ?? '',
+                      },
+                    })
+                  }
+                >
+                  <Ionicons name="camera" size={18} color="#E2E8F0" />
+                </Pressable>
+                <Pressable style={styles.heartBadge} onPress={() => toggleFavorite(item.id)}>
+                  <Ionicons
+                    name={favorites[item.id] ? 'heart' : 'heart-outline'}
+                    size={18}
+                    color="#E2E8F0"
+                  />
+                </Pressable>
+                <Text style={styles.imageDateText}>
+                  {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
+                </Text>
+                <View style={styles.avatarBadge}>
+                  {avatarUrl ? (
+                    <CachedLogo uri={avatarUrl} style={styles.avatarImage} />
+                  ) : (
+                    <Ionicons name="person" size={16} color="#111111" />
+                  )}
+                </View>
+                <View style={styles.imageTextBlock}>
+                  <Text style={styles.imageDishText} numberOfLines={1} ellipsizeMode="tail">
+                    {item.dish_name ?? 'מנה'}
+                  </Text>
+                  <Text style={styles.imageRestaurantText} numberOfLines={1} ellipsizeMode="tail">
+                    {item.restaurant_name ??
+                      (item.restaurant_id ? `מסעדה ${item.restaurant_id}` : 'מסעדה')}
+                  </Text>
+                </View>
+                <View style={styles.orderBadge}>
+                  <Ionicons name="cart-outline" size={24} color="#F87171" />
+                  <Text style={styles.orderText}>הזמן</Text>
+                </View>
+              </View>
+              <View style={styles.ratingRow}>
+                <View style={styles.ratingItem}>
+                  <View style={styles.ratingTopRow}>
+                    <Text style={styles.ratingValueInline}>{item.tasty_score ?? 0}%</Text>
+                    <Ionicons name="fast-food-outline" size={18} color="#94A3B8" />
+                  </View>
+                  <Text style={styles.ratingLabelInline}>טעים</Text>
+                </View>
+                <View style={styles.ratingItem}>
+                  <View style={styles.ratingTopRow}>
+                    <Text style={styles.ratingValueInline}>{item.fast_score ?? 0}%</Text>
+                    <Ionicons name="rocket-outline" size={18} color="#94A3B8" />
+                  </View>
+                  <Text style={styles.ratingLabelInline}>מהיר</Text>
+                </View>
+                <View style={styles.ratingItem}>
+                  <View style={styles.ratingTopRow}>
+                    <Text style={styles.ratingValueInline}>{item.filling_score ?? 0}%</Text>
+                    <Ionicons name="restaurant-outline" size={18} color="#94A3B8" />
+                  </View>
+                  <Text style={styles.ratingLabelInline}>משביע</Text>
+                </View>
+              </View>
+            </View>
+          )}
+        />
+      )}
       {isAuthenticated && (
         <>
-          <Pressable style={[styles.button, styles.runApiButton]} onPress={runApi}>
-            <Text style={styles.buttonText}>Run API</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.button, styles.refreshButton]}
-            onPress={() => {
-              setError(null);
-              setRestaurants([]);
-            }}
-          >
-            <Text style={styles.buttonText}>Refresh</Text>
-          </Pressable>
         </>
       )}
     </SafeAreaView>
@@ -553,20 +653,6 @@ const styles = StyleSheet.create({
   rightIcons: {
     width: 96,
     alignItems: 'flex-end',
-  },
-  logoCenterBox: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  logoCenterImage: {
-    width: 180,
-    height: 60,
-    resizeMode: 'contain',
-    marginBottom: 4,
-  },
-  logoUrlText: {
-    fontSize: 12,
-    color: '#6B7280',
   },
   iconButton: {
     height: 40,
@@ -741,23 +827,175 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  signOutButton: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#dddddd',
-    marginBottom: 8,
-  },
-  signOutText: {
-    fontSize: 12,
-    color: '#111111',
-    fontWeight: '600',
-  },
   listContent: {
     paddingBottom: 160,
     gap: 10,
+  },
+  feedContent: {
+    paddingBottom: 120,
+    gap: 16,
+  },
+  feedCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#eeeeee',
+  },
+  feedImageWrap: {
+    position: 'relative',
+    width: '100%',
+    height: 260,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 20,
+    overflow: 'hidden',
+    margin: 8,
+  },
+  imageGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 90,
+  },
+  feedImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  feedImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#e5e7eb',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heartBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageDateText: {
+    position: 'absolute',
+    top: 16,
+    right: 56,
+    color: '#E2E8F0',
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  avatarBadge: {
+    position: 'absolute',
+    right: 12,
+    top: 54,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageTextBlock: {
+    position: 'absolute',
+    top: 44,
+    right: 56,
+    left: 12,
+    alignItems: 'flex-end',
+  },
+  imageDishText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  imageRestaurantText: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  orderBadge: {
+    position: 'absolute',
+    left: 12,
+    bottom: -18,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  orderText: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#F87171',
+    fontWeight: '700',
+  },
+  favoritesHeader: {
+    paddingTop: 2,
+    paddingBottom: 2,
+    alignItems: 'flex-end',
+  },
+  favoritesHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111111',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  ratingItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  ratingTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ratingValueInline: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  ratingLabelInline: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  dishTitle: {
+    display: 'none',
+  },
+  restaurantText: {
+    display: 'none',
   },
   placeholderText: {
     color: '#666666',
@@ -809,30 +1047,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: '#888888',
-  },
-  button: {
-    position: 'absolute',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#111111',
-    backgroundColor: '#ffffff',
-  },
-  runApiButton: {
-    bottom: 88,
-  },
-  refreshButton: {
-    bottom: 32,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  scrollArea: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 200,
   },
 });

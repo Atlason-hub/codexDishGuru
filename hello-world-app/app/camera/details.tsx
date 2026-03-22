@@ -13,7 +13,7 @@ import {
 import Slider from '@react-native-community/slider';
 import { Buffer } from 'buffer';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 
 type Restaurant = {
@@ -27,9 +27,20 @@ type DishItem = {
 };
 
 export default function CameraDetailsScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams();
   const photoUri = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
   const photoBase64 = typeof params.photoBase64 === 'string' ? params.photoBase64 : '';
+  const presetRestaurantId =
+    typeof params.restaurantId === 'string' && params.restaurantId
+      ? Number(params.restaurantId)
+      : null;
+  const presetRestaurantName =
+    typeof params.restaurantName === 'string' && params.restaurantName ? params.restaurantName : null;
+  const presetDishId =
+    typeof params.dishId === 'string' && params.dishId ? Number(params.dishId) : null;
+  const presetDishName =
+    typeof params.dishName === 'string' && params.dishName ? params.dishName : null;
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,8 +64,7 @@ export default function CameraDetailsScreen() {
     const fetchMenu = async () => {
       try {
         setMenuLoading(true);
-        setDishDropdownOpen(true);
-        setSelectedDish(null);
+        if (!presetDishId) setSelectedDish(null);
         setDishes([]);
         const response = await fetch(
           `https://www.10bis.co.il/api/GetMenu?ResId=${selectedRestaurantId}&websiteID=10bis&domainID=10bis`,
@@ -116,7 +126,17 @@ export default function CameraDetailsScreen() {
 
   useEffect(() => {
     fetchCompanyRestaurants();
+    if (presetRestaurantId) {
+      setSelectedRestaurantId(presetRestaurantId);
+      setSelectedName(presetRestaurantName);
+    }
   }, []);
+
+  useEffect(() => {
+    if (presetDishId && presetDishName) {
+      setSelectedDish({ id: presetDishId, name: presetDishName });
+    }
+  }, [presetDishId, presetDishName, dishes]);
 
   const fetchCompanyRestaurants = async () => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -400,6 +420,7 @@ export default function CameraDetailsScreen() {
               const insert = await supabase.from('dish_associations').insert({
                 user_id: userId,
                 restaurant_id: selectedRestaurantId,
+                restaurant_name: selectedName ?? null,
                 dish_id: selectedDish.id,
                 dish_name: selectedDish.name,
                 review_text: reviewText,
@@ -412,6 +433,7 @@ export default function CameraDetailsScreen() {
               });
               if (insert.error) throw insert.error;
               Alert.alert('Saved', 'Your dish review has been saved.');
+              router.replace('/');
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               console.log('[SAVE_DISH_ERROR]:', error);
