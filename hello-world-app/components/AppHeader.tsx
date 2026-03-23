@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { loadCachedLogo } from '../lib/logo';
+import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedLogo from './CachedLogo';
 
@@ -65,6 +66,7 @@ export default function AppHeader() {
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -76,6 +78,13 @@ export default function AppHeader() {
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
         setCompanyLogoUrl(resolved);
+      }
+      const cachedAvatar = await loadCachedAvatar();
+      if (cachedAvatar) setAvatarUrl(cachedAvatar);
+      const metaAvatar = await fetchAvatarFromAuth();
+      if (metaAvatar) {
+        setAvatarUrl(metaAvatar);
+        await cacheAvatar(metaAvatar);
       }
       if (data.session?.user?.id) {
         const url = await fetchCompanyLogoForUser(
@@ -89,6 +98,13 @@ export default function AppHeader() {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       const sessionEmail = session?.user?.email ?? null;
       setUserEmail(sessionEmail);
+      const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
+      if (metaAvatar) {
+        setAvatarUrl(metaAvatar);
+        cacheAvatar(metaAvatar);
+      } else {
+        setAvatarUrl(null);
+      }
       if (session?.user?.id) {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail)).then((url) => {
           if (url) setCompanyLogoUrl(url);
@@ -109,6 +125,7 @@ export default function AppHeader() {
     setMenuVisible(false);
     setUserEmail(null);
     setCompanyLogoUrl(null);
+    setAvatarUrl(null);
   };
 
   return (
@@ -133,7 +150,12 @@ export default function AppHeader() {
           <Ionicons name="menu" size={28} color="#111111" />
         </Pressable>
       </View>
-      {menuVisible && (
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
         <View style={styles.menuContainer}>
           <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)} />
           <View style={styles.menuOverlay}>
@@ -148,7 +170,11 @@ export default function AppHeader() {
               }}
             >
               <Text style={styles.menuOption}>החשבון שלי</Text>
-              <Ionicons name="person-circle-outline" size={20} color="#F87171" />
+              {avatarUrl ? (
+                <CachedLogo uri={avatarUrl} style={styles.menuAvatar} />
+              ) : (
+                <Ionicons name="person-circle-outline" size={20} color="#F87171" />
+              )}
             </Pressable>
             <Pressable
               style={styles.menuOptionRow}
@@ -174,7 +200,7 @@ export default function AppHeader() {
             </Pressable>
           </View>
         </View>
-      )}
+      </Modal>
     </View>
   );
 }
@@ -290,5 +316,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 12,
+  },
+  menuAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
 });

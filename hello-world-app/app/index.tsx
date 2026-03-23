@@ -511,6 +511,9 @@ export default function HomeScreen() {
             <>
               {showFavoritesOnly && (
                 <View style={styles.favoritesHeader}>
+                  <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+                    <Ionicons name="chevron-back" size={18} color="#111111" />
+                  </Pressable>
                   <Text style={styles.favoritesHeaderText}>המועדפים שלי</Text>
                 </View>
               )}
@@ -537,14 +540,25 @@ export default function HomeScreen() {
           renderItem={({ item }) => (
             <View style={styles.feedCard}>
               <View style={styles.feedImageWrap}>
-                {item.image_url ? (
-                  <CachedLogo uri={item.image_url} style={styles.feedImage} />
-                ) : (
-                  <View style={styles.feedImagePlaceholder} />
-                )}
+                <Pressable
+                  style={styles.imagePressable}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/photo',
+                      params: { id: item.id },
+                    })
+                  }
+                >
+                  {item.image_url ? (
+                    <CachedLogo uri={item.image_url} style={styles.feedImage} />
+                  ) : (
+                    <View style={styles.feedImagePlaceholder} />
+                  )}
+                </Pressable>
                 <LinearGradient
                   colors={['rgba(0,0,0,0.7)', 'rgba(0,0,0,0.0)']}
                   style={styles.imageGradient}
+                  pointerEvents="none"
                 />
                 <Pressable
                   style={styles.cameraBadge}
@@ -580,9 +594,22 @@ export default function HomeScreen() {
                   )}
                 </View>
                 <View style={styles.imageTextBlock}>
-                  <Text style={styles.imageDishText} numberOfLines={1} ellipsizeMode="tail">
-                    {item.dish_name ?? 'מנה'}
-                  </Text>
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/dish',
+                        params: {
+                          dishName: item.dish_name ?? '',
+                          restaurantId: item.restaurant_id ? String(item.restaurant_id) : '',
+                          restaurantName: item.restaurant_name ?? '',
+                        },
+                      })
+                    }
+                  >
+                    <Text style={styles.imageDishText} numberOfLines={1} ellipsizeMode="tail">
+                      {item.dish_name ?? 'מנה'}
+                    </Text>
+                  </Pressable>
                   <Text style={styles.imageRestaurantText} numberOfLines={1} ellipsizeMode="tail">
                     {item.restaurant_name ??
                       (item.restaurant_id ? `מסעדה ${item.restaurant_id}` : 'מסעדה')}
@@ -862,6 +889,13 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
   },
+  imagePressable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   feedImagePlaceholder: {
     width: '100%',
     height: '100%',
@@ -958,12 +992,23 @@ const styles = StyleSheet.create({
   favoritesHeader: {
     paddingTop: 2,
     paddingBottom: 2,
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   favoritesHeaderText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#111111',
+  },
+  backButton: {
+    height: 32,
+    width: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   ratingRow: {
     flexDirection: 'row',

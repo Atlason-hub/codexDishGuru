@@ -11,6 +11,10 @@ import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 export default function AccountScreen() {
+  const FRAME_SIZE = 180;
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 3;
+
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -22,13 +26,9 @@ export default function AccountScreen() {
     height: number;
   } | null>(null);
   const [avatarOffset, setAvatarOffset] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(MIN_ZOOM);
   const dragStart = useRef({ x: 0, y: 0 });
-  const zoomStart = useRef(1);
-
-  const FRAME_SIZE = 180;
-  const MIN_ZOOM = 1;
-  const MAX_ZOOM = 3;
+  const zoomStart = useRef(MIN_ZOOM);
   const scaleToCover = pendingAsset
     ? Math.max(FRAME_SIZE / pendingAsset.width, FRAME_SIZE / pendingAsset.height)
     : 1;
@@ -98,7 +98,12 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>החשבון שלי</Text>
+      <View style={styles.headerRow}>
+        <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+          <Ionicons name="chevron-back" size={18} color="#111111" />
+        </Pressable>
+        <Text style={styles.title}>החשבון שלי</Text>
+      </View>
       <View style={styles.emailRow}>
         <Text style={styles.emailValue}>{email ?? ''}</Text>
         <Text style={styles.emailLabel}>אימייל</Text>
@@ -162,7 +167,7 @@ export default function AccountScreen() {
               setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
               setTempAvatarUrl(asset.uri);
               setAvatarOffset({ x: 0, y: 0 });
-              setZoom(MAX_ZOOM);
+              setZoom(MIN_ZOOM);
               setSaving(true);
               const { data } = await supabase.auth.getSession();
               const userId = data.session?.user?.id;
@@ -199,7 +204,7 @@ export default function AccountScreen() {
               setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
               setTempAvatarUrl(asset.uri);
               setAvatarOffset({ x: 0, y: 0 });
-              setZoom(MAX_ZOOM);
+              setZoom(MIN_ZOOM);
               setSaving(true);
               const { data } = await supabase.auth.getSession();
               const userId = data.session?.user?.id;
@@ -273,7 +278,7 @@ export default function AccountScreen() {
                 setPendingAsset(null);
                 setTempAvatarUrl(null);
                 setAvatarOffset({ x: 0, y: 0 });
-                setZoom(MAX_ZOOM);
+                setZoom(MIN_ZOOM);
                 router.replace('/');
               }
           } catch (error) {
@@ -299,11 +304,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    alignSelf: 'flex-end',
     fontSize: 14,
     fontWeight: '600',
     color: '#111111',
+  },
+  headerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  backButton: {
+    height: 32,
+    width: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   emailRow: {
     width: '100%',
