@@ -88,6 +88,9 @@ export default function AccountScreen() {
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
         cacheAvatar(metaAvatar);
+      } else {
+        setAvatarUrl(null);
+        cacheAvatar(null);
       }
     });
     return () => {

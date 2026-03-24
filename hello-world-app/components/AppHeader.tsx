@@ -104,6 +104,7 @@ export default function AppHeader() {
         cacheAvatar(metaAvatar);
       } else {
         setAvatarUrl(null);
+        cacheAvatar(null);
       }
       if (session?.user?.id) {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail)).then((url) => {
@@ -126,6 +127,7 @@ export default function AppHeader() {
     setUserEmail(null);
     setCompanyLogoUrl(null);
     setAvatarUrl(null);
+    await cacheAvatar(null);
   };
 
   return (

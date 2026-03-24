@@ -290,6 +290,9 @@ export default function HomeScreen() {
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
         cacheAvatar(metaAvatar);
+      } else {
+        setAvatarUrl(null);
+        cacheAvatar(null);
       }
       if (session?.user?.id) {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
@@ -305,6 +308,7 @@ export default function HomeScreen() {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
 
   const signIn = async () => {
     if (!email.trim() || !pass.trim()) {
@@ -407,6 +411,8 @@ export default function HomeScreen() {
     setCompanyId(null);
     setCompanyFetchError(null);
     setCompanyDebugJson(null);
+    await cacheAvatar(null);
+    setAvatarUrl(null);
   };
 
   const showFavoritesOnly =
@@ -541,9 +547,10 @@ export default function HomeScreen() {
           }
           renderItem={({ item }) => (
             <View style={styles.feedCard}>
-              <View style={styles.feedImageWrap}>
+              <View style={styles.feedImageWrap} pointerEvents="box-none">
                 <Pressable
                   style={styles.imagePressable}
+                  pointerEvents="box-only"
                   onPress={() =>
                     router.push({
                       pathname: '/photo',
@@ -591,7 +598,7 @@ export default function HomeScreen() {
                 <Pressable
                   style={styles.avatarBadge}
                   onPress={() => {
-                    if (avatarUrl) setAvatarPreviewOpen(true);
+                    setAvatarPreviewOpen(true);
                   }}
                 >
                   {avatarUrl ? (
@@ -685,27 +692,29 @@ export default function HomeScreen() {
             style={styles.avatarModalOverlay}
             onPress={() => setAvatarPreviewOpen(false)}
           />
-          <View style={styles.avatarModalCard}>
+          <View style={styles.avatarModalWrapper}>
+            <View style={styles.avatarModalCard}>
+              {avatarUrl ? (
+                <CachedLogo uri={avatarUrl} style={styles.avatarModalImage} />
+              ) : (
+                <View style={styles.avatarModalPlaceholder}>
+                  <Ionicons name="person" size={64} color="#94A3B8" />
+                </View>
+              )}
+              {userEmail ? (
+                <View style={styles.avatarEmailPill}>
+                  <Text style={styles.avatarEmailText}>
+                    {userEmail.split('@')[0]}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
             <Pressable
               style={styles.avatarModalClose}
               onPress={() => setAvatarPreviewOpen(false)}
             >
               <Ionicons name="close" size={18} color="#111111" />
             </Pressable>
-            {avatarUrl ? (
-              <CachedLogo uri={avatarUrl} style={styles.avatarModalImage} />
-            ) : null}
-            {userEmail ? (
-              <View style={styles.avatarEmailPill}>
-                <Text style={styles.avatarEmailText}>{userEmail}</Text>
-                <Pressable
-                  style={styles.avatarEmailClose}
-                  onPress={() => setAvatarPreviewOpen(false)}
-                >
-                  <Ionicons name="close" size={12} color="#ffffff" />
-                </Pressable>
-              </View>
-            ) : null}
           </View>
         </View>
       </Modal>
@@ -940,7 +949,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 90,
+    height: 100,
+    zIndex: 2,
   },
   feedImage: {
     width: '100%',
@@ -953,6 +963,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 1,
   },
   feedImagePlaceholder: {
     width: '100%',
@@ -970,18 +981,20 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 6,
   },
   heartBadge: {
     position: 'absolute',
     top: 12,
     left: 52,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 6,
   },
   imageDateText: {
     position: 'absolute',
@@ -990,6 +1003,7 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     fontSize: 10,
     textAlign: 'right',
+    zIndex: 6,
   },
   avatarBadge: {
     position: 'absolute',
@@ -1002,6 +1016,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    zIndex: 7,
   },
   avatarImage: {
     width: '100%',
@@ -1009,10 +1024,11 @@ const styles = StyleSheet.create({
   },
   imageTextBlock: {
     position: 'absolute',
-    top: 44,
-    right: 56,
+    top: 60,
+    right: 12,
     left: 12,
     alignItems: 'flex-end',
+    zIndex: 6,
   },
   imageDishText: {
     color: '#ffffff',
@@ -1166,6 +1182,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
+  avatarModalWrapper: {
+    width: 220,
+    height: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
   avatarModalCard: {
     width: 220,
     height: 220,
@@ -1181,10 +1204,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  avatarModalPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
   avatarModalClose: {
     position: 'absolute',
     top: 8,
-    right: 8,
+    right: -36,
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -1192,6 +1222,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   avatarEmailPill: {
     position: 'absolute',
@@ -1211,13 +1243,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  avatarEmailClose: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
   },
 });
