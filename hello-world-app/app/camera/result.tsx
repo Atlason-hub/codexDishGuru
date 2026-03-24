@@ -13,7 +13,7 @@ export default function CameraResultScreen() {
           {rawValue ? (
             <Image source={{ uri: rawValue }} style={styles.photo} />
           ) : (
-            <Text style={styles.placeholder}>No photo available yet</Text>
+            <Text style={styles.placeholder}>אין תמונה עדיין</Text>
           )}
         </View>
         <TouchableOpacity
@@ -25,7 +25,7 @@ export default function CameraResultScreen() {
             });
           }}
         >
-          <Text style={styles.saveText}>Save</Text>
+          <Text style={styles.saveText}>שמור</Text>
         </TouchableOpacity>
       </View>
     </View>

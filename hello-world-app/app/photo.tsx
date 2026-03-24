@@ -41,7 +41,7 @@ export default function PhotoScreen() {
 
   useEffect(() => {
     if (!id) {
-      setError('Missing dish id');
+      setError('חסר מזהה מנה');
       return;
     }
     let mounted = true;
@@ -107,7 +107,7 @@ export default function PhotoScreen() {
           setAvgScores(null);
         }
       } catch (err) {
-        if (mounted) setError(err instanceof Error ? err.message : 'Unknown error');
+        if (mounted) setError('אירעה שגיאה. נסה שוב.');
       } finally {
         if (mounted) setLoading(false);
       }

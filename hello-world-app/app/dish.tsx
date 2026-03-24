@@ -95,7 +95,7 @@ export default function DishScreen() {
 
   const loadDishAssociations = async () => {
     if (!dishName) {
-      setError('Missing dish name');
+      setError('חסר שם מנה');
       setDishAssociations([]);
       setAvgScores(null);
       return;
@@ -151,7 +151,7 @@ export default function DishScreen() {
         setAvgScores(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError('אירעה שגיאה. נסה שוב.');
     } finally {
       setLoading(false);
     }
@@ -301,10 +301,22 @@ export default function DishScreen() {
                 <Text style={styles.imageDishText} numberOfLines={1} ellipsizeMode="tail">
                   {item.dish_name ?? 'מנה'}
                 </Text>
-                <Text style={styles.imageRestaurantText} numberOfLines={1} ellipsizeMode="tail">
-                  {item.restaurant_name ??
-                    (item.restaurant_id ? `מסעדה ${item.restaurant_id}` : 'מסעדה')}
-                </Text>
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/restaurant',
+                      params: {
+                        restaurantId: item.restaurant_id ? String(item.restaurant_id) : '',
+                        restaurantName: item.restaurant_name ?? '',
+                      },
+                    })
+                  }
+                >
+                  <Text style={styles.imageRestaurantText} numberOfLines={1} ellipsizeMode="tail">
+                    {item.restaurant_name ??
+                      (item.restaurant_id ? `מסעדה ${item.restaurant_id}` : 'מסעדה')}
+                  </Text>
+                </Pressable>
               </View>
               <View style={styles.orderBadge}>
                 <Ionicons name="cart-outline" size={24} color="#F87171" />

@@ -154,7 +154,7 @@ export default function AccountScreen() {
             try {
               const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (!permission.granted) {
-                Alert.alert('Permission needed', 'Please allow photo library access.');
+                Alert.alert('נדרש אישור', 'אנא אפשר גישה לגלריה.');
                 return;
               }
               const result = await ImagePicker.launchImageLibraryAsync({
@@ -175,7 +175,7 @@ export default function AccountScreen() {
               // do not upload until user presses Save
             } catch (error) {
               console.log('[AVATAR_UPLOAD_ERROR]:', error);
-              Alert.alert('Upload failed', error instanceof Error ? error.message : 'Upload failed');
+              Alert.alert('העלאה נכשלה', error instanceof Error ? error.message : 'העלאה נכשלה');
             } finally {
               setSaving(false);
             }
@@ -190,7 +190,7 @@ export default function AccountScreen() {
             try {
               const permission = await ImagePicker.requestCameraPermissionsAsync();
               if (!permission.granted) {
-                Alert.alert('Permission needed', 'Please allow camera access.');
+                Alert.alert('נדרש אישור', 'אנא אפשר גישה למצלמה.');
                 return;
               }
               const result = await ImagePicker.launchCameraAsync({
@@ -212,7 +212,7 @@ export default function AccountScreen() {
               // do not upload until user presses Save
             } catch (error) {
               console.log('[AVATAR_CAMERA_ERROR]:', error);
-              Alert.alert('Camera upload failed', error instanceof Error ? error.message : 'Upload failed');
+              Alert.alert('צילום נכשל', error instanceof Error ? error.message : 'העלאה נכשלה');
             } finally {
               setSaving(false);
             }
@@ -254,7 +254,7 @@ export default function AccountScreen() {
               { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
             );
             if (!cropped.base64) {
-              throw new Error('Failed to crop image');
+              throw new Error('כשל בעיבוד התמונה');
             }
 
             const filePath = `${userId}/${Date.now()}.jpg`;
@@ -283,7 +283,7 @@ export default function AccountScreen() {
               }
           } catch (error) {
             console.log('[AVATAR_SAVE_ERROR]:', error);
-            Alert.alert('Save failed', error instanceof Error ? error.message : 'Save failed');
+            Alert.alert('שמירה נכשלה', error instanceof Error ? error.message : 'שמירה נכשלה');
           } finally {
             setSaving(false);
           }

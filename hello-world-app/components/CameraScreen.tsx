@@ -18,7 +18,7 @@ export default function CameraScreen() {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
         setPermissionDenied(true);
-        Alert.alert('Camera access needed', 'Please allow camera access to take a photo.');
+        Alert.alert('נדרש אישור מצלמה', 'אנא אפשר גישה למצלמה כדי לצלם.');
         return;
       }
       const photo = await ImagePicker.launchCameraAsync({
@@ -45,7 +45,7 @@ export default function CameraScreen() {
         },
       });
     } catch (err) {
-      Alert.alert('Camera error', err instanceof Error ? err.message : 'Failed to take photo');
+      Alert.alert('שגיאת מצלמה', err instanceof Error ? err.message : 'לא ניתן לצלם');
     } finally {
       setOpening(false);
     }
@@ -67,11 +67,11 @@ export default function CameraScreen() {
     <View style={styles.container}>
       <ActivityIndicator size="large" />
       <Text style={styles.loadingText}>
-        {permissionDenied ? 'Camera permission required' : 'Opening camera...'}
+        {permissionDenied ? 'נדרש אישור מצלמה' : 'פותח מצלמה...'}
       </Text>
       {permissionDenied && (
         <Pressable style={styles.retryButton} onPress={takePicture}>
-          <Text style={styles.retryText}>Try again</Text>
+          <Text style={styles.retryText}>נסה שוב</Text>
         </Pressable>
       )}
     </View>

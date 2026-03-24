@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -60,6 +61,7 @@ export default function HomeScreen() {
   const [companyFetchError, setCompanyFetchError] = useState<string | null>(null);
   const [companyDebugJson, setCompanyDebugJson] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
 
   const resolveLogoUrl = (raw: string | null | undefined) => {
     if (!raw) return null;
@@ -306,7 +308,7 @@ export default function HomeScreen() {
 
   const signIn = async () => {
     if (!email.trim() || !pass.trim()) {
-      setAuthError('Please enter email and password.');
+      setAuthError('אנא הזן אימייל וסיסמה.');
       return;
     }
     try {
@@ -320,7 +322,7 @@ export default function HomeScreen() {
         throw error;
       }
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Login failed.');
+      setAuthError(err instanceof Error ? err.message : 'התחברות נכשלה.');
     } finally {
       setAuthLoading(false);
     }
@@ -328,11 +330,11 @@ export default function HomeScreen() {
 
   const signUp = async () => {
     if (!email.trim() || !pass.trim() || !confirmPass.trim()) {
-      setAuthError('Please enter email, password, and confirm password.');
+      setAuthError('אנא הזן אימייל, סיסמה ואישור סיסמה.');
       return;
     }
     if (pass !== confirmPass) {
-      setAuthError('Passwords do not match.');
+      setAuthError('הסיסמאות אינן תואמות.');
       return;
     }
     try {
@@ -343,7 +345,7 @@ export default function HomeScreen() {
         ? trimmedEmail.split('@').pop()?.trim().toLowerCase() ?? ''
         : '';
       if (!domainPart) {
-        throw new Error('Email domain missing');
+        throw new Error('חסר דומיין אימייל');
       }
       const { data: companyMatch, error: companyError } = await supabase
         .from('companies')
@@ -355,7 +357,7 @@ export default function HomeScreen() {
         throw companyError;
       }
       if (!companyMatch?.id) {
-        throw new Error('No company matches email domain');
+        throw new Error('לא נמצאה חברה לדומיין האימייל');
       }
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -382,12 +384,12 @@ export default function HomeScreen() {
     } catch (err) {
       const authApiError =
         err && typeof err === 'object' && 'name' in err ? (err as { [k: string]: any }) : null;
-      const message = authApiError?.message ?? (err instanceof Error ? err.message : 'Signup failed.');
+      const message = authApiError?.message ?? (err instanceof Error ? err.message : 'הרשמה נכשלה.');
       const lower = message.toLowerCase();
       if (lower.includes('no company matches email domain')) {
-        setAuthError('Signup blocked: your email domain is not associated with a company.');
+        setAuthError('הרשמה נחסמה: דומיין האימייל אינו משויך לחברה.');
       } else if (lower.includes('database error saving new user')) {
-        setAuthError('Signup failed: your email domain must match an existing company.');
+        setAuthError('הרשמה נכשלה: דומיין האימייל חייב להתאים לחברה קיימת.');
       } else {
         setAuthError(message);
       }
@@ -424,7 +426,7 @@ export default function HomeScreen() {
           <Text style={styles.authTitle}>{showSignup ? 'Create account' : 'Sign in'}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder="אימייל"
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -433,7 +435,7 @@ export default function HomeScreen() {
           <View style={styles.inputRow}>
             <TextInput
               style={styles.inputField}
-              placeholder="Password"
+              placeholder="סיסמה"
               secureTextEntry={!showPass}
               value={pass}
               onChangeText={setPass}
@@ -446,7 +448,7 @@ export default function HomeScreen() {
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.inputField}
-                placeholder="Confirm password"
+                placeholder="אישור סיסמה"
                 secureTextEntry={!showConfirmPass}
                 value={confirmPass}
                 onChangeText={setConfirmPass}
@@ -466,7 +468,7 @@ export default function HomeScreen() {
                 {authLoading ? (
                   <ActivityIndicator />
                 ) : (
-                  <Text style={styles.loginButtonText}>Create account</Text>
+                  <Text style={styles.loginButtonText}>צור חשבון</Text>
                 )}
               </Pressable>
               <Pressable
@@ -477,7 +479,7 @@ export default function HomeScreen() {
                 }}
                 disabled={authLoading}
               >
-                <Text style={styles.signupButtonText}>Back to login</Text>
+                <Text style={styles.signupButtonText}>חזרה להתחברות</Text>
               </Pressable>
             </>
           ) : (
@@ -486,7 +488,7 @@ export default function HomeScreen() {
                 {authLoading ? (
                   <ActivityIndicator />
                 ) : (
-                  <Text style={styles.loginButtonText}>Login</Text>
+                  <Text style={styles.loginButtonText}>התחבר</Text>
                 )}
               </Pressable>
               <Pressable
@@ -497,7 +499,7 @@ export default function HomeScreen() {
                 }}
                 disabled={authLoading}
               >
-                <Text style={styles.signupButtonText}>Create account</Text>
+                <Text style={styles.signupButtonText}>צור חשבון</Text>
               </Pressable>
             </>
           )}
@@ -586,13 +588,18 @@ export default function HomeScreen() {
                 <Text style={styles.imageDateText}>
                   {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
                 </Text>
-                <View style={styles.avatarBadge}>
+                <Pressable
+                  style={styles.avatarBadge}
+                  onPress={() => {
+                    if (avatarUrl) setAvatarPreviewOpen(true);
+                  }}
+                >
                   {avatarUrl ? (
                     <CachedLogo uri={avatarUrl} style={styles.avatarImage} />
                   ) : (
                     <Ionicons name="person" size={16} color="#111111" />
                   )}
-                </View>
+                </Pressable>
                 <View style={styles.imageTextBlock}>
                   <Pressable
                     onPress={() =>
@@ -610,10 +617,26 @@ export default function HomeScreen() {
                       {item.dish_name ?? 'מנה'}
                     </Text>
                   </Pressable>
-                  <Text style={styles.imageRestaurantText} numberOfLines={1} ellipsizeMode="tail">
-                    {item.restaurant_name ??
-                      (item.restaurant_id ? `מסעדה ${item.restaurant_id}` : 'מסעדה')}
-                  </Text>
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/restaurant',
+                        params: {
+                          restaurantId: item.restaurant_id ? String(item.restaurant_id) : '',
+                          restaurantName: item.restaurant_name ?? '',
+                        },
+                      })
+                    }
+                  >
+                    <Text
+                      style={styles.imageRestaurantText}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {item.restaurant_name ??
+                        (item.restaurant_id ? `מסעדה ${item.restaurant_id}` : 'מסעדה')}
+                    </Text>
+                  </Pressable>
                 </View>
                 <View style={styles.orderBadge}>
                   <Ionicons name="cart-outline" size={24} color="#F87171" />
@@ -651,6 +674,41 @@ export default function HomeScreen() {
         <>
         </>
       )}
+      <Modal
+        visible={avatarPreviewOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAvatarPreviewOpen(false)}
+      >
+        <View style={styles.avatarModalBackdrop}>
+          <Pressable
+            style={styles.avatarModalOverlay}
+            onPress={() => setAvatarPreviewOpen(false)}
+          />
+          <View style={styles.avatarModalCard}>
+            <Pressable
+              style={styles.avatarModalClose}
+              onPress={() => setAvatarPreviewOpen(false)}
+            >
+              <Ionicons name="close" size={18} color="#111111" />
+            </Pressable>
+            {avatarUrl ? (
+              <CachedLogo uri={avatarUrl} style={styles.avatarModalImage} />
+            ) : null}
+            {userEmail ? (
+              <View style={styles.avatarEmailPill}>
+                <Text style={styles.avatarEmailText}>{userEmail}</Text>
+                <Pressable
+                  style={styles.avatarEmailClose}
+                  onPress={() => setAvatarPreviewOpen(false)}
+                >
+                  <Ionicons name="close" size={12} color="#ffffff" />
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -916,7 +974,7 @@ const styles = StyleSheet.create({
   heartBadge: {
     position: 'absolute',
     top: 12,
-    right: 12,
+    left: 52,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -927,7 +985,7 @@ const styles = StyleSheet.create({
   },
   imageDateText: {
     position: 'absolute',
-    top: 16,
+    top: 18,
     right: 56,
     color: '#E2E8F0',
     fontSize: 10,
@@ -936,7 +994,7 @@ const styles = StyleSheet.create({
   avatarBadge: {
     position: 'absolute',
     right: 12,
-    top: 54,
+    top: 12,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -961,17 +1019,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   imageRestaurantText: {
     color: '#E2E8F0',
     fontSize: 12,
     textAlign: 'right',
     marginTop: 2,
+    writingDirection: 'rtl',
   },
   orderBadge: {
     position: 'absolute',
     left: 12,
-    bottom: -18,
+    bottom: 6,
     width: 74,
     height: 74,
     borderRadius: 37,
@@ -1092,5 +1152,72 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: '#888888',
+  },
+  avatarModalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  avatarModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  avatarModalCard: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  avatarModalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarModalClose: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  avatarEmailPill: {
+    position: 'absolute',
+    bottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  avatarEmailText: {
+    color: '#111111',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  avatarEmailClose: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
   },
 });

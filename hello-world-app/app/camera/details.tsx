@@ -19,11 +19,193 @@ import { supabase } from '../../lib/supabase';
 type Restaurant = {
   RestaurantId: number;
   RestaurantName: string;
+  RestaurantCuisineList?: string | null;
 };
 
 type DishItem = {
   id: number;
   name: string;
+};
+
+type DishCategory = {
+  id: string;
+  name: string;
+  items: DishItem[];
+};
+
+type DishDropdownRow =
+  | { type: 'header'; id: string; name: string }
+  | { type: 'item'; id: string; item: DishItem };
+
+type RestaurantCategory = {
+  id: string;
+  name: string;
+  items: Restaurant[];
+};
+
+type RestaurantDropdownRow =
+  | { type: 'header'; id: string; name: string }
+  | { type: 'item'; id: string; item: Restaurant };
+
+const normalizeCategoryName = (raw: unknown) => {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeDishName = (raw: unknown) => {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeDishId = (raw: unknown) => {
+  if (typeof raw === 'number') return raw;
+  return null;
+};
+
+const isSystemEntry = (value: string) => value.toLowerCase().includes('system');
+
+const mapMenuToCategories = (data: any): DishCategory[] => {
+  const categories: any[] = Array.isArray(data?.Data)
+    ? data.Data
+    : Array.isArray(data?.Data?.Categories)
+    ? data.Data.Categories
+    : [];
+
+  const categoryMap = new Map<string, DishCategory>();
+  const ensureCategory = (id: string, name: string) => {
+    if (!categoryMap.has(id)) {
+      categoryMap.set(id, { id, name, items: [] });
+    }
+    return categoryMap.get(id)!;
+  };
+
+  categories.forEach((cat) => {
+    const categoryName =
+      normalizeCategoryName(cat?.CategoryName) ??
+      normalizeCategoryName(cat?.Name) ??
+      normalizeCategoryName(cat?.CategoryTitle);
+    const categoryIdRaw = normalizeCategoryName(cat?.CategoryId ?? cat?.Id ?? cat?.CategoryID);
+    const categoryId = categoryIdRaw ?? categoryName ?? 'uncategorized';
+    const safeName = categoryName ?? 'Uncategorized';
+    if (isSystemEntry(safeName)) return;
+
+    const dishesArr = Array.isArray(cat?.DishList)
+      ? cat.DishList
+      : Array.isArray(cat?.Dishes)
+      ? cat.Dishes
+      : [];
+
+    const bucket = ensureCategory(categoryId, safeName);
+    dishesArr.forEach((d: any) => {
+      const name =
+        normalizeDishName(d?.DishName) ??
+        normalizeDishName(d?.Name);
+      const id =
+        normalizeDishId(d?.DishId) ??
+        normalizeDishId(d?.Id) ??
+        normalizeDishId(d?.DishID);
+      if (!name || id === null) return;
+      if (isSystemEntry(name)) return;
+      bucket.items.push({ id, name });
+    });
+  });
+
+  if (categoryMap.size === 0 && Array.isArray(data?.Data?.Dishes)) {
+    const bucket = ensureCategory('uncategorized', 'Uncategorized');
+    data.Data.Dishes.forEach((d: any) => {
+      const name =
+        normalizeDishName(d?.DishName) ??
+        normalizeDishName(d?.Name);
+      const id =
+        normalizeDishId(d?.DishId) ??
+        normalizeDishId(d?.Id) ??
+        normalizeDishId(d?.DishID);
+      if (!name || id === null) return;
+      if (isSystemEntry(name)) return;
+      bucket.items.push({ id, name });
+    });
+  }
+
+  return Array.from(categoryMap.values()).filter((cat) => cat.items.length > 0);
+};
+
+const buildDropdownRows = (
+  categories: DishCategory[],
+  query: string,
+  collapsed: Set<string>
+): DishDropdownRow[] => {
+  const needle = query.trim().toLowerCase();
+  const rows: DishDropdownRow[] = [];
+  categories.forEach((cat) => {
+    const filtered = needle
+      ? cat.items.filter((item) => item.name.toLowerCase().includes(needle))
+      : cat.items;
+    if (filtered.length === 0) return;
+    rows.push({ type: 'header', id: `header-${cat.id}`, name: cat.name });
+    if (collapsed.has(cat.id)) return;
+    filtered.forEach((item) =>
+      rows.push({ type: 'item', id: `${cat.id}-${item.id}`, item })
+    );
+  });
+  return rows;
+};
+
+const mapRestaurantsToCategories = (restaurants: Restaurant[]): RestaurantCategory[] => {
+  const categoryMap = new Map<string, RestaurantCategory>();
+  const order: string[] = [];
+  const getBucket = (key: string, name: string) => {
+    if (!categoryMap.has(key)) {
+      categoryMap.set(key, { id: key, name, items: [] });
+      order.push(key);
+    }
+    return categoryMap.get(key)!;
+  };
+
+  restaurants.forEach((restaurant) => {
+    const cuisineRaw =
+      typeof restaurant.RestaurantCuisineList === 'string'
+        ? restaurant.RestaurantCuisineList.trim()
+        : '';
+    const cuisine = cuisineRaw.split(',')[0]?.trim();
+    if (cuisine) {
+      getBucket(`cuisine-${cuisine}`, cuisine).items.push(restaurant);
+    } else {
+      getBucket('all-restaurants', 'מסעדות').items.push(restaurant);
+    }
+  });
+
+  return order.map((key) => categoryMap.get(key)!).filter((cat) => cat.items.length > 0);
+};
+
+const getPrimaryCuisine = (cuisineList?: string | null) => {
+  if (!cuisineList) return null;
+  const first = cuisineList.split(',')[0]?.trim();
+  return first ? first : null;
+};
+
+const buildRestaurantRows = (
+  categories: RestaurantCategory[],
+  query: string,
+  collapsed: Set<string>
+): RestaurantDropdownRow[] => {
+  const needle = query.trim().toLowerCase();
+  const rows: RestaurantDropdownRow[] = [];
+  categories.forEach((cat) => {
+    const filtered = needle
+      ? cat.items.filter((item) =>
+          item.RestaurantName.toLowerCase().includes(needle)
+        )
+      : cat.items;
+    if (filtered.length === 0) return;
+    rows.push({ type: 'header', id: `header-${cat.id}`, name: cat.name });
+    if (collapsed.has(cat.id)) return;
+    filtered.forEach((item) =>
+      rows.push({ type: 'item', id: `${cat.id}-${item.RestaurantId}`, item })
+    );
+  });
+  return rows;
 };
 
 export default function CameraDetailsScreen() {
@@ -41,18 +223,30 @@ export default function CameraDetailsScreen() {
     typeof params.dishId === 'string' && params.dishId ? Number(params.dishId) : null;
   const presetDishName =
     typeof params.dishName === 'string' && params.dishName ? params.dishName : null;
+  const defaultImageUrl =
+    typeof params.defaultImageUrl === 'string' && params.defaultImageUrl
+      ? params.defaultImageUrl
+      : null;
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [restaurantCategories, setRestaurantCategories] = useState<RestaurantCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedRestaurantId, setSelectedRestaurantId] = useState<number | null>(null);
-  const [dishes, setDishes] = useState<DishItem[]>([]);
+  const [selectedRestaurantCuisine, setSelectedRestaurantCuisine] = useState<string | null>(null);
+  const [dishCategories, setDishCategories] = useState<DishCategory[]>([]);
   const [dishDropdownOpen, setDishDropdownOpen] = useState(false);
   const [dishSearch, setDishSearch] = useState('');
   const [selectedDish, setSelectedDish] = useState<DishItem | null>(null);
   const [menuLoading, setMenuLoading] = useState(false);
+  const [collapsedDishCategories, setCollapsedDishCategories] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [collapsedRestaurantCategories, setCollapsedRestaurantCategories] = useState<Set<string>>(
+    () => new Set()
+  );
   const [tastyScore, setTastyScore] = useState(60);
   const [fastScore, setFastScore] = useState(60);
   const [fillingScore, setFillingScore] = useState(60);
@@ -65,7 +259,7 @@ export default function CameraDetailsScreen() {
       try {
         setMenuLoading(true);
         if (!presetDishId) setSelectedDish(null);
-        setDishes([]);
+        setDishCategories([]);
         const response = await fetch(
           `https://www.10bis.co.il/api/GetMenu?ResId=${selectedRestaurantId}&websiteID=10bis&domainID=10bis`,
           { headers: { Accept: 'application/json' } }
@@ -73,48 +267,9 @@ export default function CameraDetailsScreen() {
         if (!response.ok) throw new Error(`Request failed: ${response.status}`);
         const text = await response.text();
         const data = JSON.parse(text);
-        const categories: any[] = Array.isArray(data?.Data)
-          ? data.Data
-          : Array.isArray(data?.Data?.Categories)
-          ? data.Data.Categories
-          : [];
-        const items: DishItem[] = [];
-        categories.forEach((cat) => {
-          const dishesArr = Array.isArray(cat?.DishList)
-            ? cat.DishList
-            : Array.isArray(cat?.Dishes)
-            ? cat.Dishes
-            : [];
-          dishesArr.forEach((d: any) => {
-            const name =
-              typeof d?.DishName === 'string' ? d.DishName : typeof d?.Name === 'string' ? d.Name : null;
-            const id =
-              typeof d?.DishId === 'number'
-                ? d.DishId
-                : typeof d?.Id === 'number'
-                ? d.Id
-                : typeof d?.DishID === 'number'
-                ? d.DishID
-                : null;
-            if (name && id !== null) items.push({ id, name });
-          });
-        });
-        if (items.length === 0 && Array.isArray(data?.Data?.Dishes)) {
-          data.Data.Dishes.forEach((d: any) => {
-            const name =
-              typeof d?.DishName === 'string' ? d.DishName : typeof d?.Name === 'string' ? d.Name : null;
-            const id =
-              typeof d?.DishId === 'number'
-                ? d.DishId
-                : typeof d?.Id === 'number'
-                ? d.Id
-                : typeof d?.DishID === 'number'
-                ? d.DishID
-                : null;
-            if (name && id !== null) items.push({ id, name });
-          });
-        }
-        setDishes(items);
+        const curated = mapMenuToCategories(data);
+        setDishCategories(curated);
+        setCollapsedDishCategories(new Set());
       } catch (error) {
         console.log('[MENU_FETCH_ERROR]:', error);
       } finally {
@@ -133,10 +288,31 @@ export default function CameraDetailsScreen() {
   }, []);
 
   useEffect(() => {
-    if (presetDishId && presetDishName) {
-      setSelectedDish({ id: presetDishId, name: presetDishName });
+    if (!selectedRestaurantId) {
+      setSelectedRestaurantCuisine(null);
+      return;
     }
-  }, [presetDishId, presetDishName, dishes]);
+    const match = restaurants.find((item) => item.RestaurantId === selectedRestaurantId);
+    setSelectedRestaurantCuisine(getPrimaryCuisine(match?.RestaurantCuisineList));
+  }, [selectedRestaurantId, restaurants]);
+
+  useEffect(() => {
+    if (!presetDishName && !presetDishId) return;
+    const allDishes = dishCategories.flatMap((cat) => cat.items);
+    let match: DishItem | undefined;
+    if (presetDishId) {
+      match = allDishes.find((item) => item.id === presetDishId);
+    }
+    if (!match && presetDishName) {
+      const needle = presetDishName.toLowerCase().trim();
+      match = allDishes.find((item) => item.name.toLowerCase().trim() === needle);
+    }
+    if (!match && presetDishName) {
+      // fallback: allow prefill even if menu hasn't loaded yet
+      match = { id: presetDishId ?? -1, name: presetDishName };
+    }
+    if (match) setSelectedDish(match);
+  }, [presetDishId, presetDishName, dishCategories]);
 
   const fetchCompanyRestaurants = async () => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -175,9 +351,13 @@ export default function CameraDetailsScreen() {
         ? data.Data.ResList.map((item: any) => ({
             RestaurantId: item?.RestaurantId,
             RestaurantName: item?.RestaurantName,
+            RestaurantCuisineList:
+              typeof item?.RestaurantCuisineList === 'string' ? item.RestaurantCuisineList : null,
           }))
         : [];
       setRestaurants(list);
+      setRestaurantCategories(mapRestaurantsToCategories(list));
+      setCollapsedRestaurantCategories(new Set());
     } catch (err) {
       console.error(err);
     } finally {
@@ -189,11 +369,32 @@ export default function CameraDetailsScreen() {
     <View style={styles.screen}>
       <View style={styles.body}>
         <View style={styles.photoRow}>
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.photo} />
-          ) : (
-            <Text style={styles.placeholder}>No photo available</Text>
-          )}
+          <Pressable
+            style={photoUri ? styles.photoPressable : styles.photoPlaceholder}
+            onPress={() =>
+              router.push({
+                pathname: '/camera',
+                params: {
+                  restaurantId: selectedRestaurantId ? String(selectedRestaurantId) : '',
+                  restaurantName: selectedName ?? '',
+                  dishId: selectedDish?.id ? String(selectedDish.id) : '',
+                  dishName: selectedDish?.name ?? '',
+                },
+              })
+            }
+          >
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.photo} />
+            ) : defaultImageUrl ? (
+              <Image source={{ uri: defaultImageUrl }} style={styles.photo} />
+            ) : null}
+            <View style={styles.cameraOverlay}>
+              <Ionicons name="camera" size={20} color="#ffffff" />
+              <Text style={styles.cameraOverlayText}>
+                {photoUri ? 'צלם מחדש' : 'צלם מנה'}
+              </Text>
+            </View>
+          </Pressable>
         </View>
         <TextInput
           style={styles.reviewInput}
@@ -228,32 +429,66 @@ export default function CameraDetailsScreen() {
                     <Ionicons name="search" size={16} color="#6B7280" />
                     <TextInput
                   style={styles.searchInput}
-                  placeholder="Type to search…"
+          placeholder="חיפוש מסעדה…"
                   placeholderTextColor="#9CA3AF"
                   value={search}
                   onChangeText={(text) => setSearch(text)}
                 />
               </View>
               {restaurants.length === 0 ? (
-                <Text style={styles.dropdownEmpty}>No restaurants found</Text>
+                <Text style={styles.dropdownEmpty}>לא נמצאו מסעדות</Text>
               ) : (
                 <FlatList
-                  data={restaurants.filter((r) =>
-                    r.RestaurantName.toLowerCase().startsWith(search.toLowerCase())
+                  data={buildRestaurantRows(
+                    restaurantCategories,
+                    search,
+                    collapsedRestaurantCategories
                   )}
-                  keyExtractor={(item) => String(item.RestaurantId)}
-                  renderItem={({ item }) => (
-                    <Pressable
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setSelectedName(item.RestaurantName);
-                        setSelectedRestaurantId(item.RestaurantId);
-                        setDropdownOpen(false);
-                      }}
-                    >
-                      <Text style={styles.dropdownItemText}>{item.RestaurantName}</Text>
-                    </Pressable>
-                  )}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) =>
+                    item.type === 'header' ? (
+                      <Pressable
+                        style={styles.categoryHeader}
+                        onPress={() =>
+                          setCollapsedRestaurantCategories((prev) => {
+                            const next = new Set(prev);
+                            const key = item.id.replace('header-', '');
+                            if (next.has(key)) {
+                              next.delete(key);
+                            } else {
+                              next.add(key);
+                            }
+                            return next;
+                          })
+                        }
+                      >
+                        <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                        <Ionicons
+                          name={
+                            collapsedRestaurantCategories.has(item.id.replace('header-', ''))
+                              ? 'chevron-down'
+                              : 'chevron-up'
+                          }
+                          size={14}
+                          color="#94A3B8"
+                        />
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setSelectedName(item.item.RestaurantName);
+                          setSelectedRestaurantId(item.item.RestaurantId);
+                          setSelectedRestaurantCuisine(
+                            getPrimaryCuisine(item.item.RestaurantCuisineList)
+                          );
+                          setDropdownOpen(false);
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{item.item.RestaurantName}</Text>
+                      </Pressable>
+                    )
+                  }
                 />
               )}
             </View>
@@ -285,7 +520,7 @@ export default function CameraDetailsScreen() {
                 <Ionicons name="search" size={16} color="#6B7280" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Type to search dish…"
+                  placeholder="חיפוש מנה…"
                   placeholderTextColor="#9CA3AF"
                   value={dishSearch}
                   onChangeText={(text) => setDishSearch(text)}
@@ -294,27 +529,54 @@ export default function CameraDetailsScreen() {
               {menuLoading ? (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator size="small" color="#111111" />
-                  <Text style={styles.dropdownEmpty}>Loading dishes…</Text>
+                  <Text style={styles.dropdownEmpty}>טוען מנות…</Text>
                 </View>
-              ) : dishes.length === 0 ? (
-                <Text style={styles.dropdownEmpty}>No dishes found</Text>
+              ) : dishCategories.length === 0 ? (
+                <Text style={styles.dropdownEmpty}>לא נמצאו מנות</Text>
               ) : (
                 <FlatList
-                  data={dishes.filter((item) =>
-                    item.name.toLowerCase().startsWith(dishSearch.toLowerCase())
-                  )}
-                  keyExtractor={(item) => String(item.id)}
-                  renderItem={({ item }) => (
-                    <Pressable
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setSelectedDish(item);
-                        setDishDropdownOpen(false);
-                      }}
-                    >
-                      <Text style={styles.dropdownItemText}>{item.name}</Text>
-                    </Pressable>
-                  )}
+                  data={buildDropdownRows(dishCategories, dishSearch, collapsedDishCategories)}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) =>
+                    item.type === 'header' ? (
+                      <Pressable
+                        style={styles.categoryHeader}
+                        onPress={() =>
+                          setCollapsedDishCategories((prev) => {
+                            const next = new Set(prev);
+                            const key = item.id.replace('header-', '');
+                            if (next.has(key)) {
+                              next.delete(key);
+                            } else {
+                              next.add(key);
+                            }
+                            return next;
+                          })
+                        }
+                      >
+                        <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                        <Ionicons
+                          name={
+                            collapsedDishCategories.has(item.id.replace('header-', ''))
+                              ? 'chevron-down'
+                              : 'chevron-up'
+                          }
+                          size={14}
+                          color="#94A3B8"
+                        />
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setSelectedDish(item.item);
+                          setDishDropdownOpen(false);
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{item.item.name}</Text>
+                      </Pressable>
+                    )
+                  }
                 />
               )}
             </View>
@@ -372,19 +634,22 @@ export default function CameraDetailsScreen() {
         </View>
 
         <Pressable
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          style={[
+            styles.saveButton,
+            (saving || !photoUri || !photoBase64) && styles.saveButtonDisabled,
+          ]}
           onPress={async () => {
             if (saving) return;
             if (!photoUri) {
-              Alert.alert('Missing image', 'Please take a photo first.');
+              Alert.alert('חסרה תמונה', 'אנא צלם תמונה תחילה.');
               return;
             }
             if (!selectedRestaurantId) {
-              Alert.alert('Missing restaurant', 'Please select a restaurant.');
+              Alert.alert('חסרה מסעדה', 'אנא בחר מסעדה.');
               return;
             }
             if (!selectedDish?.id) {
-              Alert.alert('Missing dish', 'Please select a dish.');
+              Alert.alert('חסרה מנה', 'אנא בחר מנה.');
               return;
             }
             try {
@@ -392,13 +657,13 @@ export default function CameraDetailsScreen() {
               const { data: sessionData } = await supabase.auth.getSession();
               const userId = sessionData.session?.user?.id;
               if (!userId) {
-                Alert.alert('Not signed in', 'Please sign in again.');
+                Alert.alert('לא מחובר', 'אנא התחבר שוב.');
                 return;
               }
-              if (!photoBase64) {
-                Alert.alert('Missing image data', 'Please retake the photo.');
-                return;
-              }
+            if (!photoBase64) {
+                Alert.alert('חסרה תמונה', 'אנא צלם מחדש.');
+              return;
+            }
               const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
               const filePath = `${userId}/${Date.now()}.${ext}`;
               const base64ToArrayBuffer = (b64: string) => {
@@ -421,6 +686,7 @@ export default function CameraDetailsScreen() {
                 user_id: userId,
                 restaurant_id: selectedRestaurantId,
                 restaurant_name: selectedName ?? null,
+                cuisine: selectedRestaurantCuisine,
                 dish_id: selectedDish.id,
                 dish_name: selectedDish.name,
                 review_text: reviewText,
@@ -432,12 +698,12 @@ export default function CameraDetailsScreen() {
                 created_at: new Date().toISOString(),
               });
               if (insert.error) throw insert.error;
-              Alert.alert('Saved', 'Your dish review has been saved.');
+              Alert.alert('נשמר', 'הביקורת נשמרה בהצלחה.');
               router.replace('/');
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               console.log('[SAVE_DISH_ERROR]:', error);
-              Alert.alert('Save failed', message);
+              Alert.alert('שמירה נכשלה', message);
             } finally {
               setSaving(false);
             }
@@ -469,6 +735,38 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 8,
     backgroundColor: '#f0f0f0',
+  },
+  photoPressable: {
+    width: 180,
+    height: 120,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  photoPlaceholder: {
+    width: 180,
+    height: 120,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraOverlay: {
+    position: 'absolute',
+    right: 0,
+    left: 0,
+    bottom: 0,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  cameraOverlayText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   placeholder: {
     width: 180,
@@ -543,6 +841,23 @@ const styles = StyleSheet.create({
   dropdownItemText: {
     fontSize: 14,
     color: '#111111',
+    textAlign: 'right',
+  },
+  categoryHeader: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  categoryHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    textAlign: 'right',
   },
   loadingRow: {
     flexDirection: 'row',

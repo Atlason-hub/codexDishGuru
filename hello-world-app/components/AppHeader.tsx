@@ -134,7 +134,7 @@ export default function AppHeader() {
         <Pressable style={styles.iconButton} onPress={() => router.push('/camera')}>
           <Ionicons name="camera" size={24} color="#111111" />
         </Pressable>
-        <Pressable style={styles.iconButton} onPress={() => {}}>
+        <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
           <Ionicons name="search" size={24} color="#111111" />
         </Pressable>
       </View>
