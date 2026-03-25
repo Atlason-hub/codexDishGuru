@@ -70,8 +70,12 @@ const transformLogoUrl200 = (raw: string | null | undefined): LogoResult => {
   return normalizeLogo(raw);
 };
 
-const cacheLogo = async (value: LogoResult) => {
+export const cacheLogo = async (value: LogoResult) => {
   await AsyncStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(value));
+};
+
+export const clearCachedLogo = async () => {
+  await AsyncStorage.removeItem(LOGO_CACHE_KEY);
 };
 
 export const loadCachedLogo = async (): Promise<LogoResult> => {

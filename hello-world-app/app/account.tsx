@@ -74,12 +74,12 @@ export default function AccountScreen() {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
       setEmail(data.session?.user?.email ?? null);
-      const cached = await loadCachedAvatar();
+      const cached = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cached) setAvatarUrl(cached);
       const metaAvatar = await fetchAvatarFromAuth();
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
-        await cacheAvatar(metaAvatar);
+        await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -87,10 +87,10 @@ export default function AccountScreen() {
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
-        cacheAvatar(metaAvatar);
+        cacheAvatar(session?.user?.id ?? null, metaAvatar);
       } else {
         setAvatarUrl(null);
-        cacheAvatar(null);
+        cacheAvatar(session?.user?.id ?? null, null);
       }
     });
     return () => {
@@ -276,8 +276,19 @@ export default function AccountScreen() {
             const url = publicData?.publicUrl ?? null;
               if (url) {
                 await supabase.auth.updateUser({ data: { avatar_url: url } });
+                const { data: sessionData } = await supabase.auth.getSession();
+                const currentUserId = sessionData.session?.user?.id ?? null;
+                if (currentUserId) {
+                  const { error: profileError } = await supabase
+                    .from('AppUsers')
+                    .update({ avatar_url: url })
+                    .eq('user_id', currentUserId);
+                  if (profileError) {
+                    console.log('[AVATAR_PROFILE_UPDATE_ERROR]:', profileError);
+                  }
+                }
                 setAvatarUrl(url);
-                await cacheAvatar(url);
+                await cacheAvatar(userId, url);
                 setPendingAsset(null);
                 setTempAvatarUrl(null);
                 setAvatarOffset({ x: 0, y: 0 });

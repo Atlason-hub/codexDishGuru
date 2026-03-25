@@ -698,7 +698,6 @@ export default function CameraDetailsScreen() {
                 created_at: new Date().toISOString(),
               });
               if (insert.error) throw insert.error;
-              Alert.alert('נשמר', 'הביקורת נשמרה בהצלחה.');
               router.replace('/');
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);

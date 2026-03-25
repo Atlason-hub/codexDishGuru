@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
-import { loadCachedLogo } from '../lib/logo';
+import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { useRouter } from 'expo-router';
 import { useLocalSearchParams } from 'expo-router';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
@@ -23,6 +23,7 @@ const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
 type DishAssociation = {
   id: string;
+  user_id: string | null;
   dish_id: number | null;
   image_url: string | null;
   dish_name: string | null;
@@ -47,9 +48,11 @@ export default function HomeScreen() {
   const [authLoading, setAuthLoading] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dishAssociations, setDishAssociations] = useState<DishAssociation[]>([]);
+  const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -62,6 +65,8 @@ export default function HomeScreen() {
   const [companyDebugJson, setCompanyDebugJson] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
 
   const resolveLogoUrl = (raw: string | null | undefined) => {
     if (!raw) return null;
@@ -85,17 +90,126 @@ export default function HomeScreen() {
     return domain.length > 0 ? domain : null;
   };
 
+  const getEmailName = (value: string | null | undefined) => {
+    if (!value) return null;
+    const atIndex = value.lastIndexOf('@');
+    if (atIndex === -1) return value.trim();
+    return value.slice(0, atIndex).trim();
+  };
+
+  const loadUserAvatars = async (items: DishAssociation[]) => {
+    const ids = Array.from(
+      new Set(items.map((item) => item.user_id).filter(Boolean) as string[])
+    );
+    if (ids.length === 0) {
+      setUserAvatars({});
+      return;
+    }
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_avatars', {
+      user_ids: ids,
+    });
+    if (!rpcError && Array.isArray(rpcData)) {
+      const map: Record<string, string> = {};
+      (rpcData ?? []).forEach((row: any) => {
+        if (row?.user_id && row?.avatar_url) {
+          map[String(row.user_id)] = String(row.avatar_url);
+        }
+      });
+      setUserAvatars(map);
+      return;
+    }
+    if (rpcError) {
+      console.log('[AVATAR_RPC_ERROR]:', rpcError);
+    }
+    const { data, error: avatarError } = await supabase
+      .from('AppUsers')
+      .select('user_id, avatar_url')
+      .in('user_id', ids);
+    if (avatarError) {
+      console.log('[AVATAR_LOAD_ERROR]:', avatarError);
+      setUserAvatars({});
+      return;
+    }
+    const map: Record<string, string> = {};
+    (data ?? []).forEach((row: any) => {
+      if (row?.user_id && row?.avatar_url) {
+        map[String(row.user_id)] = String(row.avatar_url);
+      }
+    });
+    setUserAvatars(map);
+  };
+
+
   const loadDishAssociations = async () => {
     try {
       setLoading(true);
       setError(null);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      const userEmail = sessionData.session?.user?.email ?? null;
+      let allowedUserIds: string[] | null = null;
+      let resolvedCompanyId: string | null = null;
+      if (userId) {
+        const { data: profile, error: profileError } = await supabase
+          .from('AppUsers')
+          .select('company_id')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle();
+        if (profileError) throw profileError;
+        let companyId = profile?.company_id ?? null;
+        if (!companyId && userEmail) {
+          const domain = userEmail.includes('@')
+            ? userEmail.split('@').pop()?.trim().toLowerCase()
+            : null;
+          if (domain) {
+            const { data: companyFromDomain, error: companyDomainError } = await supabase
+              .from('companies')
+              .select('id')
+              .ilike('domain', domain)
+              .limit(1)
+              .maybeSingle();
+            if (companyDomainError) throw companyDomainError;
+            companyId = companyFromDomain?.id ?? null;
+          }
+        }
+        if (companyId) {
+          resolvedCompanyId = companyId;
+          const { data: companyUsers, error: usersError } = await supabase
+            .from('AppUsers')
+            .select('user_id')
+            .eq('company_id', companyId);
+          if (!usersError) {
+            allowedUserIds = (companyUsers ?? [])
+              .map((row: any) => row?.user_id)
+              .filter(Boolean);
+          }
+          const { data: rpcData, error: rpcError } = await supabase.rpc(
+            'get_company_dishes',
+            {
+              company_id: companyId,
+            }
+          );
+          if (!rpcError && Array.isArray(rpcData)) {
+            await loadUserAvatars(rpcData as DishAssociation[]);
+            setDishAssociations((rpcData as DishAssociation[]) ?? []);
+            return;
+          }
+        }
+      }
+      if (!allowedUserIds || allowedUserIds.length === 0) {
+        setDishAssociations([]);
+        return;
+      }
       const { data, error: fetchError } = await supabase
         .from('dish_associations')
         .select(
-          'id, dish_id, image_url, dish_name, restaurant_name, restaurant_id, tasty_score, fast_score, filling_score, created_at'
+          'id, user_id, dish_id, image_url, dish_name, restaurant_name, restaurant_id, tasty_score, fast_score, filling_score, created_at'
         )
+        .in('user_id', allowedUserIds)
         .order('created_at', { ascending: false });
       if (fetchError) throw fetchError;
+      await loadUserAvatars((data as DishAssociation[]) ?? []);
       setDishAssociations((data as DishAssociation[]) ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -256,15 +370,16 @@ export default function HomeScreen() {
       if (!mounted) return;
       setIsAuthenticated(Boolean(data.session));
       setSessionChecked(true);
+      setCurrentUserId(data.session?.user?.id ?? null);
       const sessionEmail = data.session?.user?.email ?? null;
       setUserEmail(sessionEmail);
       setUserEmailDomain(getEmailDomain(sessionEmail));
-      const cachedAvatar = await loadCachedAvatar();
+      const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
       const metaAvatar = await fetchAvatarFromAuth();
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
-        await cacheAvatar(metaAvatar);
+        await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
       }
       const cached = await loadCachedLogo();
       if (cached.logoUrl || cached.logoPath) {
@@ -283,16 +398,17 @@ export default function HomeScreen() {
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
+      setCurrentUserId(session?.user?.id ?? null);
       const sessionEmail = session?.user?.email ?? null;
       setUserEmail(sessionEmail);
       setUserEmailDomain(getEmailDomain(sessionEmail));
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
-        cacheAvatar(metaAvatar);
+        cacheAvatar(session?.user?.id ?? null, metaAvatar);
       } else {
         setAvatarUrl(null);
-        cacheAvatar(null);
+        cacheAvatar(session?.user?.id ?? null, null);
       }
       if (session?.user?.id) {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
@@ -301,6 +417,7 @@ export default function HomeScreen() {
       } else {
         setCompanyLogoUrl(null);
         setCompanyDomain(null);
+        clearCachedLogo();
       }
     });
     return () => {
@@ -308,6 +425,12 @@ export default function HomeScreen() {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (companyLogoUrl) {
+      cacheLogo({ logoUrl: companyLogoUrl, logoPath: companyLogoPath });
+    }
+  }, [companyLogoUrl, companyLogoPath]);
 
 
   const signIn = async () => {
@@ -411,8 +534,14 @@ export default function HomeScreen() {
     setCompanyId(null);
     setCompanyFetchError(null);
     setCompanyDebugJson(null);
-    await cacheAvatar(null);
+    setCurrentUserId(null);
+    setUserAvatars({});
+    setAvatarPreviewOpen(false);
+    setAvatarPreviewUrl(null);
+    setAvatarPreviewLabel(null);
+    await cacheAvatar(currentUserId, null);
     setAvatarUrl(null);
+    await clearCachedLogo();
   };
 
   const showFavoritesOnly =
@@ -420,6 +549,7 @@ export default function HomeScreen() {
   const visibleAssociations = showFavoritesOnly
     ? dishAssociations.filter((item) => favorites[item.id])
     : dishAssociations;
+  const hasHeaderContent = showFavoritesOnly || loading || Boolean(error);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -429,7 +559,7 @@ export default function HomeScreen() {
         </View>
       ) : !isAuthenticated ? (
         <View style={styles.authCard}>
-          <Text style={styles.authTitle}>{showSignup ? 'Create account' : 'Sign in'}</Text>
+          <Text style={styles.authTitle}>{showSignup ? 'יצירת חשבון' : 'התחברות'}</Text>
           <TextInput
             style={styles.input}
             placeholder="אימייל"
@@ -474,7 +604,7 @@ export default function HomeScreen() {
                 {authLoading ? (
                   <ActivityIndicator />
                 ) : (
-                  <Text style={styles.loginButtonText}>צור חשבון</Text>
+              <Text style={styles.loginButtonText}>צור חשבון</Text>
                 )}
               </Pressable>
               <Pressable
@@ -494,7 +624,7 @@ export default function HomeScreen() {
                 {authLoading ? (
                   <ActivityIndicator />
                 ) : (
-                  <Text style={styles.loginButtonText}>התחבר</Text>
+                <Text style={styles.loginButtonText}>התחבר</Text>
                 )}
               </Pressable>
               <Pressable
@@ -514,7 +644,10 @@ export default function HomeScreen() {
         <FlatList
           data={visibleAssociations}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.feedContent}
+          contentContainerStyle={[
+            styles.feedContent,
+            !hasHeaderContent && styles.feedContentNoHeader,
+          ]}
           ListHeaderComponent={
             <>
               {showFavoritesOnly && (
@@ -545,9 +678,17 @@ export default function HomeScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
-            <View style={styles.feedCard}>
-              <View style={styles.feedImageWrap} pointerEvents="box-none">
+          renderItem={({ item }) => {
+            const itemAvatarUrl = item.user_id ? userAvatars[item.user_id] : null;
+            const resolvedAvatarUrl =
+              item.user_id && item.user_id === currentUserId && avatarUrl
+                ? avatarUrl
+                : itemAvatarUrl;
+            const avatarLabel =
+              item.user_id && item.user_id === currentUserId ? getEmailName(userEmail) : null;
+            return (
+              <View style={styles.feedCard}>
+                <View style={styles.feedImageWrap} pointerEvents="box-none">
                 <Pressable
                   style={styles.imagePressable}
                   pointerEvents="box-only"
@@ -598,11 +739,13 @@ export default function HomeScreen() {
                 <Pressable
                   style={styles.avatarBadge}
                   onPress={() => {
+                    setAvatarPreviewUrl(resolvedAvatarUrl);
+                    setAvatarPreviewLabel(avatarLabel);
                     setAvatarPreviewOpen(true);
                   }}
                 >
-                  {avatarUrl ? (
-                    <CachedLogo uri={avatarUrl} style={styles.avatarImage} />
+                  {resolvedAvatarUrl ? (
+                    <CachedLogo uri={resolvedAvatarUrl} style={styles.avatarImage} />
                   ) : (
                     <Ionicons name="person" size={16} color="#111111" />
                   )}
@@ -674,7 +817,8 @@ export default function HomeScreen() {
                 </View>
               </View>
             </View>
-          )}
+            );
+          }}
         />
       )}
       {isAuthenticated && (
@@ -685,33 +829,43 @@ export default function HomeScreen() {
         visible={avatarPreviewOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setAvatarPreviewOpen(false)}
+        onRequestClose={() => {
+          setAvatarPreviewOpen(false);
+          setAvatarPreviewUrl(null);
+          setAvatarPreviewLabel(null);
+        }}
       >
         <View style={styles.avatarModalBackdrop}>
           <Pressable
             style={styles.avatarModalOverlay}
-            onPress={() => setAvatarPreviewOpen(false)}
+            onPress={() => {
+              setAvatarPreviewOpen(false);
+              setAvatarPreviewUrl(null);
+              setAvatarPreviewLabel(null);
+            }}
           />
           <View style={styles.avatarModalWrapper}>
             <View style={styles.avatarModalCard}>
-              {avatarUrl ? (
-                <CachedLogo uri={avatarUrl} style={styles.avatarModalImage} />
+              {avatarPreviewUrl ? (
+                <CachedLogo uri={avatarPreviewUrl} style={styles.avatarModalImage} />
               ) : (
                 <View style={styles.avatarModalPlaceholder}>
                   <Ionicons name="person" size={64} color="#94A3B8" />
                 </View>
               )}
-              {userEmail ? (
+              {avatarPreviewLabel ? (
                 <View style={styles.avatarEmailPill}>
-                  <Text style={styles.avatarEmailText}>
-                    {userEmail.split('@')[0]}
-                  </Text>
+                  <Text style={styles.avatarEmailText}>{avatarPreviewLabel}</Text>
                 </View>
               ) : null}
             </View>
             <Pressable
               style={styles.avatarModalClose}
-              onPress={() => setAvatarPreviewOpen(false)}
+              onPress={() => {
+                setAvatarPreviewOpen(false);
+                setAvatarPreviewUrl(null);
+                setAvatarPreviewLabel(null);
+              }}
             >
               <Ionicons name="close" size={18} color="#111111" />
             </Pressable>
@@ -865,6 +1019,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#111111',
+    textAlign: 'right',
   },
   input: {
     height: 44,
@@ -874,6 +1029,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 14,
     backgroundColor: '#fafafa',
+    textAlign: 'right',
   },
   inputRow: {
     flexDirection: 'row',
@@ -888,6 +1044,7 @@ const styles = StyleSheet.create({
   inputField: {
     flex: 1,
     fontSize: 14,
+    textAlign: 'right',
   },
   eyeButton: {
     height: 32,
@@ -928,6 +1085,9 @@ const styles = StyleSheet.create({
   feedContent: {
     paddingBottom: 120,
     gap: 16,
+  },
+  feedContentNoHeader: {
+    marginTop: -16,
   },
   feedCard: {
     backgroundColor: '#ffffff',
@@ -1047,7 +1207,7 @@ const styles = StyleSheet.create({
   orderBadge: {
     position: 'absolute',
     left: 12,
-    bottom: 6,
+    bottom: 12,
     width: 74,
     height: 74,
     borderRadius: 37,
@@ -1058,6 +1218,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 4,
+    zIndex: 6,
   },
   orderText: {
     marginTop: 2,
@@ -1076,6 +1237,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#111111',
+    textAlign: 'right',
+    flex: 1,
+    alignSelf: 'flex-end',
   },
   backButton: {
     height: 32,
@@ -1121,6 +1285,7 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#666666',
     fontSize: 14,
+    textAlign: 'right',
   },
   errorText: {
     color: '#b00020',

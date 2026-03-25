@@ -1,23 +1,32 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 
-const AVATAR_CACHE_KEY = 'userAvatarUrl';
+const AVATAR_CACHE_PREFIX = 'userAvatarUrl:';
 
-export const loadCachedAvatar = async (): Promise<string | null> => {
+const getAvatarCacheKey = (userId: string | null | undefined) => {
+  if (!userId) return null;
+  return `${AVATAR_CACHE_PREFIX}${userId}`;
+};
+
+export const loadCachedAvatar = async (userId: string | null | undefined): Promise<string | null> => {
   try {
-    const raw = await AsyncStorage.getItem(AVATAR_CACHE_KEY);
+    const key = getAvatarCacheKey(userId);
+    if (!key) return null;
+    const raw = await AsyncStorage.getItem(key);
     return raw ?? null;
   } catch {
     return null;
   }
 };
 
-export const cacheAvatar = async (url: string | null) => {
+export const cacheAvatar = async (userId: string | null | undefined, url: string | null) => {
+  const key = getAvatarCacheKey(userId);
+  if (!key) return;
   if (!url) {
-    await AsyncStorage.removeItem(AVATAR_CACHE_KEY);
+    await AsyncStorage.removeItem(key);
     return;
   }
-  await AsyncStorage.setItem(AVATAR_CACHE_KEY, url);
+  await AsyncStorage.setItem(key, url);
 };
 
 export const fetchAvatarFromAuth = async (): Promise<string | null> => {

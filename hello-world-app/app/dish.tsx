@@ -161,7 +161,7 @@ export default function DishScreen() {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
-      const cachedAvatar = await loadCachedAvatar();
+      const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
       if (data.session?.user?.id) {
         await loadFavorites(data.session.user.id);

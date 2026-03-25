@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
-import { loadCachedLogo } from '../lib/logo';
+import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedLogo from './CachedLogo';
@@ -67,51 +67,61 @@ export default function AppHeader() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
       const sessionEmail = data.session?.user?.email ?? null;
+      setCurrentUserId(data.session?.user?.id ?? null);
       setUserEmail(sessionEmail);
       const cached = await loadCachedLogo();
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
         setCompanyLogoUrl(resolved);
       }
-      const cachedAvatar = await loadCachedAvatar();
+      const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
       const metaAvatar = await fetchAvatarFromAuth();
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
-        await cacheAvatar(metaAvatar);
+        await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
       }
       if (data.session?.user?.id) {
         const url = await fetchCompanyLogoForUser(
           data.session.user.id,
           getEmailDomain(sessionEmail)
         );
-        if (url) setCompanyLogoUrl(url);
+        if (url) {
+          setCompanyLogoUrl(url);
+          cacheLogo({ logoUrl: url, logoPath: null });
+        }
       }
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       const sessionEmail = session?.user?.email ?? null;
+      setCurrentUserId(session?.user?.id ?? null);
       setUserEmail(sessionEmail);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
-        cacheAvatar(metaAvatar);
+        cacheAvatar(session?.user?.id ?? null, metaAvatar);
       } else {
         setAvatarUrl(null);
-        cacheAvatar(null);
+        cacheAvatar(session?.user?.id ?? null, null);
       }
       if (session?.user?.id) {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail)).then((url) => {
-          if (url) setCompanyLogoUrl(url);
+          if (url) {
+            setCompanyLogoUrl(url);
+            cacheLogo({ logoUrl: url, logoPath: null });
+          }
         });
       } else {
         setCompanyLogoUrl(null);
+        clearCachedLogo();
       }
     });
 
@@ -127,7 +137,8 @@ export default function AppHeader() {
     setUserEmail(null);
     setCompanyLogoUrl(null);
     setAvatarUrl(null);
-    await cacheAvatar(null);
+    await cacheAvatar(currentUserId, null);
+    await clearCachedLogo();
   };
 
   return (
