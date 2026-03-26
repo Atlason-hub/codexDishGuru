@@ -342,7 +342,7 @@ export default function RestaurantScreen() {
                       : 'chevron-up'
                   }
                   size={14}
-                  color="#F87171"
+                  color="#9e211c"
                 />
               </Pressable>
             ) : (
@@ -410,6 +410,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: 6,
     marginBottom: 10,
   },
   backButton: {
@@ -420,6 +421,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginTop: 2,
   },
   headerTitle: {
     fontSize: 18,
@@ -461,7 +463,7 @@ const styles = StyleSheet.create({
   sectionHeaderText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#F87171',
+    color: '#9e211c',
     textAlign: 'right',
   },
   dishCard: {

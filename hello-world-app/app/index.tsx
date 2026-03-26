@@ -53,6 +53,7 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [dishAssociations, setDishAssociations] = useState<DishAssociation[]>([]);
   const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
+  const [userLabels, setUserLabels] = useState<Record<string, string>>({});
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -103,23 +104,29 @@ export default function HomeScreen() {
     );
     if (ids.length === 0) {
       setUserAvatars({});
+      setUserLabels({});
       return;
     }
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_avatars', {
+    const { data: profileData, error: profileError } = await supabase.rpc('get_user_profiles', {
       user_ids: ids,
     });
-    if (!rpcError && Array.isArray(rpcData)) {
+    if (!profileError && Array.isArray(profileData)) {
       const map: Record<string, string> = {};
-      (rpcData ?? []).forEach((row: any) => {
+      const labels: Record<string, string> = {};
+      (profileData ?? []).forEach((row: any) => {
         if (row?.user_id && row?.avatar_url) {
           map[String(row.user_id)] = String(row.avatar_url);
         }
+        if (row?.user_id && row?.email_prefix) {
+          labels[String(row.user_id)] = String(row.email_prefix);
+        }
       });
       setUserAvatars(map);
+      setUserLabels(labels);
       return;
     }
-    if (rpcError) {
-      console.log('[AVATAR_RPC_ERROR]:', rpcError);
+    if (profileError) {
+      console.log('[AVATAR_PROFILE_RPC_ERROR]:', profileError);
     }
     const { data, error: avatarError } = await supabase
       .from('AppUsers')
@@ -128,6 +135,7 @@ export default function HomeScreen() {
     if (avatarError) {
       console.log('[AVATAR_LOAD_ERROR]:', avatarError);
       setUserAvatars({});
+      setUserLabels({});
       return;
     }
     const map: Record<string, string> = {};
@@ -137,6 +145,7 @@ export default function HomeScreen() {
       }
     });
     setUserAvatars(map);
+    setUserLabels({});
   };
 
 
@@ -191,8 +200,13 @@ export default function HomeScreen() {
             }
           );
           if (!rpcError && Array.isArray(rpcData)) {
-            await loadUserAvatars(rpcData as DishAssociation[]);
-            setDishAssociations((rpcData as DishAssociation[]) ?? []);
+            const sorted = [...rpcData].sort((a: any, b: any) => {
+              const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
+              const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
+              return bTime - aTime;
+            });
+            await loadUserAvatars(sorted as DishAssociation[]);
+            setDishAssociations((sorted as DishAssociation[]) ?? []);
             return;
           }
         }
@@ -209,8 +223,13 @@ export default function HomeScreen() {
         .in('user_id', allowedUserIds)
         .order('created_at', { ascending: false });
       if (fetchError) throw fetchError;
-      await loadUserAvatars((data as DishAssociation[]) ?? []);
-      setDishAssociations((data as DishAssociation[]) ?? []);
+      const sorted = [...(data ?? [])].sort((a: any, b: any) => {
+        const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTime - aTime;
+      });
+      await loadUserAvatars((sorted as DishAssociation[]) ?? []);
+      setDishAssociations((sorted as DishAssociation[]) ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -546,13 +565,63 @@ export default function HomeScreen() {
 
   const showFavoritesOnly =
     typeof params.favorites === 'string' ? params.favorites === '1' : false;
+  const restaurantFilterId =
+    typeof params.restaurantId === 'string' && params.restaurantId.length > 0
+      ? Number(params.restaurantId)
+      : null;
+  const restaurantFilterName =
+    typeof params.restaurantName === 'string' ? params.restaurantName : null;
+  const showRestaurantOnly =
+    !showFavoritesOnly && (restaurantFilterId !== null || Boolean(restaurantFilterName));
+
   const visibleAssociations = showFavoritesOnly
     ? dishAssociations.filter((item) => favorites[item.id])
-    : dishAssociations;
-  const hasHeaderContent = showFavoritesOnly || loading || Boolean(error);
+    : showRestaurantOnly
+      ? dishAssociations.filter((item) => {
+          if (restaurantFilterId !== null) {
+            return item.restaurant_id === restaurantFilterId;
+          }
+          if (restaurantFilterName) {
+            return (item.restaurant_name ?? '') === restaurantFilterName;
+          }
+          return true;
+        })
+      : dishAssociations;
+  const hasHeaderContent = showFavoritesOnly || showRestaurantOnly || loading || Boolean(error);
+  const listHeader = hasHeaderContent ? (
+    <>
+      {showRestaurantOnly && (
+        <View style={styles.favoritesHeader}>
+          <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+            <Ionicons name="chevron-back" size={18} color="#111111" />
+          </Pressable>
+          <Text style={styles.favoritesHeaderText}>
+            {restaurantFilterName ?? 'מסעדה'}
+          </Text>
+        </View>
+      )}
+      {showFavoritesOnly && (
+        <View style={styles.favoritesHeader}>
+          <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+            <Ionicons name="chevron-back" size={18} color="#111111" />
+          </Pressable>
+          <Text style={styles.favoritesHeaderText}>המועדפים שלי</Text>
+        </View>
+      )}
+      {loading ? (
+        <View style={styles.results}>
+          <ActivityIndicator size="large" />
+        </View>
+      ) : error ? (
+        <View style={styles.results}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+    </>
+  ) : null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       {!sessionChecked ? (
         <View style={styles.results}>
           <ActivityIndicator size="large" />
@@ -648,27 +717,7 @@ export default function HomeScreen() {
             styles.feedContent,
             !hasHeaderContent && styles.feedContentNoHeader,
           ]}
-          ListHeaderComponent={
-            <>
-              {showFavoritesOnly && (
-                <View style={styles.favoritesHeader}>
-                  <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
-                    <Ionicons name="chevron-back" size={18} color="#111111" />
-                  </Pressable>
-                  <Text style={styles.favoritesHeaderText}>המועדפים שלי</Text>
-                </View>
-              )}
-              {loading ? (
-                <View style={styles.results}>
-                  <ActivityIndicator size="large" />
-                </View>
-              ) : error ? (
-                <View style={styles.results}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
-            </>
-          }
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={
             !loading && !error ? (
               <View style={styles.results}>
@@ -685,7 +734,11 @@ export default function HomeScreen() {
                 ? avatarUrl
                 : itemAvatarUrl;
             const avatarLabel =
-              item.user_id && item.user_id === currentUserId ? getEmailName(userEmail) : null;
+              (item.user_id ? userLabels[item.user_id] : null) ??
+              (item.user_id && item.user_id === currentUserId
+                ? getEmailName(userEmail)
+                : null) ??
+              'משתמש';
             return (
               <View style={styles.feedCard}>
                 <View style={styles.feedImageWrap} pointerEvents="box-none">
@@ -711,7 +764,19 @@ export default function HomeScreen() {
                   pointerEvents="none"
                 />
                 <Pressable
+                  style={styles.heartBadge}
+                  hitSlop={8}
+                  onPress={() => toggleFavorite(item.id)}
+                >
+                  <Ionicons
+                    name={favorites[item.id] ? 'heart' : 'heart-outline'}
+                    size={18}
+                    color="#111111"
+                  />
+                </Pressable>
+                <Pressable
                   style={styles.cameraBadge}
+                  hitSlop={8}
                   onPress={() =>
                     router.push({
                       pathname: '/camera',
@@ -724,14 +789,7 @@ export default function HomeScreen() {
                     })
                   }
                 >
-                  <Ionicons name="camera" size={18} color="#E2E8F0" />
-                </Pressable>
-                <Pressable style={styles.heartBadge} onPress={() => toggleFavorite(item.id)}>
-                  <Ionicons
-                    name={favorites[item.id] ? 'heart' : 'heart-outline'}
-                    size={18}
-                    color="#E2E8F0"
-                  />
+                  <Ionicons name="camera" size={18} color="#111111" />
                 </Pressable>
                 <Text style={styles.imageDateText}>
                   {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
@@ -756,6 +814,7 @@ export default function HomeScreen() {
                       router.push({
                         pathname: '/dish',
                         params: {
+                          dishId: item.dish_id !== null ? String(item.dish_id) : '',
                           dishName: item.dish_name ?? '',
                           restaurantId: item.restaurant_id ? String(item.restaurant_id) : '',
                           restaurantName: item.restaurant_name ?? '',
@@ -763,7 +822,7 @@ export default function HomeScreen() {
                       })
                     }
                   >
-                    <Text style={styles.imageDishText} numberOfLines={1} ellipsizeMode="tail">
+                    <Text style={styles.imageDishText} numberOfLines={2} ellipsizeMode="tail">
                       {item.dish_name ?? 'מנה'}
                     </Text>
                   </Pressable>
@@ -789,7 +848,7 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
                 <View style={styles.orderBadge}>
-                  <Ionicons name="cart-outline" size={24} color="#F87171" />
+                  <Ionicons name="cart-outline" size={28} color="#9e211c" />
                   <Text style={styles.orderText}>הזמן</Text>
                 </View>
               </View>
@@ -879,7 +938,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#F5F5F5',
     paddingHorizontal: 16,
   },
   header: {
@@ -1000,11 +1059,8 @@ const styles = StyleSheet.create({
   results: {
     alignSelf: 'stretch',
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-    borderRadius: 12,
     padding: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: 'transparent',
   },
   authCard: {
     alignSelf: 'stretch',
@@ -1087,7 +1143,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   feedContentNoHeader: {
-    marginTop: -16,
+    paddingTop: 16,
   },
   feedCard: {
     backgroundColor: '#ffffff',
@@ -1132,43 +1188,60 @@ const styles = StyleSheet.create({
   },
   cameraBadge: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 6,
+    top: 64,
+    left: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
+    borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   heartBadge: {
     position: 'absolute',
-    top: 12,
-    left: 52,
-    width: 32,
-    height: 32,
-    borderRadius: 6,
+    top: 112,
+    left: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
+    borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   imageDateText: {
     position: 'absolute',
-    top: 18,
-    right: 56,
-    color: '#E2E8F0',
+    top: 12,
+    left: 14,
     fontSize: 10,
-    textAlign: 'right',
+    color: '#1f2937',
+    fontWeight: '700',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 16,
+    textAlign: 'left',
     zIndex: 6,
   },
   avatarBadge: {
     position: 'absolute',
-    right: 12,
-    top: 12,
+    right: 16,
+    bottom: 8,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -1177,6 +1250,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     zIndex: 7,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   avatarImage: {
     width: '100%',
@@ -1184,22 +1264,24 @@ const styles = StyleSheet.create({
   },
   imageTextBlock: {
     position: 'absolute',
-    top: 60,
+    top: 16,
     right: 12,
     left: 12,
     alignItems: 'flex-end',
+    paddingLeft: 84,
     zIndex: 6,
   },
   imageDishText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
     textAlign: 'right',
     writingDirection: 'rtl',
+    lineHeight: 26,
   },
   imageRestaurantText: {
     color: '#E2E8F0',
-    fontSize: 12,
+    fontSize: 14,
     textAlign: 'right',
     marginTop: 2,
     writingDirection: 'rtl',
@@ -1222,24 +1304,24 @@ const styles = StyleSheet.create({
   },
   orderText: {
     marginTop: 2,
-    fontSize: 12,
-    color: '#F87171',
+    fontSize: 13,
+    color: '#9e211c',
     fontWeight: '700',
   },
   favoritesHeader: {
-    paddingTop: 2,
-    paddingBottom: 2,
-    alignItems: 'center',
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: 6,
+    marginBottom: 0,
   },
   favoritesHeaderText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111111',
     textAlign: 'right',
     flex: 1,
-    alignSelf: 'flex-end',
+    marginRight: 8,
   },
   backButton: {
     height: 32,
@@ -1249,6 +1331,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginTop: 2,
   },
   ratingRow: {
     flexDirection: 'row',

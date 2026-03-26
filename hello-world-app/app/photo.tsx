@@ -231,7 +231,8 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    paddingVertical: 6,
     marginBottom: 10,
   },
   backButton: {
@@ -242,20 +243,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginTop: 2,
   },
   headerTextWrap: {
     flex: 1,
     alignItems: 'flex-end',
+    marginRight: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#111111',
+    textAlign: 'right',
   },
   headerSubtitle: {
     marginTop: 2,
     fontSize: 12,
     color: '#6B7280',
+    textAlign: 'right',
   },
   content: {
     flex: 1,

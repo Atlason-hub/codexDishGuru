@@ -419,7 +419,7 @@ export default function CameraDetailsScreen() {
               <Ionicons
                 name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
                 size={16}
-                color="#F87171"
+                color="#9e211c"
               />
             </View>
           </Pressable>
@@ -510,7 +510,7 @@ export default function CameraDetailsScreen() {
               <Ionicons
                 name={dishDropdownOpen ? 'chevron-up' : 'chevron-down'}
                 size={16}
-                color="#F87171"
+                color="#9e211c"
               />
             </View>
           </Pressable>
@@ -591,13 +591,16 @@ export default function CameraDetailsScreen() {
             maximumValue={100}
             value={tastyScore}
             onValueChange={(v) => setTastyScore(Math.round(v))}
-            minimumTrackTintColor="#F87171"
+            minimumTrackTintColor="#9e211c"
             maximumTrackTintColor="#CBD5E1"
-            thumbTintColor="#F87171"
+            thumbTintColor="#9e211c"
           />
           <View style={styles.sliderLabel}>
             <Text style={styles.sliderValue}>{tastyScore}</Text>
-            <Text style={styles.sliderText}>טעים</Text>
+            <View style={styles.sliderLabelRow}>
+              <Ionicons name="fast-food-outline" size={14} color="#94A3B8" />
+              <Text style={styles.sliderText}>טעים</Text>
+            </View>
           </View>
         </View>
         <View style={styles.sliderRow}>
@@ -607,13 +610,16 @@ export default function CameraDetailsScreen() {
             maximumValue={100}
             value={fastScore}
             onValueChange={(v) => setFastScore(Math.round(v))}
-            minimumTrackTintColor="#F87171"
+            minimumTrackTintColor="#9e211c"
             maximumTrackTintColor="#CBD5E1"
-            thumbTintColor="#F87171"
+            thumbTintColor="#9e211c"
           />
           <View style={styles.sliderLabel}>
             <Text style={styles.sliderValue}>{fastScore}</Text>
-            <Text style={styles.sliderText}>מהיר</Text>
+            <View style={styles.sliderLabelRow}>
+              <Ionicons name="rocket-outline" size={14} color="#94A3B8" />
+              <Text style={styles.sliderText}>מהיר</Text>
+            </View>
           </View>
         </View>
         <View style={styles.sliderRow}>
@@ -623,19 +629,23 @@ export default function CameraDetailsScreen() {
             maximumValue={100}
             value={fillingScore}
             onValueChange={(v) => setFillingScore(Math.round(v))}
-            minimumTrackTintColor="#F87171"
+            minimumTrackTintColor="#9e211c"
             maximumTrackTintColor="#CBD5E1"
-            thumbTintColor="#F87171"
+            thumbTintColor="#9e211c"
           />
           <View style={styles.sliderLabel}>
             <Text style={styles.sliderValue}>{fillingScore}</Text>
-            <Text style={styles.sliderText}>משביע</Text>
+            <View style={styles.sliderLabelRow}>
+              <Ionicons name="restaurant-outline" size={14} color="#94A3B8" />
+              <Text style={styles.sliderText}>משביע</Text>
+            </View>
           </View>
         </View>
 
         <Pressable
-          style={[
+          style={({ pressed }) => [
             styles.saveButton,
+            pressed && !saving && photoUri && photoBase64 && styles.saveButtonPressed,
             (saving || !photoUri || !photoBase64) && styles.saveButtonDisabled,
           ]}
           onPress={async () => {
@@ -708,7 +718,11 @@ export default function CameraDetailsScreen() {
             }
           }}
         >
-          {saving ? <ActivityIndicator color="#F87171" /> : <Text style={styles.saveButtonText}>שמור</Text>}
+          {saving ? (
+            <ActivityIndicator color="#9e211c" />
+          ) : (
+            <Text style={styles.saveButtonText}>שמור</Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -869,7 +883,7 @@ const styles = StyleSheet.create({
     width: 28,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: '#9e211c',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -894,6 +908,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sliderLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   sliderValue: {
     fontSize: 16,
     fontWeight: '600',
@@ -904,17 +923,24 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   saveButton: {
-    marginTop: 8,
+    marginTop: 18,
     paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 28,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignSelf: 'flex-start',
+  },
+  saveButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   saveButtonDisabled: {
     opacity: 0.6,
   },
   saveButtonText: {
-    fontSize: 18,
-    color: '#F87171',
-    textAlign: 'left',
+    fontSize: 16,
+    color: '#111111',
+    fontWeight: '600',
   },
 });

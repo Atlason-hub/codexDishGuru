@@ -146,16 +146,38 @@ export default function SearchScreen() {
       try {
         setLoading(true);
         setError(null);
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData.session?.user?.id ?? null;
+        let companyRows: DishAssociation[] = [];
+        if (userId) {
+          const { data: profile } = await supabase
+            .from('AppUsers')
+            .select('company_id')
+            .eq('user_id', userId)
+            .maybeSingle();
+          const companyId = profile?.company_id ?? null;
+          if (companyId) {
+            const { data: rpcData, error: rpcError } = await supabase.rpc(
+              'get_company_dishes',
+              { company_id: companyId }
+            );
+            if (rpcError) throw rpcError;
+            companyRows = (rpcData as DishAssociation[]) ?? [];
+          }
+        }
+
+        const restaurantNeedle = trimmedRestaurant.toLowerCase();
+        const dishNeedle = trimmedDish.toLowerCase();
+
+        const filteredRestaurants = trimmedRestaurant
+          ? companyRows.filter((row) =>
+              (row.restaurant_name ?? '').toLowerCase().includes(restaurantNeedle)
+            )
+          : companyRows;
+
         if (trimmedRestaurant) {
-          const { data: restaurantData, error: restaurantError } = await supabase
-            .from('dish_associations')
-            .select('restaurant_id, restaurant_name, cuisine')
-            .ilike('restaurant_name', `%${trimmedRestaurant}%`)
-            .order('restaurant_name', { ascending: true })
-            .limit(100);
-          if (restaurantError) throw restaurantError;
           const unique = new Map<string, RestaurantApi>();
-          (restaurantData ?? []).forEach((row: any) => {
+          filteredRestaurants.forEach((row: any) => {
             const id = row?.restaurant_id;
             const name = row?.restaurant_name;
             if (!id || !name) return;
@@ -173,20 +195,23 @@ export default function SearchScreen() {
         }
 
         if (trimmedDish) {
-          let query = supabase
-            .from('dish_associations')
-            .select(
-              'id, dish_id, dish_name, restaurant_name, restaurant_id, cuisine, image_url, tasty_score, fast_score, filling_score, created_at'
-            )
-            .ilike('dish_name', `%${trimmedDish}%`)
-            .order('created_at', { ascending: false })
-            .limit(100);
-          if (trimmedRestaurant) {
-            query = query.ilike('restaurant_name', `%${trimmedRestaurant}%`);
+          const filteredDishes = companyRows.filter((row) =>
+            (row.dish_name ?? '').toLowerCase().includes(dishNeedle)
+          );
+          const scopedDishes = trimmedRestaurant
+            ? filteredDishes.filter((row) =>
+                (row.restaurant_name ?? '').toLowerCase().includes(restaurantNeedle)
+              )
+            : filteredDishes;
+          if (mounted) {
+            setResults(
+              scopedDishes.sort((a, b) => {
+                const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return bTime - aTime;
+              })
+            );
           }
-          const { data, error: fetchError } = await query;
-          if (fetchError) throw fetchError;
-          if (mounted) setResults((data as DishAssociation[]) ?? []);
         } else {
           if (mounted) setResults([]);
         }
@@ -390,7 +415,7 @@ export default function SearchScreen() {
                     onPress={() => {
                       setRestaurantQuery(item.RestaurantName ?? '');
                       router.push({
-                        pathname: '/restaurant',
+                        pathname: '/',
                         params: {
                           restaurantId: String(item.RestaurantId),
                           restaurantName: item.RestaurantName ?? '',
@@ -430,15 +455,10 @@ export default function SearchScreen() {
                       <Pressable
                         onPress={() =>
                           router.push({
-                            pathname: '/camera/details',
+                            pathname: '/dish',
                             params: {
                               dishId: item.dish_id ? String(item.dish_id) : '',
                               dishName: item.dish_name ?? '',
-                              restaurantId: item.restaurant_id
-                                ? String(item.restaurant_id)
-                                : '',
-                              restaurantName: item.restaurant_name ?? '',
-                              defaultImageUrl: item.image_url ?? '',
                             },
                           })
                         }
@@ -540,6 +560,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: 6,
     marginBottom: 10,
   },
   backButton: {
@@ -550,6 +571,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginTop: 2,
   },
   headerTitle: {
     fontSize: 18,
@@ -589,7 +611,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   modeButtonActive: {
-    borderColor: '#F87171',
+    borderColor: '#9e211c',
     backgroundColor: '#FEE2E2',
   },
   modeText: {
@@ -609,7 +631,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginTop: 12,
     fontSize: 12,
-    color: '#F87171',
+    color: '#9e211c',
     fontWeight: '700',
     textAlign: 'right',
   },
@@ -656,7 +678,7 @@ const styles = StyleSheet.create({
   cuisineText: {
     marginTop: 4,
     fontSize: 11,
-    color: '#F87171',
+    color: '#9e211c',
     textAlign: 'right',
   },
   resultImageWrap: {

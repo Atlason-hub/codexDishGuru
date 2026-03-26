@@ -186,7 +186,7 @@ export default function AppHeader() {
               {avatarUrl ? (
                 <CachedLogo uri={avatarUrl} style={styles.menuAvatar} />
               ) : (
-                <Ionicons name="person-circle-outline" size={20} color="#F87171" />
+                <Ionicons name="person-circle-outline" size={20} color="#9e211c" />
               )}
             </Pressable>
             <Pressable
@@ -197,19 +197,19 @@ export default function AppHeader() {
               }}
             >
               <Text style={styles.menuOption}>המועדפים שלי</Text>
-              <Ionicons name="heart-outline" size={20} color="#F87171" />
+              <Ionicons name="heart-outline" size={20} color="#9e211c" />
             </Pressable>
             <Pressable style={styles.menuOptionRow}>
               <Text style={styles.menuOption}>מדיניות פרטיות</Text>
-              <Ionicons name="megaphone-outline" size={20} color="#F87171" />
+              <Ionicons name="megaphone-outline" size={20} color="#9e211c" />
             </Pressable>
             <Pressable style={styles.menuOptionRow}>
               <Text style={styles.menuOption}>תנאים</Text>
-              <Ionicons name="document-text-outline" size={20} color="#F87171" />
+              <Ionicons name="document-text-outline" size={20} color="#9e211c" />
             </Pressable>
             <Pressable style={styles.menuOptionRow} onPress={signOut}>
               <Text style={[styles.menuOption, styles.menuOptionDanger]}>התנתקות</Text>
-              <Ionicons name="log-out-outline" size={20} color="#F87171" />
+              <Ionicons name="log-out-outline" size={20} color="#9e211c" />
             </Pressable>
           </View>
         </View>
@@ -278,14 +278,14 @@ const styles = StyleSheet.create({
   },
   menuOverlay: {
     position: 'absolute',
-    top: 64,
+    top: 12,
     right: 16,
     width: 220,
     zIndex: 20,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 12,
-    paddingTop: 32,
+    paddingTop: 12,
     borderWidth: 1,
     borderColor: '#dddddd',
     shadowColor: '#000',
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   menuClose: {
     position: 'absolute',
     top: 8,
-    right: 8,
+    left: 8,
     height: 32,
     width: 32,
     alignItems: 'center',

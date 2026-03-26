@@ -225,7 +225,11 @@ export default function AccountScreen() {
         </Pressable>
       </View>
       <Pressable
-        style={[styles.saveButton, (!pendingAsset || saving) && styles.saveButtonDisabled]}
+        style={({ pressed }) => [
+          styles.saveButton,
+          pressed && !saving && pendingAsset && styles.saveButtonPressed,
+          (!pendingAsset || saving) && styles.saveButtonDisabled,
+        ]}
         onPress={async () => {
           if (!pendingAsset || saving) return;
           try {
@@ -318,16 +322,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111111',
+    textAlign: 'right',
+    flex: 1,
+    marginRight: 8,
   },
   headerRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    paddingVertical: 6,
+    marginBottom: 10,
   },
   backButton: {
     height: 32,
@@ -337,6 +345,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginTop: 2,
   },
   emailRow: {
     width: '100%',
@@ -366,7 +375,7 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: '#F87171',
+    backgroundColor: '#9e211c',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -402,6 +411,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+  },
+  saveButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   saveButtonDisabled: {
     opacity: 0.4,

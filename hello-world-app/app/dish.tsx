@@ -17,6 +17,7 @@ import { loadCachedAvatar } from '../lib/avatar';
 
 type DishAssociation = {
   id: string;
+  user_id: string | null;
   dish_id: number | null;
   image_url: string | null;
   dish_name: string | null;
@@ -32,6 +33,11 @@ export default function DishScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const dishName = typeof params.dishName === 'string' ? params.dishName : '';
+  const dishQuery = typeof params.dishQuery === 'string' ? params.dishQuery : '';
+  const dishIdParam =
+    typeof params.dishId === 'string' && params.dishId.length > 0
+      ? Number(params.dishId)
+      : null;
   const restaurantIdParam =
     typeof params.restaurantId === 'string' ? Number(params.restaurantId) : null;
   const restaurantName =
@@ -40,8 +46,10 @@ export default function DishScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dishAssociations, setDishAssociations] = useState<DishAssociation[]>([]);
+  const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [avgScores, setAvgScores] = useState<{
     tasty: number;
     fast: number;
@@ -93,8 +101,47 @@ export default function DishScreen() {
     }
   };
 
+  const loadUserAvatars = async (items: DishAssociation[]) => {
+    const ids = Array.from(
+      new Set(items.map((item) => item.user_id).filter(Boolean) as string[])
+    );
+    if (ids.length === 0) {
+      setUserAvatars({});
+      return;
+    }
+    const { data: profileData, error: profileError } = await supabase.rpc('get_user_profiles', {
+      user_ids: ids,
+    });
+    if (!profileError && Array.isArray(profileData)) {
+      const map: Record<string, string> = {};
+      (profileData ?? []).forEach((row: any) => {
+        if (row?.user_id && row?.avatar_url) {
+          map[String(row.user_id)] = String(row.avatar_url);
+        }
+      });
+      setUserAvatars(map);
+      return;
+    }
+    const { data, error: avatarError } = await supabase
+      .from('AppUsers')
+      .select('user_id, avatar_url')
+      .in('user_id', ids);
+    if (avatarError) {
+      console.log('[AVATAR_LOAD_ERROR]:', avatarError);
+      setUserAvatars({});
+      return;
+    }
+    const map: Record<string, string> = {};
+    (data ?? []).forEach((row: any) => {
+      if (row?.user_id && row?.avatar_url) {
+        map[String(row.user_id)] = String(row.avatar_url);
+      }
+    });
+    setUserAvatars(map);
+  };
+
   const loadDishAssociations = async () => {
-    if (!dishName) {
+    if (!dishName && !dishQuery && dishIdParam === null) {
       setError('חסר שם מנה');
       setDishAssociations([]);
       setAvgScores(null);
@@ -103,24 +150,73 @@ export default function DishScreen() {
     try {
       setLoading(true);
       setError(null);
-      let query = supabase
-        .from('dish_associations')
-        .select(
-          'id, dish_id, image_url, dish_name, restaurant_name, restaurant_id, tasty_score, fast_score, filling_score, created_at'
-        )
-        .ilike('dish_name', dishName)
-        .order('created_at', { ascending: false });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id ?? null;
+      let list: DishAssociation[] = [];
 
-      if (restaurantIdParam) {
-        query = query.eq('restaurant_id', restaurantIdParam);
-      } else if (restaurantName) {
-        query = query.ilike('restaurant_name', restaurantName);
+      if (userId) {
+        const { data: profile } = await supabase
+          .from('AppUsers')
+          .select('company_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+        const companyId = profile?.company_id ?? null;
+        if (companyId) {
+          const { data: rpcData, error: rpcError } = await supabase.rpc(
+            'get_company_dishes',
+            { company_id: companyId }
+          );
+          if (rpcError) throw rpcError;
+          const allRows = (rpcData as DishAssociation[]) ?? [];
+          const normalizedQuery = dishQuery.trim().toLowerCase();
+          list = allRows.filter((row) => {
+            if (dishIdParam !== null) {
+              return row.dish_id === dishIdParam;
+            }
+            if (normalizedQuery) {
+              return (row.dish_name ?? '').toLowerCase().includes(normalizedQuery);
+            }
+            return (row.dish_name ?? '').toLowerCase() === dishName.toLowerCase();
+          });
+        }
       }
 
-      const { data, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-      const list = (data as DishAssociation[]) ?? [];
+      if (list.length === 0) {
+        let query = supabase
+          .from('dish_associations')
+          .select(
+            'id, user_id, dish_id, image_url, dish_name, restaurant_name, restaurant_id, tasty_score, fast_score, filling_score, created_at'
+          )
+          .order('created_at', { ascending: false });
+
+        if (dishIdParam !== null) {
+          query = query.eq('dish_id', dishIdParam);
+        } else if (dishQuery.trim()) {
+          query = query.ilike('dish_name', `%${dishQuery.trim()}%`);
+        } else if (dishName) {
+          query = query.ilike('dish_name', dishName);
+        }
+
+        if (!dishQuery.trim()) {
+          if (restaurantIdParam) {
+            query = query.eq('restaurant_id', restaurantIdParam);
+          } else if (restaurantName) {
+            query = query.ilike('restaurant_name', restaurantName);
+          }
+        }
+
+        const { data, error: fetchError } = await query;
+        if (fetchError) throw fetchError;
+        list = (data as DishAssociation[]) ?? [];
+      }
+
+      list.sort((a, b) => {
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTime - aTime;
+      });
       setDishAssociations(list);
+      await loadUserAvatars(list);
       if (list.length > 0) {
         let tastySum = 0;
         let tastyCount = 0;
@@ -161,6 +257,7 @@ export default function DishScreen() {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
+      setCurrentUserId(data.session?.user?.id ?? null);
       const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
       if (data.session?.user?.id) {
@@ -169,6 +266,7 @@ export default function DishScreen() {
       await loadDishAssociations();
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUserId(session?.user?.id ?? null);
       if (session?.user?.id) {
         loadFavorites(session.user.id);
       } else {
@@ -179,7 +277,15 @@ export default function DishScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [dishName, restaurantIdParam, restaurantName]);
+  }, [dishName, dishQuery, dishIdParam, restaurantIdParam, restaurantName]);
+
+  const headerRestaurant =
+    restaurantName ||
+    (dishAssociations.length > 0
+      ? dishAssociations[0].restaurant_name ?? null
+      : restaurantIdParam
+        ? `מסעדה ${restaurantIdParam}`
+        : null);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -194,10 +300,8 @@ export default function DishScreen() {
                 <Ionicons name="chevron-back" size={18} color="#111111" />
               </Pressable>
               <View style={styles.headerTextWrap}>
-                <Text style={styles.headerTitle}>{dishName || 'מנה'}</Text>
-                <Text style={styles.headerSubtitle}>
-                  {restaurantName || (restaurantIdParam ? `מסעדה ${restaurantIdParam}` : '')}
-                </Text>
+                <Text style={styles.headerTitle}>{dishQuery || dishName || 'מנה'}</Text>
+                <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
               </View>
             </View>
             {avgScores ? (
@@ -266,6 +370,7 @@ export default function DishScreen() {
               />
               <Pressable
                 style={styles.cameraBadge}
+                hitSlop={8}
                 onPress={() =>
                   router.push({
                     pathname: '/camera',
@@ -278,24 +383,31 @@ export default function DishScreen() {
                   })
                 }
               >
-                <Ionicons name="camera" size={18} color="#E2E8F0" />
+                <Ionicons name="camera" size={18} color="#111111" />
               </Pressable>
-              <Pressable style={styles.heartBadge} onPress={() => toggleFavorite(item.id)}>
+              <Pressable style={styles.heartBadge} hitSlop={8} onPress={() => toggleFavorite(item.id)}>
                 <Ionicons
                   name={favorites[item.id] ? 'heart' : 'heart-outline'}
                   size={18}
-                  color="#E2E8F0"
+                  color="#111111"
                 />
               </Pressable>
               <Text style={styles.imageDateText}>
                 {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
               </Text>
               <View style={styles.avatarBadge}>
-                {avatarUrl ? (
-                  <CachedLogo uri={avatarUrl} style={styles.avatarImage} />
-                ) : (
-                  <Ionicons name="person" size={16} color="#111111" />
-                )}
+                {(() => {
+                  const itemAvatar = item.user_id ? userAvatars[item.user_id] : null;
+                  const resolvedAvatar =
+                    item.user_id && item.user_id === currentUserId
+                      ? itemAvatar ?? avatarUrl
+                      : itemAvatar;
+                  return resolvedAvatar ? (
+                    <CachedLogo uri={resolvedAvatar} style={styles.avatarImage} />
+                  ) : (
+                    <Ionicons name="person" size={16} color="#111111" />
+                  );
+                })()}
               </View>
               <View style={styles.imageTextBlock}>
                 <Text style={styles.imageDishText} numberOfLines={1} ellipsizeMode="tail">
@@ -319,7 +431,7 @@ export default function DishScreen() {
                 </Pressable>
               </View>
               <View style={styles.orderBadge}>
-                <Ionicons name="cart-outline" size={24} color="#F87171" />
+                <Ionicons name="cart-outline" size={28} color="#9e211c" />
                 <Text style={styles.orderText}>הזמן</Text>
               </View>
             </View>
@@ -356,13 +468,14 @@ export default function DishScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#F5F5F5',
     paddingHorizontal: 16,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    paddingVertical: 6,
     marginBottom: 10,
   },
   backButton: {
@@ -373,20 +486,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginTop: 2,
   },
   headerTextWrap: {
     flex: 1,
     alignItems: 'flex-end',
+    marginRight: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#111111',
+    textAlign: 'right',
   },
   headerSubtitle: {
     marginTop: 2,
     fontSize: 12,
     color: '#6B7280',
+    textAlign: 'right',
   },
   results: {
     alignSelf: 'stretch',
@@ -435,7 +552,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 90,
+    height: 100,
+    zIndex: 2,
   },
   feedImage: {
     width: '100%',
@@ -449,40 +567,60 @@ const styles = StyleSheet.create({
   },
   cameraBadge: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heartBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 64,
+    left: 14,
     width: 36,
     height: 36,
     borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
+    borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  heartBadge: {
+    position: 'absolute',
+    top: 112,
+    left: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 1,
+    borderColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   imageDateText: {
     position: 'absolute',
-    top: 16,
-    right: 56,
-    color: '#E2E8F0',
+    top: 12,
+    left: 14,
     fontSize: 10,
-    textAlign: 'right',
+    color: '#1f2937',
+    fontWeight: '700',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 16,
+    textAlign: 'left',
+    zIndex: 6,
   },
   avatarBadge: {
     position: 'absolute',
-    right: 12,
-    top: 54,
+    right: 16,
+    bottom: 8,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -490,6 +628,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    zIndex: 7,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   avatarImage: {
     width: '100%',
@@ -497,27 +643,32 @@ const styles = StyleSheet.create({
   },
   imageTextBlock: {
     position: 'absolute',
-    top: 44,
-    right: 56,
+    top: 16,
+    right: 12,
     left: 12,
     alignItems: 'flex-end',
+    paddingLeft: 84,
+    zIndex: 6,
   },
   imageDishText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
     textAlign: 'right',
+    writingDirection: 'rtl',
+    lineHeight: 26,
   },
   imageRestaurantText: {
     color: '#E2E8F0',
-    fontSize: 12,
+    fontSize: 14,
     textAlign: 'right',
     marginTop: 2,
+    writingDirection: 'rtl',
   },
   orderBadge: {
     position: 'absolute',
     left: 12,
-    bottom: -18,
+    bottom: 12,
     width: 74,
     height: 74,
     borderRadius: 37,
@@ -528,11 +679,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 4,
+    zIndex: 6,
   },
   orderText: {
     marginTop: 2,
-    fontSize: 12,
-    color: '#F87171',
+    fontSize: 13,
+    color: '#9e211c',
     fontWeight: '700',
   },
   ratingRow: {

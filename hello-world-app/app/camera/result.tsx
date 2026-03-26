@@ -1,4 +1,4 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 export default function CameraResultScreen() {
@@ -16,8 +16,8 @@ export default function CameraResultScreen() {
             <Text style={styles.placeholder}>אין תמונה עדיין</Text>
           )}
         </View>
-        <TouchableOpacity
-          style={styles.saveButton}
+        <Pressable
+          style={({ pressed }) => [styles.saveButton, pressed && styles.saveButtonPressed]}
           onPress={() => {
             router.push({
               pathname: '/camera/details',
@@ -26,7 +26,7 @@ export default function CameraResultScreen() {
           }}
         >
           <Text style={styles.saveText}>שמור</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </View>
   );
@@ -75,6 +75,10 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     paddingVertical: 12,
     paddingHorizontal: 48,
+  },
+  saveButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   saveText: {
     fontWeight: '600',
