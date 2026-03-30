@@ -1,5 +1,6 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { theme } from '../../lib/theme';
 
 export default function CameraResultScreen() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export default function CameraResultScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.background,
   },
   body: {
     flex: 1,
@@ -45,10 +46,10 @@ const styles = StyleSheet.create({
   photoCard: {
     width: '90%',
     borderRadius: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
+    borderColor: theme.colors.border,
+    shadowColor: theme.colors.ink,
     shadowOpacity: 0.05,
     shadowRadius: 20,
     elevation: 4,
@@ -58,20 +59,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 280,
     borderRadius: 12,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.colors.cardAlt,
   },
   placeholder: {
     width: '100%',
     height: 280,
     textAlign: 'center',
     textAlignVertical: 'center',
-    color: '#9CA3AF',
+    color: theme.colors.textMuted,
   },
   saveButton: {
     marginTop: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     borderRadius: 50,
     paddingVertical: 12,
     paddingHorizontal: 48,
@@ -82,6 +83,6 @@ const styles = StyleSheet.create({
   },
   saveText: {
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text,
   },
 });

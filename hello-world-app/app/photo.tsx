@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
+import { theme } from '../lib/theme';
 
 type DishPhoto = {
   id: string;
@@ -34,7 +35,6 @@ export default function PhotoScreen() {
   const [photo, setPhoto] = useState<DishPhoto | null>(null);
   const [avgScores, setAvgScores] = useState<{
     tasty: number;
-    fast: number;
     filling: number;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -63,7 +63,9 @@ export default function PhotoScreen() {
         if (base?.dish_name && (base.dish_id || base.restaurant_id || base.restaurant_name)) {
           let listQuery = supabase
             .from('dish_associations')
-            .select('tasty_score, fast_score, filling_score, dish_id, dish_name, restaurant_id, restaurant_name')
+            .select(
+              'tasty_score, filling_score, dish_id, dish_name, restaurant_id, restaurant_name'
+            )
             .ilike('dish_name', base.dish_name);
           if (base.dish_id) {
             listQuery = listQuery.eq('dish_id', base.dish_id);
@@ -77,18 +79,12 @@ export default function PhotoScreen() {
           if (!listError && Array.isArray(list) && list.length > 0) {
             let tastySum = 0;
             let tastyCount = 0;
-            let fastSum = 0;
-            let fastCount = 0;
             let fillingSum = 0;
             let fillingCount = 0;
             list.forEach((row: any) => {
               if (typeof row.tasty_score === 'number') {
                 tastySum += row.tasty_score;
                 tastyCount += 1;
-              }
-              if (typeof row.fast_score === 'number') {
-                fastSum += row.fast_score;
-                fastCount += 1;
               }
               if (typeof row.filling_score === 'number') {
                 fillingSum += row.filling_score;
@@ -97,7 +93,6 @@ export default function PhotoScreen() {
             });
             setAvgScores({
               tasty: tastyCount ? tastySum / tastyCount : 0,
-              fast: fastCount ? fastSum / fastCount : 0,
               filling: fillingCount ? fillingSum / fillingCount : 0,
             });
           } else {
@@ -122,7 +117,7 @@ export default function PhotoScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={18} color="#111111" />
+          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <View style={styles.headerTextWrap}>
           <Text style={styles.headerTitle}>{photo?.dish_name ?? 'מנה'}</Text>
@@ -162,25 +157,16 @@ export default function PhotoScreen() {
                     <Text style={styles.ratingValueInline}>
                       {Math.round(avgScores.tasty)}%
                     </Text>
-                    <Ionicons name="fast-food-outline" size={18} color="#94A3B8" />
+                    <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
                   </View>
                   <Text style={styles.ratingLabelInline}>טעים</Text>
                 </View>
                 <View style={styles.ratingItem}>
                   <View style={styles.ratingTopRow}>
                     <Text style={styles.ratingValueInline}>
-                      {Math.round(avgScores.fast)}%
-                    </Text>
-                    <Ionicons name="rocket-outline" size={18} color="#94A3B8" />
-                  </View>
-                  <Text style={styles.ratingLabelInline}>מהיר</Text>
-                </View>
-                <View style={styles.ratingItem}>
-                  <View style={styles.ratingTopRow}>
-                    <Text style={styles.ratingValueInline}>
                       {Math.round(avgScores.filling)}%
                     </Text>
-                    <Ionicons name="restaurant-outline" size={18} color="#94A3B8" />
+                    <Ionicons name="restaurant-outline" size={18} color={theme.colors.textMuted} />
                   </View>
                   <Text style={styles.ratingLabelInline}>משביע</Text>
                 </View>
@@ -225,7 +211,7 @@ export default function PhotoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 16,
   },
   headerRow: {
@@ -242,7 +228,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     marginTop: 2,
   },
   headerTextWrap: {
@@ -253,13 +239,13 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
   },
   headerSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.colors.textMuted,
     textAlign: 'right',
   },
   content: {
@@ -269,12 +255,12 @@ const styles = StyleSheet.create({
   imageWrap: {
     width: '100%',
     height: 320,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.colors.cardAlt,
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#0f172a',
+    borderColor: theme.colors.border,
+    shadowColor: theme.colors.ink,
     shadowOpacity: 0.18,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -303,34 +289,34 @@ const styles = StyleSheet.create({
   },
   reviewCard: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: theme.colors.border,
     borderRadius: 14,
     padding: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
   },
   reviewLabel: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
     marginBottom: 6,
     textAlign: 'right',
   },
   reviewText: {
     fontSize: 14,
-    color: '#0f172a',
+    color: theme.colors.text,
     textAlign: 'right',
     lineHeight: 20,
   },
   avgCard: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: theme.colors.border,
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
   },
   avgHeader: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
     textAlign: 'right',
     marginBottom: 6,
   },
@@ -352,12 +338,12 @@ const styles = StyleSheet.create({
   ratingValueInline: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: theme.colors.text,
   },
   ratingLabelInline: {
     marginTop: 2,
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
   },
   previewBackdrop: {
     flex: 1,
@@ -398,17 +384,17 @@ const styles = StyleSheet.create({
   results: {
     alignSelf: 'stretch',
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.cardAlt,
   },
   placeholderText: {
-    color: '#666666',
+    color: theme.colors.textMuted,
     fontSize: 14,
   },
   errorText: {
-    color: '#b00020',
+    color: theme.colors.danger,
     fontSize: 14,
   },
 });

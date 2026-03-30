@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
 import { supabase } from '../lib/supabase';
+import { theme } from '../lib/theme';
 
 type DishAssociation = {
   id: string;
@@ -20,7 +21,6 @@ type DishAssociation = {
   image_url: string | null;
   cuisine: string | null;
   tasty_score: number | null;
-  fast_score: number | null;
   filling_score: number | null;
   created_at: string | null;
 };
@@ -41,7 +41,6 @@ type DishSummary = {
   name: string;
   imageUrl: string | null;
   avgTasty: number;
-  avgFast: number;
   avgFilling: number;
   cuisine: string;
 };
@@ -156,7 +155,6 @@ const buildRowsFromMenu = (
           name: dish.name,
           imageUrl: summary?.imageUrl ?? null,
           avgTasty: summary?.avgTasty ?? 0,
-          avgFast: summary?.avgFast ?? 0,
           avgFilling: summary?.avgFilling ?? 0,
           cuisine: summary?.cuisine ?? 'ללא מטבח',
         },
@@ -178,6 +176,7 @@ export default function RestaurantScreen() {
     typeof params.restaurantName === 'string' ? params.restaurantName : '';
 
   const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<DishSummary[]>([]);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
@@ -194,6 +193,7 @@ export default function RestaurantScreen() {
     let mounted = true;
     const load = async () => {
       try {
+        setHasLoaded(false);
         setLoading(true);
         setError(null);
         const menuResponse = await fetch(
@@ -210,7 +210,7 @@ export default function RestaurantScreen() {
         const { data, error: fetchError } = await supabase
           .from('dish_associations')
           .select(
-            'id, dish_id, dish_name, image_url, cuisine, tasty_score, fast_score, filling_score, created_at'
+            'id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at'
           )
           .eq('restaurant_id', restaurantId)
           .order('created_at', { ascending: false });
@@ -227,7 +227,6 @@ export default function RestaurantScreen() {
               name,
               imageUrl: row.image_url ?? null,
               avgTasty: 0,
-              avgFast: 0,
               avgFilling: 0,
               cuisine: row.cuisine ?? 'ללא מטבח',
               count: 0,
@@ -238,7 +237,6 @@ export default function RestaurantScreen() {
             entry.imageUrl = row.image_url;
           }
           if (typeof row.tasty_score === 'number') entry.avgTasty += row.tasty_score;
-          if (typeof row.fast_score === 'number') entry.avgFast += row.fast_score;
           if (typeof row.filling_score === 'number') entry.avgFilling += row.filling_score;
           entry.count += 1;
         });
@@ -248,7 +246,6 @@ export default function RestaurantScreen() {
           name: entry.name,
           imageUrl: entry.imageUrl,
           avgTasty: entry.count ? entry.avgTasty / entry.count : 0,
-          avgFast: entry.count ? entry.avgFast / entry.count : 0,
           avgFilling: entry.count ? entry.avgFilling / entry.count : 0,
           cuisine: entry.cuisine,
         }));
@@ -257,7 +254,10 @@ export default function RestaurantScreen() {
       } catch (err) {
         if (mounted) setError('אירעה שגיאה. נסה שוב.');
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setHasLoaded(true);
+        }
       }
     };
     load();
@@ -275,7 +275,7 @@ export default function RestaurantScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={18} color="#111111" />
+          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <Text style={styles.headerTitle}>{restaurantName || 'מסעדה'}</Text>
       </View>
@@ -308,7 +308,7 @@ export default function RestaurantScreen() {
         <View style={styles.results}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && hasLoaded ? (
         <View style={styles.results}>
           <Text style={styles.placeholderText}>אין מנות להצגה</Text>
         </View>
@@ -316,6 +316,11 @@ export default function RestaurantScreen() {
         <FlatList
           data={rows}
           keyExtractor={(item) => item.id}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+          removeClippedSubviews
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) =>
             item.type === 'header' ? (
@@ -369,10 +374,6 @@ export default function RestaurantScreen() {
                       <Text style={styles.scoreLabel}>טעים</Text>
                     </View>
                     <View style={styles.scoreItem}>
-                      <Text style={styles.scoreValue}>{Math.round(item.dish.avgFast)}%</Text>
-                      <Text style={styles.scoreLabel}>מהיר</Text>
-                    </View>
-                    <View style={styles.scoreItem}>
                       <Text style={styles.scoreValue}>{Math.round(item.dish.avgFilling)}%</Text>
                       <Text style={styles.scoreLabel}>משביע</Text>
                     </View>
@@ -383,7 +384,11 @@ export default function RestaurantScreen() {
                     <CachedLogo uri={item.dish.imageUrl} style={styles.image} />
                   ) : (
                     <View style={styles.placeholderImage}>
-                      <Ionicons name="image-outline" size={20} color="#CBD5E1" />
+                      <Ionicons
+                        name="image-outline"
+                        size={20}
+                        color={theme.colors.textMuted}
+                      />
                       <View style={styles.placeholderOverlay}>
                         <Ionicons name="camera" size={10} color="#ffffff" />
                         <Text style={styles.placeholderOverlayText}>צלם מנה</Text>
@@ -403,7 +408,7 @@ export default function RestaurantScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 16,
   },
   headerRow: {
@@ -420,13 +425,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     marginTop: 2,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
@@ -441,13 +446,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
   },
   controlText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#475569',
+    color: theme.colors.textMuted,
   },
   listContent: {
     paddingBottom: 120,
@@ -463,7 +468,7 @@ const styles = StyleSheet.create({
   sectionHeaderText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#9e211c',
+    color: theme.colors.accent,
     textAlign: 'right',
   },
   dishCard: {
@@ -472,9 +477,9 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     borderRadius: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
   },
   dishInfo: {
     flex: 1,
@@ -483,7 +488,7 @@ const styles = StyleSheet.create({
   dishName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
     marginBottom: 6,
   },
@@ -497,20 +502,20 @@ const styles = StyleSheet.create({
   scoreValue: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1E293B',
+    color: theme.colors.text,
   },
   scoreLabel: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
   },
   imageWrap: {
     width: 110,
     height: 76,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: theme.colors.cardAlt,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -524,7 +529,7 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: theme.colors.cardAlt,
   },
   placeholderOverlay: {
     position: 'absolute',
@@ -546,18 +551,18 @@ const styles = StyleSheet.create({
   results: {
     alignSelf: 'stretch',
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.cardAlt,
   },
   placeholderText: {
-    color: '#666666',
+    color: theme.colors.textMuted,
     fontSize: 14,
     textAlign: 'right',
   },
   errorText: {
-    color: '#b00020',
+    color: theme.colors.danger,
     fontSize: 14,
     textAlign: 'right',
   },

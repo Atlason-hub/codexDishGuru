@@ -1,6 +1,9 @@
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -9,11 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import CachedLogo from '../components/CachedLogo';
 import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
+import DishCard from '../components/DishCard';
+import { theme } from '../lib/theme';
 
 type DishAssociation = {
   id: string;
@@ -24,9 +27,10 @@ type DishAssociation = {
   restaurant_name: string | null;
   restaurant_id: number | null;
   tasty_score: number | null;
-  fast_score: number | null;
   filling_score: number | null;
+  image_path?: string | null;
   created_at: string | null;
+  review_text?: string | null;
 };
 
 export default function DishScreen() {
@@ -34,6 +38,7 @@ export default function DishScreen() {
   const params = useLocalSearchParams();
   const dishName = typeof params.dishName === 'string' ? params.dishName : '';
   const dishQuery = typeof params.dishQuery === 'string' ? params.dishQuery : '';
+  const refreshParam = typeof params.refresh === 'string' ? params.refresh : '';
   const dishIdParam =
     typeof params.dishId === 'string' && params.dishId.length > 0
       ? Number(params.dishId)
@@ -50,9 +55,10 @@ export default function DishScreen() {
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [avgScores, setAvgScores] = useState<{
     tasty: number;
-    fast: number;
     filling: number;
   } | null>(null);
 
@@ -69,7 +75,6 @@ export default function DishScreen() {
       });
       setFavorites(map);
     } catch (err) {
-      console.log('[FAVORITES_LOAD_ERROR]:', err);
     }
   };
 
@@ -96,9 +101,50 @@ export default function DishScreen() {
         if (error) throw error;
       }
     } catch (err) {
-      console.log('[FAVORITE_TOGGLE_ERROR]:', err);
       setFavorites((prev) => ({ ...prev, [dishAssociationId]: isFav }));
     }
+  };
+
+  const deleteDishAssociation = async (dish: DishAssociation) => {
+    Alert.alert('מחיקת מנה', 'האם למחוק את המנה והביקורות שלה?', [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: 'מחק',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (!currentUserId) {
+              Alert.alert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
+              return;
+            }
+            if (dish.user_id !== currentUserId) {
+              Alert.alert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
+              return;
+            }
+            if (dish.image_path) {
+              await supabase.storage.from('dish-images').remove([dish.image_path]);
+            }
+            await supabase.from('dish_favorites').delete().eq('dish_association_id', dish.id);
+            const { error } = await supabase
+              .from('dish_associations')
+              .delete()
+              .eq('id', dish.id)
+              .eq('user_id', currentUserId);
+            if (error) throw error;
+
+            setDishAssociations((prev) => prev.filter((item) => item.id !== dish.id));
+            setFavorites((prev) => {
+              const next = { ...prev };
+              delete next[dish.id];
+              return next;
+            });
+            loadDishAssociations();
+          } catch (err) {
+            Alert.alert('שגיאה', 'מחיקה נכשלה.');
+          }
+        },
+      },
+    ]);
   };
 
   const loadUserAvatars = async (items: DishAssociation[]) => {
@@ -127,7 +173,6 @@ export default function DishScreen() {
       .select('user_id, avatar_url')
       .in('user_id', ids);
     if (avatarError) {
-      console.log('[AVATAR_LOAD_ERROR]:', avatarError);
       setUserAvatars({});
       return;
     }
@@ -148,6 +193,7 @@ export default function DishScreen() {
       return;
     }
     try {
+      setHasLoaded(false);
       setLoading(true);
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
@@ -185,7 +231,7 @@ export default function DishScreen() {
         let query = supabase
           .from('dish_associations')
           .select(
-            'id, user_id, dish_id, image_url, dish_name, restaurant_name, restaurant_id, tasty_score, fast_score, filling_score, created_at'
+            'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
           )
           .order('created_at', { ascending: false });
 
@@ -220,18 +266,12 @@ export default function DishScreen() {
       if (list.length > 0) {
         let tastySum = 0;
         let tastyCount = 0;
-        let fastSum = 0;
-        let fastCount = 0;
         let fillingSum = 0;
         let fillingCount = 0;
         list.forEach((row) => {
           if (typeof row.tasty_score === 'number') {
             tastySum += row.tasty_score;
             tastyCount += 1;
-          }
-          if (typeof row.fast_score === 'number') {
-            fastSum += row.fast_score;
-            fastCount += 1;
           }
           if (typeof row.filling_score === 'number') {
             fillingSum += row.filling_score;
@@ -240,7 +280,6 @@ export default function DishScreen() {
         });
         setAvgScores({
           tasty: tastyCount ? tastySum / tastyCount : 0,
-          fast: fastCount ? fastSum / fastCount : 0,
           filling: fillingCount ? fillingSum / fillingCount : 0,
         });
       } else {
@@ -250,6 +289,7 @@ export default function DishScreen() {
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
       setLoading(false);
+      setHasLoaded(true);
     }
   };
 
@@ -277,7 +317,7 @@ export default function DishScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [dishName, dishQuery, dishIdParam, restaurantIdParam, restaurantName]);
+  }, [dishName, dishQuery, dishIdParam, restaurantIdParam, restaurantName, refreshParam]);
 
   const headerRestaurant =
     restaurantName ||
@@ -289,178 +329,119 @@ export default function DishScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.headerRow}>
+        <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+        </Pressable>
+        <View style={styles.headerTextWrap}>
+          <Text style={styles.headerTitle}>{dishQuery || dishName || 'מנה'}</Text>
+          <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
+        </View>
+      </View>
+      {avgScores ? (
+        <View style={styles.avgCard}>
+          <Text style={styles.avgHeader}>דירוג ממוצע</Text>
+          <View style={styles.ratingRow}>
+            <View style={styles.ratingItem}>
+              <View style={styles.ratingTopRow}>
+                <Text style={styles.ratingValueInline}>{Math.round(avgScores.tasty)}%</Text>
+                <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
+              </View>
+              <Text style={styles.ratingLabelInline}>טעים</Text>
+            </View>
+            <View style={styles.ratingItem}>
+              <View style={styles.ratingTopRow}>
+                <Text style={styles.ratingValueInline}>{Math.round(avgScores.filling)}%</Text>
+                <Ionicons name="restaurant-outline" size={18} color={theme.colors.textMuted} />
+              </View>
+              <Text style={styles.ratingLabelInline}>משביע</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+      {loading ? (
+        <View style={styles.results}>
+          <ActivityIndicator size="large" />
+        </View>
+      ) : error ? (
+        <View style={styles.results}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
       <FlatList
         data={dishAssociations}
         keyExtractor={(item) => item.id}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        updateCellsBatchingPeriod={50}
+        windowSize={7}
+        removeClippedSubviews
         contentContainerStyle={styles.feedContent}
-        ListHeaderComponent={
-          <>
-            <View style={styles.headerRow}>
-              <Pressable style={styles.backButton} onPress={() => router.back()}>
-                <Ionicons name="chevron-back" size={18} color="#111111" />
-              </Pressable>
-              <View style={styles.headerTextWrap}>
-                <Text style={styles.headerTitle}>{dishQuery || dishName || 'מנה'}</Text>
-                <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
-              </View>
-            </View>
-            {avgScores ? (
-              <View style={styles.avgCard}>
-                <Text style={styles.avgHeader}>דירוג ממוצע</Text>
-                <View style={styles.ratingRow}>
-                  <View style={styles.ratingItem}>
-                    <View style={styles.ratingTopRow}>
-                      <Text style={styles.ratingValueInline}>
-                        {Math.round(avgScores.tasty)}%
-                      </Text>
-                      <Ionicons name="fast-food-outline" size={18} color="#94A3B8" />
-                    </View>
-                    <Text style={styles.ratingLabelInline}>טעים</Text>
-                  </View>
-                  <View style={styles.ratingItem}>
-                    <View style={styles.ratingTopRow}>
-                      <Text style={styles.ratingValueInline}>
-                        {Math.round(avgScores.fast)}%
-                      </Text>
-                      <Ionicons name="rocket-outline" size={18} color="#94A3B8" />
-                    </View>
-                    <Text style={styles.ratingLabelInline}>מהיר</Text>
-                  </View>
-                  <View style={styles.ratingItem}>
-                    <View style={styles.ratingTopRow}>
-                      <Text style={styles.ratingValueInline}>
-                        {Math.round(avgScores.filling)}%
-                      </Text>
-                      <Ionicons name="restaurant-outline" size={18} color="#94A3B8" />
-                    </View>
-                    <Text style={styles.ratingLabelInline}>משביע</Text>
-                  </View>
-                </View>
-              </View>
-            ) : null}
-            {loading ? (
-              <View style={styles.results}>
-                <ActivityIndicator size="large" />
-              </View>
-            ) : error ? (
-              <View style={styles.results}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-          </>
-        }
         ListEmptyComponent={
-          !loading && !error ? (
+          !loading && !error && hasLoaded ? (
             <View style={styles.results}>
               <Text style={styles.placeholderText}>אין מנות להצגה</Text>
             </View>
           ) : null
         }
         renderItem={({ item }) => (
-          <View style={styles.feedCard}>
-            <View style={styles.feedImageWrap}>
-              {item.image_url ? (
-                <CachedLogo uri={item.image_url} style={styles.feedImage} />
-              ) : (
-                <View style={styles.feedImagePlaceholder} />
-              )}
-              <LinearGradient
-                colors={['rgba(0,0,0,0.7)', 'rgba(0,0,0,0.0)']}
-                style={styles.imageGradient}
-              />
-              <Pressable
-                style={styles.cameraBadge}
-                hitSlop={8}
-                onPress={() =>
-                  router.push({
-                    pathname: '/camera',
-                    params: {
-                      restaurantId: item.restaurant_id ? String(item.restaurant_id) : '',
-                      restaurantName: item.restaurant_name ?? '',
-                      dishId: item.dish_id !== null ? String(item.dish_id) : '',
-                      dishName: item.dish_name ?? '',
-                    },
-                  })
-                }
-              >
-                <Ionicons name="camera" size={18} color="#111111" />
-              </Pressable>
-              <Pressable style={styles.heartBadge} hitSlop={8} onPress={() => toggleFavorite(item.id)}>
-                <Ionicons
-                  name={favorites[item.id] ? 'heart' : 'heart-outline'}
-                  size={18}
-                  color="#111111"
-                />
-              </Pressable>
-              <Text style={styles.imageDateText}>
-                {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
-              </Text>
-              <View style={styles.avatarBadge}>
-                {(() => {
-                  const itemAvatar = item.user_id ? userAvatars[item.user_id] : null;
-                  const resolvedAvatar =
-                    item.user_id && item.user_id === currentUserId
-                      ? itemAvatar ?? avatarUrl
-                      : itemAvatar;
-                  return resolvedAvatar ? (
-                    <CachedLogo uri={resolvedAvatar} style={styles.avatarImage} />
-                  ) : (
-                    <Ionicons name="person" size={16} color="#111111" />
-                  );
-                })()}
-              </View>
-              <View style={styles.imageTextBlock}>
-                <Text style={styles.imageDishText} numberOfLines={1} ellipsizeMode="tail">
-                  {item.dish_name ?? 'מנה'}
-                </Text>
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/restaurant',
-                      params: {
-                        restaurantId: item.restaurant_id ? String(item.restaurant_id) : '',
-                        restaurantName: item.restaurant_name ?? '',
-                      },
-                    })
-                  }
-                >
-                  <Text style={styles.imageRestaurantText} numberOfLines={1} ellipsizeMode="tail">
-                    {item.restaurant_name ??
-                      (item.restaurant_id ? `מסעדה ${item.restaurant_id}` : 'מסעדה')}
-                  </Text>
-                </Pressable>
-              </View>
-              <View style={styles.orderBadge}>
-                <Ionicons name="cart-outline" size={28} color="#9e211c" />
-                <Text style={styles.orderText}>הזמן</Text>
-              </View>
-            </View>
-            <View style={styles.ratingRow}>
-              <View style={styles.ratingItem}>
-                <View style={styles.ratingTopRow}>
-                  <Text style={styles.ratingValueInline}>{item.tasty_score ?? 0}%</Text>
-                  <Ionicons name="fast-food-outline" size={18} color="#94A3B8" />
-                </View>
-                <Text style={styles.ratingLabelInline}>טעים</Text>
-              </View>
-              <View style={styles.ratingItem}>
-                <View style={styles.ratingTopRow}>
-                  <Text style={styles.ratingValueInline}>{item.fast_score ?? 0}%</Text>
-                  <Ionicons name="rocket-outline" size={18} color="#94A3B8" />
-                </View>
-                <Text style={styles.ratingLabelInline}>מהיר</Text>
-              </View>
-              <View style={styles.ratingItem}>
-                <View style={styles.ratingTopRow}>
-                  <Text style={styles.ratingValueInline}>{item.filling_score ?? 0}%</Text>
-                  <Ionicons name="restaurant-outline" size={18} color="#94A3B8" />
-                </View>
-                <Text style={styles.ratingLabelInline}>משביע</Text>
-              </View>
-            </View>
-          </View>
+          <DishCard
+            items={[item]}
+            favorites={favorites}
+            currentUserId={currentUserId}
+            avatarUrl={avatarUrl}
+            userAvatars={userAvatars}
+            userLabels={{}}
+            showReview
+            onToggleFavorite={(id) => toggleFavorite(id)}
+            onOpenPhoto={(dish) => setFullScreenImage(dish.image_url ?? null)}
+            onOpenRestaurant={(dish) =>
+              router.push({
+                pathname: '/restaurant',
+                params: {
+                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+                  restaurantName: dish.restaurant_name ?? '',
+                },
+              })
+            }
+            onOpenCamera={(dish) =>
+              router.push({
+                pathname: '/camera',
+                params: {
+                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+                  restaurantName: dish.restaurant_name ?? '',
+                  dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
+                  dishName: dish.dish_name ?? '',
+                },
+              })
+            }
+            onDelete={(dish) => deleteDishAssociation(dish)}
+            onEdit={(dish) =>
+              router.push({
+                pathname: '/edit-dish',
+                params: { id: dish.id, returnTo: 'dish' },
+              })
+            }
+          />
         )}
       />
+      <Modal
+        visible={Boolean(fullScreenImage)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullScreenImage(null)}
+      >
+        <Pressable style={styles.fullscreenOverlay} onPress={() => setFullScreenImage(null)}>
+          <Pressable style={styles.fullscreenContent} onPress={() => {}}>
+            {fullScreenImage ? (
+              <Image source={{ uri: fullScreenImage }} style={styles.fullscreenImage} />
+            ) : null}
+            <Pressable style={styles.fullscreenClose} onPress={() => setFullScreenImage(null)}>
+              <Ionicons name="close" size={22} color="#fff" />
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -468,7 +449,7 @@ export default function DishScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 16,
   },
   headerRow: {
@@ -485,7 +466,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     marginTop: 2,
   },
   headerTextWrap: {
@@ -496,196 +477,41 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
   },
   headerSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.colors.textMuted,
     textAlign: 'right',
   },
   results: {
     alignSelf: 'stretch',
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.cardAlt,
   },
   avgCard: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: theme.colors.border,
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
     marginBottom: 10,
   },
   avgHeader: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
     textAlign: 'right',
     marginBottom: 6,
   },
   feedContent: {
     paddingBottom: 120,
     gap: 16,
-  },
-  feedCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#eeeeee',
-  },
-  feedImageWrap: {
-    position: 'relative',
-    width: '100%',
-    height: 260,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 20,
-    overflow: 'hidden',
-    margin: 8,
-  },
-  imageGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 2,
-  },
-  feedImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  feedImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#e5e7eb',
-  },
-  cameraBadge: {
-    position: 'absolute',
-    top: 64,
-    left: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderWidth: 1,
-    borderColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 6,
-    shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  heartBadge: {
-    position: 'absolute',
-    top: 112,
-    left: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderWidth: 1,
-    borderColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 6,
-    shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  imageDateText: {
-    position: 'absolute',
-    top: 12,
-    left: 14,
-    fontSize: 10,
-    color: '#1f2937',
-    fontWeight: '700',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 16,
-    textAlign: 'left',
-    zIndex: 6,
-  },
-  avatarBadge: {
-    position: 'absolute',
-    right: 16,
-    bottom: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    zIndex: 7,
-    borderWidth: 2,
-    borderColor: '#ffffff',
-    shadowColor: '#000000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  imageTextBlock: {
-    position: 'absolute',
-    top: 16,
-    right: 12,
-    left: 12,
-    alignItems: 'flex-end',
-    paddingLeft: 84,
-    zIndex: 6,
-  },
-  imageDishText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    lineHeight: 26,
-  },
-  imageRestaurantText: {
-    color: '#E2E8F0',
-    fontSize: 14,
-    textAlign: 'right',
-    marginTop: 2,
-    writingDirection: 'rtl',
-  },
-  orderBadge: {
-    position: 'absolute',
-    left: 12,
-    bottom: 12,
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 4,
-    zIndex: 6,
-  },
-  orderText: {
-    marginTop: 2,
-    fontSize: 13,
-    color: '#9e211c',
-    fontWeight: '700',
   },
   ratingRow: {
     flexDirection: 'row',
@@ -705,19 +531,48 @@ const styles = StyleSheet.create({
   ratingValueInline: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: theme.colors.text,
   },
   ratingLabelInline: {
     marginTop: 2,
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
+  },
+  fullscreenOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  fullscreenContent: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullscreenImage: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: 18,
+    backgroundColor: theme.colors.ink,
+  },
+  fullscreenClose: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    height: 36,
+    width: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
   placeholderText: {
-    color: '#666666',
+    color: theme.colors.textMuted,
     fontSize: 14,
   },
   errorText: {
-    color: '#b00020',
+    color: theme.colors.danger,
     fontSize: 14,
   },
 });

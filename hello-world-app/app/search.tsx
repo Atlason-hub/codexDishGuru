@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import CachedLogo from '../components/CachedLogo';
+import { theme } from '../lib/theme';
 
 type DishAssociation = {
   id: string;
@@ -23,7 +24,6 @@ type DishAssociation = {
   cuisine: string | null;
   image_url: string | null;
   tasty_score: number | null;
-  fast_score: number | null;
   filling_score: number | null;
   created_at: string | null;
 };
@@ -329,28 +329,28 @@ export default function SearchScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={18} color="#111111" />
+          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <Text style={styles.headerTitle}>חיפוש</Text>
       </View>
 
       <View style={styles.searchBox}>
-        <Ionicons name="restaurant-outline" size={18} color="#94A3B8" />
+        <Ionicons name="restaurant-outline" size={18} color={theme.colors.textMuted} />
         <TextInput
           style={styles.searchInput}
           placeholder="חיפוש מסעדות"
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={theme.colors.textMuted}
           value={restaurantQuery}
           onChangeText={setRestaurantQuery}
           textAlign="right"
         />
       </View>
       <View style={styles.searchBox}>
-        <Ionicons name="fast-food-outline" size={18} color="#94A3B8" />
+        <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
         <TextInput
           style={styles.searchInput}
           placeholder="חיפוש מנות"
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={theme.colors.textMuted}
           value={dishQuery}
           onChangeText={setDishQuery}
           textAlign="right"
@@ -408,6 +408,11 @@ export default function SearchScreen() {
               <FlatList
                 data={restaurantResults}
                 keyExtractor={(item) => String(item.RestaurantId)}
+                initialNumToRender={12}
+                maxToRenderPerBatch={12}
+                updateCellsBatchingPeriod={50}
+                windowSize={6}
+                removeClippedSubviews
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => (
                   <Pressable
@@ -433,7 +438,11 @@ export default function SearchScreen() {
                     </View>
                     <View style={styles.resultImageWrap}>
                       <View style={styles.resultPlaceholder}>
-                        <Ionicons name="restaurant-outline" size={18} color="#CBD5E1" />
+                        <Ionicons
+                          name="restaurant-outline"
+                          size={18}
+                          color={theme.colors.textMuted}
+                        />
                       </View>
                     </View>
                   </Pressable>
@@ -448,6 +457,11 @@ export default function SearchScreen() {
               <FlatList
                 data={results}
                 keyExtractor={(item) => item.id}
+                initialNumToRender={12}
+                maxToRenderPerBatch={12}
+                updateCellsBatchingPeriod={50}
+                windowSize={6}
+                removeClippedSubviews
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => (
                   <View style={styles.resultCard}>
@@ -489,7 +503,11 @@ export default function SearchScreen() {
                         <CachedLogo uri={item.image_url} style={styles.resultImage} />
                       ) : (
                         <View style={styles.resultPlaceholder}>
-                          <Ionicons name="image-outline" size={18} color="#CBD5E1" />
+                          <Ionicons
+                            name="image-outline"
+                            size={18}
+                            color={theme.colors.textMuted}
+                          />
                           <View style={styles.placeholderOverlay}>
                             <Ionicons name="camera" size={10} color="#ffffff" />
                             <Text style={styles.placeholderOverlayText}>צלם מנה</Text>
@@ -509,6 +527,11 @@ export default function SearchScreen() {
               <FlatList
                 data={apiDishResults}
                 keyExtractor={(item) => item.id}
+                initialNumToRender={12}
+                maxToRenderPerBatch={12}
+                updateCellsBatchingPeriod={50}
+                windowSize={6}
+                removeClippedSubviews
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => (
                   <Pressable
@@ -532,7 +555,11 @@ export default function SearchScreen() {
                     </View>
                     <View style={styles.resultImageWrap}>
                       <View style={styles.resultPlaceholder}>
-                        <Ionicons name="fast-food-outline" size={18} color="#CBD5E1" />
+                        <Ionicons
+                          name="fast-food-outline"
+                          size={18}
+                          color={theme.colors.textMuted}
+                        />
                         <View style={styles.placeholderOverlay}>
                           <Ionicons name="camera" size={10} color="#ffffff" />
                           <Text style={styles.placeholderOverlayText}>צלם מנה</Text>
@@ -553,7 +580,7 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 16,
   },
   headerRow: {
@@ -570,13 +597,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     marginTop: 2,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
@@ -586,16 +613,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: theme.colors.cardAlt,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#111111',
+    color: theme.colors.text,
   },
   modeRow: {
     flexDirection: 'row-reverse',
@@ -607,41 +634,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
   },
   modeButtonActive: {
-    borderColor: '#9e211c',
-    backgroundColor: '#FEE2E2',
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
   },
   modeText: {
     fontSize: 12,
-    color: '#475569',
+    color: theme.colors.textMuted,
     fontWeight: '600',
   },
   modeTextActive: {
-    color: '#991B1B',
+    color: theme.colors.accent,
   },
   resultsHeader: {
     marginTop: 10,
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
     textAlign: 'right',
   },
   sectionHeader: {
     marginTop: 12,
     fontSize: 12,
-    color: '#9e211c',
+    color: theme.colors.accent,
     fontWeight: '700',
     textAlign: 'right',
   },
   resultsBox: {
     alignSelf: 'stretch',
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.cardAlt,
     marginTop: 12,
   },
   listContent: {
@@ -655,9 +682,9 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     borderRadius: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
   },
   resultInfo: {
     flex: 1,
@@ -666,19 +693,19 @@ const styles = StyleSheet.create({
   dishName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
   },
   restaurantName: {
     marginTop: 4,
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.colors.textMuted,
     textAlign: 'right',
   },
   cuisineText: {
     marginTop: 4,
     fontSize: 11,
-    color: '#9e211c',
+    color: theme.colors.accent,
     textAlign: 'right',
   },
   resultImageWrap: {
@@ -687,8 +714,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
   },
   resultImage: {
     width: '100%',
@@ -699,7 +726,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: theme.colors.cardAlt,
   },
   placeholderOverlay: {
     position: 'absolute',
@@ -719,12 +746,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   placeholderText: {
-    color: '#666666',
+    color: theme.colors.textMuted,
     fontSize: 14,
     textAlign: 'right',
   },
   errorText: {
-    color: '#b00020',
+    color: theme.colors.danger,
     fontSize: 14,
     textAlign: 'right',
   },

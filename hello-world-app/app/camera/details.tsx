@@ -15,6 +15,7 @@ import { Buffer } from 'buffer';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { theme } from '../../lib/theme';
 
 type Restaurant = {
   RestaurantId: number;
@@ -247,9 +248,8 @@ export default function CameraDetailsScreen() {
   const [collapsedRestaurantCategories, setCollapsedRestaurantCategories] = useState<Set<string>>(
     () => new Set()
   );
-  const [tastyScore, setTastyScore] = useState(60);
-  const [fastScore, setFastScore] = useState(60);
-  const [fillingScore, setFillingScore] = useState(60);
+  const [tastyScore, setTastyScore] = useState(50);
+  const [fillingScore, setFillingScore] = useState(50);
   const [reviewText, setReviewText] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -271,7 +271,6 @@ export default function CameraDetailsScreen() {
         setDishCategories(curated);
         setCollapsedDishCategories(new Set());
       } catch (error) {
-        console.log('[MENU_FETCH_ERROR]:', error);
       } finally {
         setMenuLoading(false);
       }
@@ -368,6 +367,15 @@ export default function CameraDetailsScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.body}>
+        <View style={styles.headerRow}>
+          <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+            <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+            <Text style={styles.backText}>חזור</Text>
+          </Pressable>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.headerTitle}>פרטי המנה</Text>
+          </View>
+        </View>
         <View style={styles.photoRow}>
           <Pressable
             style={photoUri ? styles.photoPressable : styles.photoPlaceholder}
@@ -399,7 +407,7 @@ export default function CameraDetailsScreen() {
         <TextInput
           style={styles.reviewInput}
           placeholder="כתוב דעתך על המנה"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={theme.colors.textMuted}
           multiline
           textAlign="right"
           value={reviewText}
@@ -426,11 +434,11 @@ export default function CameraDetailsScreen() {
           {dropdownOpen && (
             <View style={styles.dropdownList}>
                   <View style={styles.searchRow}>
-                    <Ionicons name="search" size={16} color="#6B7280" />
+                    <Ionicons name="search" size={16} color={theme.colors.textMuted} />
                     <TextInput
                   style={styles.searchInput}
           placeholder="חיפוש מסעדה…"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={search}
                   onChangeText={(text) => setSearch(text)}
                 />
@@ -445,6 +453,11 @@ export default function CameraDetailsScreen() {
                     collapsedRestaurantCategories
                   )}
                   keyExtractor={(item) => item.id}
+                  initialNumToRender={16}
+                  maxToRenderPerBatch={16}
+                  updateCellsBatchingPeriod={50}
+                  windowSize={6}
+                  removeClippedSubviews
                   renderItem={({ item }) =>
                     item.type === 'header' ? (
                       <Pressable
@@ -517,18 +530,18 @@ export default function CameraDetailsScreen() {
           {dishDropdownOpen && (
             <View style={styles.dropdownList}>
               <View style={styles.searchRow}>
-                <Ionicons name="search" size={16} color="#6B7280" />
+                <Ionicons name="search" size={16} color={theme.colors.textMuted} />
                 <TextInput
                   style={styles.searchInput}
                   placeholder="חיפוש מנה…"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={dishSearch}
                   onChangeText={(text) => setDishSearch(text)}
                 />
               </View>
               {menuLoading ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color="#111111" />
+                  <ActivityIndicator size="small" color={theme.colors.text} />
                   <Text style={styles.dropdownEmpty}>טוען מנות…</Text>
                 </View>
               ) : dishCategories.length === 0 ? (
@@ -537,6 +550,11 @@ export default function CameraDetailsScreen() {
                 <FlatList
                   data={buildDropdownRows(dishCategories, dishSearch, collapsedDishCategories)}
                   keyExtractor={(item) => item.id}
+                  initialNumToRender={16}
+                  maxToRenderPerBatch={16}
+                  updateCellsBatchingPeriod={50}
+                  windowSize={6}
+                  removeClippedSubviews
                   renderItem={({ item }) =>
                     item.type === 'header' ? (
                       <Pressable
@@ -591,34 +609,15 @@ export default function CameraDetailsScreen() {
             maximumValue={100}
             value={tastyScore}
             onValueChange={(v) => setTastyScore(Math.round(v))}
-            minimumTrackTintColor="#9e211c"
-            maximumTrackTintColor="#CBD5E1"
-            thumbTintColor="#9e211c"
+            minimumTrackTintColor={theme.colors.accent}
+            maximumTrackTintColor={theme.colors.border}
+            thumbTintColor={theme.colors.accent}
           />
           <View style={styles.sliderLabel}>
             <Text style={styles.sliderValue}>{tastyScore}</Text>
             <View style={styles.sliderLabelRow}>
-              <Ionicons name="fast-food-outline" size={14} color="#94A3B8" />
+              <Ionicons name="fast-food-outline" size={14} color={theme.colors.textMuted} />
               <Text style={styles.sliderText}>טעים</Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.sliderRow}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={100}
-            value={fastScore}
-            onValueChange={(v) => setFastScore(Math.round(v))}
-            minimumTrackTintColor="#9e211c"
-            maximumTrackTintColor="#CBD5E1"
-            thumbTintColor="#9e211c"
-          />
-          <View style={styles.sliderLabel}>
-            <Text style={styles.sliderValue}>{fastScore}</Text>
-            <View style={styles.sliderLabelRow}>
-              <Ionicons name="rocket-outline" size={14} color="#94A3B8" />
-              <Text style={styles.sliderText}>מהיר</Text>
             </View>
           </View>
         </View>
@@ -629,14 +628,18 @@ export default function CameraDetailsScreen() {
             maximumValue={100}
             value={fillingScore}
             onValueChange={(v) => setFillingScore(Math.round(v))}
-            minimumTrackTintColor="#9e211c"
-            maximumTrackTintColor="#CBD5E1"
-            thumbTintColor="#9e211c"
+            minimumTrackTintColor={theme.colors.accent}
+            maximumTrackTintColor={theme.colors.border}
+            thumbTintColor={theme.colors.accent}
           />
           <View style={styles.sliderLabel}>
             <Text style={styles.sliderValue}>{fillingScore}</Text>
             <View style={styles.sliderLabelRow}>
-              <Ionicons name="restaurant-outline" size={14} color="#94A3B8" />
+              <Ionicons
+                name="restaurant-outline"
+                size={14}
+                color={theme.colors.textMuted}
+              />
               <Text style={styles.sliderText}>משביע</Text>
             </View>
           </View>
@@ -701,7 +704,6 @@ export default function CameraDetailsScreen() {
                 dish_name: selectedDish.name,
                 review_text: reviewText,
                 tasty_score: tastyScore,
-                fast_score: fastScore,
                 filling_score: fillingScore,
                 image_url: publicData?.publicUrl ?? null,
                 image_path: filePath,
@@ -711,7 +713,6 @@ export default function CameraDetailsScreen() {
               router.replace('/');
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
-              console.log('[SAVE_DISH_ERROR]:', error);
               Alert.alert('שמירה נכשלה', message);
             } finally {
               setSaving(false);
@@ -719,7 +720,7 @@ export default function CameraDetailsScreen() {
           }}
         >
           {saving ? (
-            <ActivityIndicator color="#9e211c" />
+            <ActivityIndicator color={theme.colors.accent} />
           ) : (
             <Text style={styles.saveButtonText}>שמור</Text>
           )}
@@ -732,34 +733,71 @@ export default function CameraDetailsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.background,
   },
   body: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 24,
     gap: 12,
   },
-  photoRow: {
+  headerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  backButton: {
+    height: 32,
+    minWidth: 64,
+    borderRadius: 16,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: 6,
+    paddingHorizontal: 8,
+    marginTop: 2,
+  },
+  backText: {
+    fontSize: 12,
+    color: theme.colors.text,
+    textAlign: 'right',
+  },
+  headerTextWrap: {
+    flex: 1,
     alignItems: 'flex-end',
+    marginRight: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  photoRow: {
+    alignItems: 'center',
   },
   photo: {
-    width: 180,
-    height: 120,
+    width: 260,
+    height: 180,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.colors.cardAlt,
   },
   photoPressable: {
-    width: 180,
-    height: 120,
+    width: 260,
+    height: 180,
     borderRadius: 8,
     overflow: 'hidden',
+    marginTop: 2,
   },
   photoPlaceholder: {
-    width: 180,
-    height: 120,
+    width: 260,
+    height: 180,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.colors.cardAlt,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -786,15 +824,16 @@ const styles = StyleSheet.create({
     height: 120,
     textAlign: 'center',
     textAlignVertical: 'center',
-    color: '#9CA3AF',
+    color: theme.colors.textMuted,
   },
   reviewInput: {
     minHeight: 60,
     borderBottomWidth: 1,
-    borderBottomColor: '#CBD5E1',
+    borderBottomColor: theme.colors.border,
     fontSize: 16,
-    color: '#111827',
+    color: theme.colors.text,
     paddingVertical: 6,
+    marginTop: 6,
   },
   dropdownContainer: {
     width: '100%',
@@ -806,26 +845,26 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#ffffff',
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
   },
   dropdownText: {
     fontSize: 18,
-    color: '#111827',
+    color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
   },
   dropdownPlaceholder: {
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
   },
   dropdownList: {
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     maxHeight: 220,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
   },
   searchRow: {
     flexDirection: 'row',
@@ -839,11 +878,11 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#111111',
+    color: theme.colors.text,
   },
   dropdownEmpty: {
     padding: 12,
-    color: '#9CA3AF',
+    color: theme.colors.textMuted,
   },
   dropdownItem: {
     paddingVertical: 10,
@@ -853,15 +892,15 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: {
     fontSize: 14,
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
   },
   categoryHeader: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: theme.colors.cardAlt,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: theme.colors.border,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -869,7 +908,7 @@ const styles = StyleSheet.create({
   categoryHeaderText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748B',
+    color: theme.colors.textMuted,
     textAlign: 'right',
   },
   loadingRow: {
@@ -883,14 +922,14 @@ const styles = StyleSheet.create({
     width: 28,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#9e211c',
+    borderColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ratingHeader: {
     marginTop: 6,
     fontSize: 16,
-    color: '#111827',
+    color: theme.colors.text,
     textAlign: 'right',
     fontWeight: '600',
   },
@@ -916,11 +955,11 @@ const styles = StyleSheet.create({
   sliderValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text,
   },
   sliderText: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
   },
   saveButton: {
     marginTop: 18,
@@ -928,7 +967,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     alignSelf: 'flex-start',
   },
   saveButtonPressed: {
@@ -940,7 +979,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 16,
-    color: '#111111',
+    color: theme.colors.text,
     fontWeight: '600',
   },
 });

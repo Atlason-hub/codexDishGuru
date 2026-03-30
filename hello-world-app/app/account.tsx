@@ -9,6 +9,7 @@ import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avata
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { theme } from '../lib/theme';
 
 export default function AccountScreen() {
   const FRAME_SIZE = 180;
@@ -103,7 +104,7 @@ export default function AccountScreen() {
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
-          <Ionicons name="chevron-back" size={18} color="#111111" />
+          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <Text style={styles.title}>החשבון שלי</Text>
       </View>
@@ -132,7 +133,7 @@ export default function AccountScreen() {
       </View>
       {tempAvatarUrl ? (
         <View style={styles.zoomRow}>
-          <Ionicons name="remove" size={16} color="#6B7280" />
+          <Ionicons name="remove" size={16} color={theme.colors.textMuted} />
           <Slider
             style={styles.zoomSlider}
             minimumValue={MIN_ZOOM}
@@ -143,10 +144,10 @@ export default function AccountScreen() {
               setZoom(value);
               setAvatarOffset((prev) => clampOffset(prev));
             }}
-            minimumTrackTintColor="#111111"
-            maximumTrackTintColor="#E5E7EB"
+            minimumTrackTintColor={theme.colors.accent}
+            maximumTrackTintColor={theme.colors.border}
           />
-          <Ionicons name="add" size={16} color="#6B7280" />
+          <Ionicons name="add" size={16} color={theme.colors.textMuted} />
         </View>
       ) : null}
       <View style={styles.actionsRow}>
@@ -177,14 +178,13 @@ export default function AccountScreen() {
               if (!userId) return;
               // do not upload until user presses Save
             } catch (error) {
-              console.log('[AVATAR_UPLOAD_ERROR]:', error);
               Alert.alert('העלאה נכשלה', error instanceof Error ? error.message : 'העלאה נכשלה');
             } finally {
               setSaving(false);
             }
           }}
         >
-          <Ionicons name="image-outline" size={22} color="#6B7280" />
+          <Ionicons name="image-outline" size={22} color={theme.colors.textMuted} />
         </Pressable>
         <Pressable
           style={styles.actionButton}
@@ -214,14 +214,13 @@ export default function AccountScreen() {
               if (!userId) return;
               // do not upload until user presses Save
             } catch (error) {
-              console.log('[AVATAR_CAMERA_ERROR]:', error);
               Alert.alert('צילום נכשל', error instanceof Error ? error.message : 'העלאה נכשלה');
             } finally {
               setSaving(false);
             }
           }}
         >
-          <Ionicons name="camera-outline" size={22} color="#6B7280" />
+          <Ionicons name="camera-outline" size={22} color={theme.colors.textMuted} />
         </Pressable>
       </View>
       <Pressable
@@ -288,7 +287,7 @@ export default function AccountScreen() {
                     .update({ avatar_url: url })
                     .eq('user_id', currentUserId);
                   if (profileError) {
-                    console.log('[AVATAR_PROFILE_UPDATE_ERROR]:', profileError);
+                    throw profileError;
                   }
                 }
                 setAvatarUrl(url);
@@ -300,7 +299,6 @@ export default function AccountScreen() {
                 router.replace('/');
               }
           } catch (error) {
-            console.log('[AVATAR_SAVE_ERROR]:', error);
             Alert.alert('שמירה נכשלה', error instanceof Error ? error.message : 'שמירה נכשלה');
           } finally {
             setSaving(false);
@@ -316,7 +314,7 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 20,
     paddingTop: 12,
     alignItems: 'center',
@@ -324,7 +322,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
@@ -344,7 +342,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     marginTop: 2,
   },
   emailRow: {
@@ -355,19 +353,19 @@ const styles = StyleSheet.create({
   },
   emailValue: {
     fontSize: 18,
-    color: '#111111',
+    color: theme.colors.text,
     flex: 1,
     textAlign: 'left',
   },
   emailLabel: {
     fontSize: 16,
-    color: '#6B7280',
+    color: theme.colors.textMuted,
     marginLeft: 12,
   },
   divider: {
     width: '100%',
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: theme.colors.border,
     marginTop: 6,
     marginBottom: 28,
   },
@@ -375,7 +373,7 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: '#9e211c',
+    backgroundColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -410,7 +408,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
   },
   saveButtonPressed: {
     opacity: 0.85,
@@ -421,14 +419,14 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 16,
-    color: '#111111',
+    color: theme.colors.text,
     fontWeight: '600',
   },
   actionButton: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.colors.cardAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },

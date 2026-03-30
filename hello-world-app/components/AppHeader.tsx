@@ -7,6 +7,7 @@ import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedLogo from './CachedLogo';
+import { theme } from '../lib/theme';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
@@ -68,12 +69,14 @@ export default function AppHeader() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
       const sessionEmail = data.session?.user?.email ?? null;
+      setIsAuthenticated(Boolean(data.session?.user?.id));
       setCurrentUserId(data.session?.user?.id ?? null);
       setUserEmail(sessionEmail);
       const cached = await loadCachedLogo();
@@ -102,6 +105,7 @@ export default function AppHeader() {
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       const sessionEmail = session?.user?.email ?? null;
+      setIsAuthenticated(Boolean(session?.user?.id));
       setCurrentUserId(session?.user?.id ?? null);
       setUserEmail(sessionEmail);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
@@ -139,16 +143,21 @@ export default function AppHeader() {
     setAvatarUrl(null);
     await cacheAvatar(currentUserId, null);
     await clearCachedLogo();
+    router.replace('/');
   };
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
       <View style={styles.leftIcons}>
         <Pressable style={styles.iconButton} onPress={() => router.push('/camera')}>
-          <Ionicons name="camera" size={24} color="#111111" />
+          <Ionicons name="camera" size={24} color={theme.colors.ink} />
         </Pressable>
         <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
-          <Ionicons name="search" size={24} color="#111111" />
+          <Ionicons name="search" size={24} color={theme.colors.ink} />
         </Pressable>
       </View>
       <Pressable style={styles.logoContainer} onPress={() => router.push('/')}>
@@ -160,7 +169,7 @@ export default function AppHeader() {
       </Pressable>
       <View style={styles.rightIcons}>
         <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
-          <Ionicons name="menu" size={28} color="#111111" />
+          <Ionicons name="menu" size={28} color={theme.colors.ink} />
         </Pressable>
       </View>
       <Modal
@@ -173,7 +182,7 @@ export default function AppHeader() {
           <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)} />
           <View style={styles.menuOverlay}>
             <Pressable style={styles.menuClose} onPress={() => setMenuVisible(false)}>
-              <Ionicons name="close" size={20} color="#333333" />
+              <Ionicons name="close" size={20} color={theme.colors.textMuted} />
             </Pressable>
             <Pressable
               style={styles.menuOptionRow}
@@ -186,8 +195,18 @@ export default function AppHeader() {
               {avatarUrl ? (
                 <CachedLogo uri={avatarUrl} style={styles.menuAvatar} />
               ) : (
-                <Ionicons name="person-circle-outline" size={20} color="#9e211c" />
+                <Ionicons name="person-circle-outline" size={20} color={theme.colors.accent} />
               )}
+            </Pressable>
+            <Pressable
+              style={styles.menuOptionRow}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push('/my-dishes');
+              }}
+            >
+              <Text style={styles.menuOption}>המנות שלי</Text>
+              <Ionicons name="restaurant-outline" size={20} color={theme.colors.accent} />
             </Pressable>
             <Pressable
               style={styles.menuOptionRow}
@@ -197,19 +216,19 @@ export default function AppHeader() {
               }}
             >
               <Text style={styles.menuOption}>המועדפים שלי</Text>
-              <Ionicons name="heart-outline" size={20} color="#9e211c" />
+              <Ionicons name="heart-outline" size={20} color={theme.colors.accent} />
             </Pressable>
             <Pressable style={styles.menuOptionRow}>
               <Text style={styles.menuOption}>מדיניות פרטיות</Text>
-              <Ionicons name="megaphone-outline" size={20} color="#9e211c" />
+              <Ionicons name="megaphone-outline" size={20} color={theme.colors.accent} />
             </Pressable>
             <Pressable style={styles.menuOptionRow}>
               <Text style={styles.menuOption}>תנאים</Text>
-              <Ionicons name="document-text-outline" size={20} color="#9e211c" />
+              <Ionicons name="document-text-outline" size={20} color={theme.colors.accent} />
             </Pressable>
             <Pressable style={styles.menuOptionRow} onPress={signOut}>
-              <Text style={[styles.menuOption, styles.menuOptionDanger]}>התנתקות</Text>
-              <Ionicons name="log-out-outline" size={20} color="#9e211c" />
+              <Text style={styles.menuOption}>התנתקות</Text>
+              <Ionicons name="log-out-outline" size={20} color={theme.colors.accent} />
             </Pressable>
           </View>
         </View>
@@ -225,10 +244,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#eeeeee',
+    borderBottomColor: theme.colors.border,
     paddingHorizontal: 16,
     paddingBottom: 6,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
   },
   leftIcons: {
     flexDirection: 'row',
@@ -254,7 +273,7 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111111',
+    color: theme.colors.text,
   },
   logoImage: {
     width: 160,
@@ -282,13 +301,13 @@ const styles = StyleSheet.create({
     right: 16,
     width: 220,
     zIndex: 20,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 12,
     paddingTop: 12,
     borderWidth: 1,
-    borderColor: '#dddddd',
-    shadowColor: '#000',
+    borderColor: theme.colors.border,
+    shadowColor: theme.colors.ink,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
@@ -305,21 +324,24 @@ const styles = StyleSheet.create({
   },
   menuOption: {
     fontSize: 14,
-    color: '#666666',
+    color: theme.colors.textMuted,
     flex: 1,
     textAlign: 'right',
+  },
+  menuOptionDanger: {
+    color: theme.colors.danger,
   },
   signOutMenuButton: {
     marginTop: 12,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 6,
-    backgroundColor: '#111111',
+    backgroundColor: theme.colors.accent,
     alignItems: 'center',
     alignSelf: 'flex-start',
   },
   signOutMenuText: {
-    color: '#ffffff',
+    color: theme.colors.white,
     fontSize: 14,
     fontWeight: '600',
   },
