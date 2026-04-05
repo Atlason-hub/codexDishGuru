@@ -4,10 +4,13 @@ import {
   Alert,
   FlatList,
   Image,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  UIManager,
   View,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
@@ -254,6 +257,12 @@ export default function CameraDetailsScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (Platform.OS === 'android') {
+      UIManager.setLayoutAnimationEnabledExperimental?.(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!selectedRestaurantId) return;
     const fetchMenu = async () => {
       try {
@@ -417,7 +426,10 @@ export default function CameraDetailsScreen() {
         <View style={styles.dropdownContainer}>
           <Pressable
             style={styles.dropdownHeader}
-            onPress={() => setDropdownOpen((prev) => !prev)}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setDropdownOpen((prev) => !prev);
+            }}
             disabled={loading}
           >
             <Text style={[styles.dropdownText, !selectedName && styles.dropdownPlaceholder]}>
@@ -464,6 +476,9 @@ export default function CameraDetailsScreen() {
                         style={styles.categoryHeader}
                         onPress={() =>
                           setCollapsedRestaurantCategories((prev) => {
+                            LayoutAnimation.configureNext(
+                              LayoutAnimation.Presets.easeInEaseOut
+                            );
                             const next = new Set(prev);
                             const key = item.id.replace('header-', '');
                             if (next.has(key)) {
@@ -476,19 +491,21 @@ export default function CameraDetailsScreen() {
                         }
                       >
                         <Text style={styles.categoryHeaderText}>{item.name}</Text>
-                        <Ionicons
-                          name={
-                            collapsedRestaurantCategories.has(item.id.replace('header-', ''))
-                              ? 'chevron-down'
-                              : 'chevron-up'
-                          }
-                          size={14}
-                          color="#94A3B8"
-                        />
+                        <View style={styles.categoryChevronCircle}>
+                          <Ionicons
+                            name={
+                              collapsedRestaurantCategories.has(item.id.replace('header-', ''))
+                                ? 'chevron-down'
+                                : 'chevron-up'
+                            }
+                            size={14}
+                            color={theme.colors.textMuted}
+                          />
+                        </View>
                       </Pressable>
                     ) : (
                       <Pressable
-                        style={styles.dropdownItem}
+                        style={styles.searchResultCard}
                         onPress={() => {
                           setSelectedName(item.item.RestaurantName);
                           setSelectedRestaurantId(item.item.RestaurantId);
@@ -498,7 +515,25 @@ export default function CameraDetailsScreen() {
                           setDropdownOpen(false);
                         }}
                       >
-                        <Text style={styles.dropdownItemText}>{item.item.RestaurantName}</Text>
+                        <View style={styles.searchResultInfo}>
+                          <Text style={styles.searchResultTitle}>
+                            {item.item.RestaurantName}
+                          </Text>
+                          {item.item.RestaurantCuisineList ? (
+                            <Text style={styles.searchResultSubtitle}>
+                              {getPrimaryCuisine(item.item.RestaurantCuisineList)}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.searchResultImageWrap}>
+                          <View style={styles.searchResultPlaceholder}>
+                            <Ionicons
+                              name="restaurant-outline"
+                              size={18}
+                              color={theme.colors.textMuted}
+                            />
+                          </View>
+                        </View>
                       </Pressable>
                     )
                   }
@@ -511,7 +546,10 @@ export default function CameraDetailsScreen() {
         <View style={styles.dropdownContainer}>
           <Pressable
             style={styles.dropdownHeader}
-            onPress={() => setDishDropdownOpen((prev) => !prev)}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setDishDropdownOpen((prev) => !prev);
+            }}
             disabled={loading || !selectedRestaurantId}
           >
             <Text style={[styles.dropdownText, !selectedDish && styles.dropdownPlaceholder]}>
@@ -561,6 +599,9 @@ export default function CameraDetailsScreen() {
                         style={styles.categoryHeader}
                         onPress={() =>
                           setCollapsedDishCategories((prev) => {
+                            LayoutAnimation.configureNext(
+                              LayoutAnimation.Presets.easeInEaseOut
+                            );
                             const next = new Set(prev);
                             const key = item.id.replace('header-', '');
                             if (next.has(key)) {
@@ -573,25 +614,45 @@ export default function CameraDetailsScreen() {
                         }
                       >
                         <Text style={styles.categoryHeaderText}>{item.name}</Text>
-                        <Ionicons
-                          name={
-                            collapsedDishCategories.has(item.id.replace('header-', ''))
-                              ? 'chevron-down'
-                              : 'chevron-up'
-                          }
-                          size={14}
-                          color="#94A3B8"
-                        />
+                        <View style={styles.categoryChevronCircle}>
+                          <Ionicons
+                            name={
+                              collapsedDishCategories.has(item.id.replace('header-', ''))
+                                ? 'chevron-down'
+                                : 'chevron-up'
+                            }
+                            size={14}
+                            color={theme.colors.textMuted}
+                          />
+                        </View>
                       </Pressable>
                     ) : (
                       <Pressable
-                        style={styles.dropdownItem}
+                        style={styles.searchResultCard}
                         onPress={() => {
                           setSelectedDish(item.item);
                           setDishDropdownOpen(false);
                         }}
                       >
-                        <Text style={styles.dropdownItemText}>{item.item.name}</Text>
+                        <View style={styles.searchResultInfo}>
+                          <Text style={styles.searchResultTitle}>{item.item.name}</Text>
+                          <Text style={styles.searchResultSubtitle}>
+                            {selectedName ?? 'מסעדה'}
+                          </Text>
+                        </View>
+                        <View style={styles.searchResultImageWrap}>
+                          <View style={styles.searchResultPlaceholder}>
+                            <Ionicons
+                              name="fast-food-outline"
+                              size={18}
+                              color={theme.colors.textMuted}
+                            />
+                            <View style={styles.searchResultOverlay}>
+                              <Ionicons name="camera" size={10} color="#ffffff" />
+                              <Text style={styles.searchResultOverlayText}>צלם מנה</Text>
+                            </View>
+                          </View>
+                        </View>
                       </Pressable>
                     )
                   }
@@ -895,6 +956,63 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlign: 'right',
   },
+  searchResultCard: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: theme.colors.cardAlt,
+  },
+  searchResultInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  searchResultTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+    textAlign: 'right',
+  },
+  searchResultSubtitle: {
+    marginTop: 4,
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    textAlign: 'right',
+  },
+  searchResultImageWrap: {
+    width: 62,
+    height: 46,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+  },
+  searchResultPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.card,
+  },
+  searchResultOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  searchResultOverlayText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '600',
+  },
   categoryHeader: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -910,6 +1028,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.textMuted,
     textAlign: 'right',
+  },
+  categoryChevronCircle: {
+    height: 22,
+    width: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.card,
   },
   loadingRow: {
     flexDirection: 'row',

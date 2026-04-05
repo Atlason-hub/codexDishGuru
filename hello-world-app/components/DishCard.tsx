@@ -1,5 +1,14 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CachedLogo from './CachedLogo';
@@ -66,6 +75,14 @@ export default function DishCard({
   const [imageWidth, setImageWidth] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollRef = useRef<ScrollView | null>(null);
+  const ratingAnim = useRef(new Animated.Value(0)).current;
+  const dotAnim = useRef(new Animated.Value(0)).current;
+  const heartScale = useRef(new Animated.Value(1)).current;
+  const cameraScale = useRef(new Animated.Value(1)).current;
+  const editScale = useRef(new Animated.Value(1)).current;
+  const trashScale = useRef(new Animated.Value(1)).current;
+  const avatarScale = useRef(new Animated.Value(1)).current;
+  const orderScale = useRef(new Animated.Value(1)).current;
   const [buttonLayouts, setButtonLayouts] = useState<{
     camera?: Rect;
     heart?: Rect;
@@ -85,6 +102,45 @@ export default function DishCard({
         ? userAvatars[currentItem.user_id] ?? null
         : null;
   const avatarLabel = currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null;
+
+  const bouncePress = (scale: Animated.Value) => {
+    Animated.sequence([
+      Animated.timing(scale, {
+        toValue: 0.92,
+        duration: 70,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 1.08,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  useEffect(() => {
+    ratingAnim.setValue(0);
+    Animated.timing(ratingAnim, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [currentItem?.id, ratingAnim]);
+
+  useEffect(() => {
+    Animated.timing(dotAnim, {
+      toValue: currentIndex,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [currentIndex, dotAnim]);
 
   const panResponder = useMemo(
     () =>
@@ -198,85 +254,123 @@ export default function DishCard({
             style={styles.imageGradient}
             pointerEvents="none"
           />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.45)']}
+            style={styles.imageGradientBottom}
+            pointerEvents="none"
+          />
           <View style={styles.leftButtonStack} pointerEvents="box-none">
-            <Pressable
-              style={styles.cameraBadge}
-              hitSlop={8}
-              onStartShouldSetResponder={() => true}
-              onStartShouldSetResponderCapture={() => true}
-              onLayout={(event) => {
-                const { x, y, width, height } = event.nativeEvent.layout;
-                setButtonLayouts((prev) => ({ ...prev, camera: { x, y, width, height } }));
-              }}
-              onPress={() => currentItem && onOpenCamera?.(currentItem)}
-            >
-              <Ionicons name="camera" size={18} color={theme.colors.textMuted} />
-            </Pressable>
-            <Pressable
-              style={styles.heartBadge}
-              hitSlop={8}
-              onStartShouldSetResponder={() => true}
-              onStartShouldSetResponderCapture={() => true}
-              onLayout={(event) => {
-                const { x, y, width, height } = event.nativeEvent.layout;
-                setButtonLayouts((prev) => ({ ...prev, heart: { x, y, width, height } }));
-              }}
-              onPress={() => currentItem?.id && onToggleFavorite?.(currentItem.id)}
-            >
-              <Ionicons
-                name={currentItem?.id && favorites[currentItem.id] ? 'heart' : 'heart-outline'}
-                size={18}
-                color={
-                  currentItem?.id && favorites[currentItem.id]
-                    ? theme.colors.accent
-                    : theme.colors.textMuted
-                }
-              />
-            </Pressable>
-            {currentItem?.user_id && currentItem.user_id === currentUserId && onEdit ? (
+            <Animated.View style={[styles.cameraBadge, { transform: [{ scale: cameraScale }] }]}>
               <Pressable
-                style={styles.editBadge}
+                style={styles.badgePressable}
                 hitSlop={8}
+                onStartShouldSetResponder={() => true}
+                onStartShouldSetResponderCapture={() => true}
                 onLayout={(event) => {
                   const { x, y, width, height } = event.nativeEvent.layout;
-                  setButtonLayouts((prev) => ({ ...prev, edit: { x, y, width, height } }));
+                  setButtonLayouts((prev) => ({ ...prev, camera: { x, y, width, height } }));
                 }}
-                onPress={() => onEdit(currentItem)}
+                onPress={() => {
+                  if (currentItem) {
+                    onOpenCamera?.(currentItem);
+                    bouncePress(cameraScale);
+                  }
+                }}
               >
-                <Ionicons name="create-outline" size={18} color={theme.colors.textMuted} />
+                <Ionicons name="camera" size={18} color={theme.colors.textMuted} />
               </Pressable>
+            </Animated.View>
+            <Animated.View style={[styles.heartBadge, { transform: [{ scale: heartScale }] }]}>
+              <Pressable
+                style={styles.badgePressable}
+                hitSlop={8}
+                onStartShouldSetResponder={() => true}
+                onStartShouldSetResponderCapture={() => true}
+                onLayout={(event) => {
+                  const { x, y, width, height } = event.nativeEvent.layout;
+                  setButtonLayouts((prev) => ({ ...prev, heart: { x, y, width, height } }));
+                }}
+                onPress={() => {
+                  if (currentItem?.id) {
+                    onToggleFavorite?.(currentItem.id);
+                    bouncePress(heartScale);
+                  }
+                }}
+              >
+                <Ionicons
+                  name={currentItem?.id && favorites[currentItem.id] ? 'heart' : 'heart-outline'}
+                  size={18}
+                  color={
+                    currentItem?.id && favorites[currentItem.id]
+                      ? theme.colors.accent
+                      : theme.colors.textMuted
+                  }
+                />
+              </Pressable>
+            </Animated.View>
+            {currentItem?.user_id && currentItem.user_id === currentUserId && onEdit ? (
+              <Animated.View style={[styles.editBadge, { transform: [{ scale: editScale }] }]}>
+                <Pressable
+                  style={styles.badgePressable}
+                  hitSlop={8}
+                  onLayout={(event) => {
+                    const { x, y, width, height } = event.nativeEvent.layout;
+                    setButtonLayouts((prev) => ({ ...prev, edit: { x, y, width, height } }));
+                  }}
+                  onPress={() => {
+                    onEdit(currentItem);
+                    bouncePress(editScale);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={18} color={theme.colors.textMuted} />
+                </Pressable>
+              </Animated.View>
             ) : null}
           </View>
           <Text style={styles.imageDateText}>
             {currentItem?.created_at ? new Date(currentItem.created_at).toLocaleDateString() : ''}
           </Text>
-          <Pressable
-            style={styles.avatarBadge}
-            onLayout={(event) => {
-              const { x, y, width, height } = event.nativeEvent.layout;
-              setButtonLayouts((prev) => ({ ...prev, avatar: { x, y, width, height } }));
-            }}
-            onPress={() => onAvatarPress?.(resolvedAvatarUrl ?? null, avatarLabel ?? null)}
-            disabled={!onAvatarPress}
-          >
-            {resolvedAvatarUrl ? (
-              <CachedLogo uri={resolvedAvatarUrl} style={styles.avatarImage} />
-            ) : (
-              <Ionicons name="person" size={16} color={theme.colors.textMuted} />
-            )}
-          </Pressable>
-          {currentItem?.user_id && currentItem.user_id === currentUserId ? (
+          <Animated.View style={[styles.avatarBadge, { transform: [{ scale: avatarScale }] }]}>
             <Pressable
-              style={styles.trashBadge}
-              hitSlop={8}
+              style={styles.badgePressable}
               onLayout={(event) => {
                 const { x, y, width, height } = event.nativeEvent.layout;
-                setButtonLayouts((prev) => ({ ...prev, trash: { x, y, width, height } }));
+                setButtonLayouts((prev) => ({ ...prev, avatar: { x, y, width, height } }));
               }}
-              onPress={() => currentItem && onDelete?.(currentItem)}
+              onPress={() => {
+                if (onAvatarPress) {
+                  onAvatarPress(resolvedAvatarUrl ?? null, avatarLabel ?? null);
+                  bouncePress(avatarScale);
+                }
+              }}
+              disabled={!onAvatarPress}
             >
-              <Ionicons name="trash-outline" size={16} color={theme.colors.white} />
+              {resolvedAvatarUrl ? (
+                <CachedLogo uri={resolvedAvatarUrl} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={16} color={theme.colors.textMuted} />
+              )}
             </Pressable>
+          </Animated.View>
+          {currentItem?.user_id && currentItem.user_id === currentUserId ? (
+            <Animated.View style={[styles.trashBadge, { transform: [{ scale: trashScale }] }]}>
+              <Pressable
+                style={styles.badgePressable}
+                hitSlop={8}
+                onLayout={(event) => {
+                  const { x, y, width, height } = event.nativeEvent.layout;
+                  setButtonLayouts((prev) => ({ ...prev, trash: { x, y, width, height } }));
+                }}
+                onPress={() => {
+                  if (currentItem) {
+                    onDelete?.(currentItem);
+                    bouncePress(trashScale);
+                  }
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color={theme.colors.white} />
+              </Pressable>
+            </Animated.View>
           ) : null}
           <View style={styles.imageTextBlock}>
             <Pressable onPress={() => currentItem && onOpenDish?.(currentItem)}>
@@ -294,9 +388,23 @@ export default function DishCard({
           {items.length > 1 ? (
             <View style={styles.carouselDots} pointerEvents="none">
               {items.map((_, idx) => (
-                <View
+                <Animated.View
                   key={`${items[0]?.id ?? 'item'}-dot-${idx}`}
-                  style={[styles.carouselDot, idx === currentIndex && styles.carouselDotActive]}
+                  style={[
+                    styles.carouselDot,
+                    idx === currentIndex && styles.carouselDotActive,
+                    {
+                      transform: [
+                        {
+                          scale: dotAnim.interpolate({
+                            inputRange: [idx - 1, idx, idx + 1],
+                            outputRange: [1, 1.15, 1],
+                            extrapolate: 'clamp',
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
                 />
               ))}
             </View>
@@ -311,32 +419,89 @@ export default function DishCard({
       <View style={styles.ratingRow}>
         <View style={styles.ratingItem}>
           <View style={styles.ratingTopRow}>
-            <Text style={styles.ratingValueInline}>{currentItem?.filling_score ?? 0}%</Text>
+            <Animated.Text
+              style={[
+                styles.ratingValueInline,
+                {
+                  opacity: ratingAnim,
+                  transform: [
+                    {
+                      translateY: ratingAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [6, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              {currentItem?.filling_score ?? 0}%
+            </Animated.Text>
             <Ionicons
               name="restaurant-outline"
               size={18}
               color={theme.colors.textMuted}
+              style={styles.ratingIcon}
             />
           </View>
           <Text style={styles.ratingLabelInline}>משביע</Text>
         </View>
         <View style={styles.ratingItem}>
           <View style={styles.ratingTopRow}>
-            <Text style={styles.ratingValueInline}>{currentItem?.tasty_score ?? 0}%</Text>
-            <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
+            <Animated.Text
+              style={[
+                styles.ratingValueInline,
+                {
+                  opacity: ratingAnim,
+                  transform: [
+                    {
+                      translateY: ratingAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [6, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              {currentItem?.tasty_score ?? 0}%
+            </Animated.Text>
+            <Ionicons
+              name="fast-food-outline"
+              size={18}
+              color={theme.colors.textMuted}
+              style={styles.ratingIcon}
+            />
           </View>
           <Text style={styles.ratingLabelInline}>טעים</Text>
         </View>
-        <Pressable
-          style={styles.orderButton}
-          onLayout={(event) => {
-            const { x, y, width, height } = event.nativeEvent.layout;
-            setButtonLayouts((prev) => ({ ...prev, order: { x, y, width, height } }));
-          }}
-        >
-          <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
-          <Text style={styles.orderButtonText}>הזמן</Text>
-        </Pressable>
+        <Animated.View style={{ transform: [{ scale: orderScale }] }}>
+          <Pressable
+            style={styles.orderButton}
+            onLayout={(event) => {
+              const { x, y, width, height } = event.nativeEvent.layout;
+              setButtonLayouts((prev) => ({ ...prev, order: { x, y, width, height } }));
+            }}
+            onPressIn={() =>
+              Animated.timing(orderScale, {
+                toValue: 0.96,
+                duration: 80,
+                useNativeDriver: true,
+              }).start()
+            }
+            onPressOut={() =>
+              Animated.timing(orderScale, {
+                toValue: 1,
+                duration: 120,
+                useNativeDriver: true,
+              }).start()
+            }
+          >
+            <View pointerEvents="none" style={styles.orderButtonHighlight} />
+            <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
+            <Text style={styles.orderButtonText}>הזמן</Text>
+          </Pressable>
+        </Animated.View>
       </View>
     </View>
   );
@@ -365,6 +530,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 100,
+    zIndex: 2,
+  },
+  imageGradientBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 120,
     zIndex: 2,
   },
   feedImage: {
@@ -407,7 +580,7 @@ const styles = StyleSheet.create({
   leftButtonStack: {
     position: 'absolute',
     top: 54,
-    left: 14,
+    left: 12,
     width: 36,
     height: 176,
     justifyContent: 'flex-start',
@@ -431,6 +604,13 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 20,
+  },
+  badgePressable: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
   },
   heartBadge: {
     position: 'absolute',
@@ -558,15 +738,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   orderButton: {
-    height: 36,
+    height: 38,
     paddingHorizontal: 16,
-    borderRadius: 18,
+    borderRadius: 19,
     backgroundColor: theme.colors.accent,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     justifyContent: 'center',
     marginRight: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    overflow: 'hidden',
+  },
+  orderButtonHighlight: {
+    position: 'absolute',
+    top: 1,
+    left: 2,
+    right: 2,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   orderButtonText: {
     color: theme.colors.white,
@@ -606,8 +797,11 @@ const styles = StyleSheet.create({
   },
   ratingTopRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: 6,
+  },
+  ratingIcon: {
+    marginBottom: 1,
   },
   ratingValueInline: {
     color: theme.colors.accent,

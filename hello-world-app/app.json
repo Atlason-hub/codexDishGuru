@@ -15,6 +15,7 @@
       }
     },
     "android": {
+      "package": "com.atlas.dishguru",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -46,6 +47,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "203870bf-82dc-4143-96fa-9e2567761272"
+      }
     }
   }
 }

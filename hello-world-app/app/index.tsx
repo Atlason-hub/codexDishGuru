@@ -52,6 +52,7 @@ export default function HomeScreen() {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [homeSearch, setHomeSearch] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -578,12 +579,15 @@ export default function HomeScreen() {
           return true;
         })
       : dishAssociations;
-  const hasHeaderContent = showFavoritesOnly || showRestaurantOnly || loading || Boolean(error);
-  const listHeader = hasHeaderContent ? (
-    <>
+  const hasHeaderContent = true;
+  const listHeader = (
+    <View style={styles.listHeader}>
       {showRestaurantOnly && (
         <View style={styles.favoritesHeader}>
-          <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+          >
             <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
           </Pressable>
           <Text style={styles.favoritesHeaderText}>
@@ -593,7 +597,10 @@ export default function HomeScreen() {
       )}
       {showFavoritesOnly && (
         <View style={styles.favoritesHeader}>
-          <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+          >
             <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
           </Pressable>
           <Text style={styles.favoritesHeaderText}>המועדפים שלי</Text>
@@ -608,20 +615,52 @@ export default function HomeScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-    </>
-  ) : null;
+      <View style={styles.homeSearchBox}>
+        <Ionicons name="search" size={18} color={theme.colors.textMuted} />
+        <TextInput
+          style={styles.homeSearchInput}
+          placeholder="חיפוש מנות או מסעדות"
+          placeholderTextColor={theme.colors.textMuted}
+          value={homeSearch}
+          onChangeText={setHomeSearch}
+          textAlign="right"
+        />
+        {homeSearch.trim().length > 0 ? (
+          <Pressable
+            style={styles.homeSearchClear}
+            onPress={() => setHomeSearch('')}
+            hitSlop={6}
+          >
+            <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
 
   const groupedAssociations = useMemo(() => {
+    const needle = homeSearch.trim().toLowerCase();
+    const filtered = needle
+      ? visibleAssociations.filter((item) => {
+          const dishName = (item.dish_name ?? '').toLowerCase();
+          const restName = (item.restaurant_name ?? '').toLowerCase();
+          return dishName.includes(needle) || restName.includes(needle);
+        })
+      : visibleAssociations;
     const groups = new Map<string, DishAssociation[]>();
-    visibleAssociations.forEach((item) => {
-      const dishKey =
-        item.dish_id !== null
+    filtered.forEach((item) => {
+      const normalizedDish = (item.dish_name ?? '').trim().toLowerCase();
+      const normalizedRest = (item.restaurant_name ?? '').trim().toLowerCase();
+      const dishKey = normalizedDish
+        ? `dishName:${normalizedDish}`
+        : item.dish_id !== null
           ? `dish:${item.dish_id}`
-          : `dishName:${item.dish_name ?? ''}`;
-      const restKey =
-        item.restaurant_id !== null
+          : 'dish:unknown';
+      const restKey = normalizedRest
+        ? `restName:${normalizedRest}`
+        : item.restaurant_id !== null
           ? `rest:${item.restaurant_id}`
-          : `restName:${item.restaurant_name ?? ''}`;
+          : 'rest:unknown';
       const key = `${dishKey}|${restKey}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(item);
@@ -641,7 +680,7 @@ export default function HomeScreen() {
         restaurantId: items[0]?.restaurant_id ?? null,
       };
     });
-  }, [visibleAssociations]);
+  }, [homeSearch, visibleAssociations]);
 
   return (
     <SafeAreaView
@@ -723,7 +762,14 @@ export default function HomeScreen() {
             {authError && <Text style={styles.errorText}>{authError}</Text>}
             {showSignup ? (
               <>
-                <Pressable style={styles.loginButton} onPress={signUp} disabled={authLoading}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.loginButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={signUp}
+                  disabled={authLoading}
+                >
                   {authLoading ? (
                     <ActivityIndicator />
                   ) : (
@@ -731,7 +777,10 @@ export default function HomeScreen() {
                   )}
                 </Pressable>
                 <Pressable
-                  style={styles.signupButton}
+                  style={({ pressed }) => [
+                    styles.signupButton,
+                    pressed && styles.buttonPressed,
+                  ]}
                   onPress={() => {
                     setShowSignup(false);
                     setAuthError(null);
@@ -743,7 +792,14 @@ export default function HomeScreen() {
               </>
             ) : (
               <>
-                <Pressable style={styles.loginButton} onPress={signIn} disabled={authLoading}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.loginButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={signIn}
+                  disabled={authLoading}
+                >
                   {authLoading ? (
                     <ActivityIndicator />
                   ) : (
@@ -751,7 +807,10 @@ export default function HomeScreen() {
                   )}
                 </Pressable>
                 <Pressable
-                  style={styles.signupButton}
+                  style={({ pressed }) => [
+                    styles.signupButton,
+                    pressed && styles.buttonPressed,
+                  ]}
                   onPress={() => {
                     setShowSignup(true);
                     setAuthError(null);
@@ -1130,6 +1189,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  buttonPressed: {
+    transform: [{ scale: 0.98 }],
+  },
   listContent: {
     paddingBottom: 160,
     gap: 10,
@@ -1140,6 +1202,34 @@ const styles = StyleSheet.create({
   },
   feedContentNoHeader: {
     paddingTop: 16,
+  },
+  listHeader: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  homeSearchBox: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+  },
+  homeSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.text,
+  },
+  homeSearchClear: {
+    height: 28,
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   favoritesHeader: {
     flexDirection: 'row',

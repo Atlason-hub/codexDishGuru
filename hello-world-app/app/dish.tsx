@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -61,6 +61,14 @@ export default function DishScreen() {
     tasty: number;
     filling: number;
   } | null>(null);
+
+  const sortedAssociations = useMemo(() => {
+    return [...dishAssociations].sort((a, b) => {
+      const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bDate - aDate;
+    });
+  }, [dishAssociations]);
 
   const loadFavorites = async (userId: string) => {
     try {
@@ -330,7 +338,10 @@ export default function DishScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        >
           <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <View style={styles.headerTextWrap}>
@@ -368,63 +379,62 @@ export default function DishScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-      <FlatList
-        data={dishAssociations}
-        keyExtractor={(item) => item.id}
-        initialNumToRender={4}
-        maxToRenderPerBatch={4}
-        updateCellsBatchingPeriod={50}
-        windowSize={7}
-        removeClippedSubviews
-        contentContainerStyle={styles.feedContent}
-        ListEmptyComponent={
-          !loading && !error && hasLoaded ? (
-            <View style={styles.results}>
-              <Text style={styles.placeholderText}>אין מנות להצגה</Text>
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <DishCard
-            items={[item]}
-            favorites={favorites}
-            currentUserId={currentUserId}
-            avatarUrl={avatarUrl}
-            userAvatars={userAvatars}
-            userLabels={{}}
-            showReview
-            onToggleFavorite={(id) => toggleFavorite(id)}
-            onOpenPhoto={(dish) => setFullScreenImage(dish.image_url ?? null)}
-            onOpenRestaurant={(dish) =>
-              router.push({
-                pathname: '/restaurant',
-                params: {
-                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                  restaurantName: dish.restaurant_name ?? '',
-                },
-              })
-            }
-            onOpenCamera={(dish) =>
-              router.push({
-                pathname: '/camera',
-                params: {
-                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                  restaurantName: dish.restaurant_name ?? '',
-                  dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
-                  dishName: dish.dish_name ?? '',
-                },
-              })
-            }
-            onDelete={(dish) => deleteDishAssociation(dish)}
-            onEdit={(dish) =>
-              router.push({
-                pathname: '/edit-dish',
-                params: { id: dish.id, returnTo: 'dish' },
-              })
-            }
-          />
-        )}
-      />
+      {sortedAssociations.length > 0 ? (
+        <FlatList
+          data={sortedAssociations}
+          keyExtractor={(item) => item.id}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+          removeClippedSubviews
+          contentContainerStyle={styles.feedContent}
+          renderItem={({ item }) => (
+            <DishCard
+              items={[item]}
+              favorites={favorites}
+              currentUserId={currentUserId}
+              avatarUrl={avatarUrl}
+              userAvatars={userAvatars}
+              userLabels={{}}
+              showReview
+              onToggleFavorite={(id) => toggleFavorite(id)}
+              onOpenPhoto={(dish) => setFullScreenImage(dish.image_url ?? null)}
+              onOpenRestaurant={(dish) =>
+                router.push({
+                  pathname: '/restaurant',
+                  params: {
+                    restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+                    restaurantName: dish.restaurant_name ?? '',
+                  },
+                })
+              }
+              onOpenCamera={(dish) =>
+                router.push({
+                  pathname: '/camera',
+                  params: {
+                    restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+                    restaurantName: dish.restaurant_name ?? '',
+                    dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
+                    dishName: dish.dish_name ?? '',
+                  },
+                })
+              }
+              onDelete={(dish) => deleteDishAssociation(dish)}
+              onEdit={(dish) =>
+                router.push({
+                  pathname: '/edit-dish',
+                  params: { id: dish.id, returnTo: 'dish' },
+                })
+              }
+            />
+          )}
+        />
+      ) : !loading && !error && hasLoaded ? (
+        <View style={styles.results}>
+          <Text style={styles.placeholderText}>אין מנות להצגה</Text>
+        </View>
+      ) : null}
       <Modal
         visible={Boolean(fullScreenImage)}
         transparent

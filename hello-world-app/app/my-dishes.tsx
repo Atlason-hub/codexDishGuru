@@ -36,12 +36,11 @@ export default function MyDishesScreen() {
   const groupedMyDishes = useMemo(() => {
     const map = new Map<string, DishAssociation[]>();
     dishAssociations.forEach((item) => {
-      const key = [
-        item.dish_id ?? 'none',
-        item.restaurant_id ?? 'none',
-        item.dish_name ?? '',
-        item.restaurant_name ?? '',
-      ].join('::');
+      const normalizedDish = (item.dish_name ?? '').trim().toLowerCase();
+      const normalizedRest = (item.restaurant_name ?? '').trim().toLowerCase();
+      const dishKey = normalizedDish ? `dishName:${normalizedDish}` : `dish:${item.dish_id ?? 'none'}`;
+      const restKey = normalizedRest ? `restName:${normalizedRest}` : `rest:${item.restaurant_id ?? 'none'}`;
+      const key = `${dishKey}::${restKey}`;
       const list = map.get(key) ?? [];
       list.push(item);
       list.sort((a, b) => {
