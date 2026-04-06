@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   },
   menuOverlay: {
     position: 'absolute',
-    top: 12,
+    top: Platform.OS === 'ios' ? 38 : 12,
     right: 16,
     width: 220,
     zIndex: 20,
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   menuOptionRow: {
-    paddingVertical: 10,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',

@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -55,7 +56,7 @@ const isInsideLayout = (layout: Rect | undefined, x: number, y: number) => {
   return x >= layout.x && x <= layout.x + layout.width && y >= layout.y && y <= layout.y + layout.height;
 };
 
-export default function DishCard({
+function DishCard({
   items,
   favorites = {},
   currentUserId,
@@ -277,7 +278,7 @@ export default function DishCard({
                   }
                 }}
               >
-                <Ionicons name="camera" size={18} color={theme.colors.textMuted} />
+                <Ionicons name="camera" size={18} color={theme.colors.accent} />
               </Pressable>
             </Animated.View>
             <Animated.View style={[styles.heartBadge, { transform: [{ scale: heartScale }] }]}>
@@ -300,11 +301,7 @@ export default function DishCard({
                 <Ionicons
                   name={currentItem?.id && favorites[currentItem.id] ? 'heart' : 'heart-outline'}
                   size={18}
-                  color={
-                    currentItem?.id && favorites[currentItem.id]
-                      ? theme.colors.accent
-                      : theme.colors.textMuted
-                  }
+                  color={theme.colors.accent}
                 />
               </Pressable>
             </Animated.View>
@@ -322,7 +319,27 @@ export default function DishCard({
                     bouncePress(editScale);
                   }}
                 >
-                  <Ionicons name="create-outline" size={18} color={theme.colors.textMuted} />
+                  <Ionicons name="create-outline" size={18} color={theme.colors.accent} />
+                </Pressable>
+              </Animated.View>
+            ) : null}
+            {currentItem?.user_id && currentItem.user_id === currentUserId ? (
+              <Animated.View style={[styles.trashBadge, { transform: [{ scale: trashScale }] }]}>
+                <Pressable
+                  style={styles.badgePressable}
+                  hitSlop={8}
+                  onLayout={(event) => {
+                    const { x, y, width, height } = event.nativeEvent.layout;
+                    setButtonLayouts((prev) => ({ ...prev, trash: { x, y, width, height } }));
+                  }}
+                  onPress={() => {
+                    if (currentItem) {
+                      onDelete?.(currentItem);
+                      bouncePress(trashScale);
+                    }
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={16} color={theme.colors.white} />
                 </Pressable>
               </Animated.View>
             ) : null}
@@ -352,26 +369,6 @@ export default function DishCard({
               )}
             </Pressable>
           </Animated.View>
-          {currentItem?.user_id && currentItem.user_id === currentUserId ? (
-            <Animated.View style={[styles.trashBadge, { transform: [{ scale: trashScale }] }]}>
-              <Pressable
-                style={styles.badgePressable}
-                hitSlop={8}
-                onLayout={(event) => {
-                  const { x, y, width, height } = event.nativeEvent.layout;
-                  setButtonLayouts((prev) => ({ ...prev, trash: { x, y, width, height } }));
-                }}
-                onPress={() => {
-                  if (currentItem) {
-                    onDelete?.(currentItem);
-                    bouncePress(trashScale);
-                  }
-                }}
-              >
-                <Ionicons name="trash-outline" size={16} color={theme.colors.white} />
-              </Pressable>
-            </Animated.View>
-          ) : null}
           <View style={styles.imageTextBlock}>
             <Pressable onPress={() => currentItem && onOpenDish?.(currentItem)}>
               <Text style={styles.imageDishText} numberOfLines={2} ellipsizeMode="tail">
@@ -416,9 +413,37 @@ export default function DishCard({
           <Text style={styles.reviewText}>{reviewValue}</Text>
         </View>
       ) : null}
-      <View style={styles.ratingRow}>
-        <View style={styles.ratingItem}>
-          <View style={styles.ratingTopRow}>
+      <View style={[styles.ratingRow, Platform.OS === 'ios' && styles.ratingRowIos]}>
+        <Animated.View style={{ transform: [{ scale: orderScale }] }}>
+          <Pressable
+            style={styles.orderButton}
+            onLayout={(event) => {
+              const { x, y, width, height } = event.nativeEvent.layout;
+              setButtonLayouts((prev) => ({ ...prev, order: { x, y, width, height } }));
+            }}
+            onPressIn={() =>
+              Animated.timing(orderScale, {
+                toValue: 0.96,
+                duration: 80,
+                useNativeDriver: true,
+              }).start()
+            }
+            onPressOut={() =>
+              Animated.timing(orderScale, {
+                toValue: 1,
+                duration: 120,
+                useNativeDriver: true,
+              }).start()
+            }
+          >
+            <View pointerEvents="none" style={styles.orderButtonHighlight} />
+            <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
+            <Text style={styles.orderButtonText}>הזמן</Text>
+          </Pressable>
+        </Animated.View>
+        <View style={styles.ratingGroup}>
+          <View style={styles.ratingItem}>
+            <View style={styles.ratingTopRow}>
             <Animated.Text
               style={[
                 styles.ratingValueInline,
@@ -475,37 +500,81 @@ export default function DishCard({
           </View>
           <Text style={styles.ratingLabelInline}>טעים</Text>
         </View>
-        <Animated.View style={{ transform: [{ scale: orderScale }] }}>
-          <Pressable
-            style={styles.orderButton}
-            onLayout={(event) => {
-              const { x, y, width, height } = event.nativeEvent.layout;
-              setButtonLayouts((prev) => ({ ...prev, order: { x, y, width, height } }));
-            }}
-            onPressIn={() =>
-              Animated.timing(orderScale, {
-                toValue: 0.96,
-                duration: 80,
-                useNativeDriver: true,
-              }).start()
-            }
-            onPressOut={() =>
-              Animated.timing(orderScale, {
-                toValue: 1,
-                duration: 120,
-                useNativeDriver: true,
-              }).start()
-            }
-          >
-            <View pointerEvents="none" style={styles.orderButtonHighlight} />
-            <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
-            <Text style={styles.orderButtonText}>הזמן</Text>
-          </Pressable>
-        </Animated.View>
+        </View>
       </View>
     </View>
   );
 }
+
+const itemsEqual = (a: DishCardItem[], b: DishCardItem[]) => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (
+      left.id !== right.id ||
+      left.image_url !== right.image_url ||
+      left.dish_name !== right.dish_name ||
+      left.restaurant_name !== right.restaurant_name ||
+      left.tasty_score !== right.tasty_score ||
+      left.filling_score !== right.filling_score ||
+      left.created_at !== right.created_at ||
+      left.review_text !== right.review_text ||
+      left.user_id !== right.user_id ||
+      left.dish_id !== right.dish_id ||
+      left.restaurant_id !== right.restaurant_id
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const favoritesEqual = (
+  a: Record<string, boolean> | undefined,
+  b: Record<string, boolean> | undefined,
+  items: DishCardItem[]
+) => {
+  if (a === b) return true;
+  for (const item of items) {
+    const id = item.id;
+    if (Boolean(a?.[id]) !== Boolean(b?.[id])) return false;
+  }
+  return true;
+};
+
+const mapsEqualForUsers = (
+  a: Record<string, string> | undefined,
+  b: Record<string, string> | undefined,
+  items: DishCardItem[]
+) => {
+  if (a === b) return true;
+  const ids = new Set(items.map((item) => item.user_id).filter(Boolean) as string[]);
+  for (const id of ids) {
+    if ((a?.[id] ?? null) !== (b?.[id] ?? null)) return false;
+  }
+  return true;
+};
+
+export default React.memo(DishCard, (prev, next) => {
+  if (!itemsEqual(prev.items, next.items)) return false;
+  if (!favoritesEqual(prev.favorites, next.favorites, next.items)) return false;
+  if (prev.currentUserId !== next.currentUserId) return false;
+  if (prev.avatarUrl !== next.avatarUrl) return false;
+  if (prev.showReview !== next.showReview) return false;
+  if (!mapsEqualForUsers(prev.userAvatars, next.userAvatars, next.items)) return false;
+  if (!mapsEqualForUsers(prev.userLabels, next.userLabels, next.items)) return false;
+  if (prev.onAvatarPress !== next.onAvatarPress) return false;
+  if (prev.onToggleFavorite !== next.onToggleFavorite) return false;
+  if (prev.onOpenPhoto !== next.onOpenPhoto) return false;
+  if (prev.onOpenDish !== next.onOpenDish) return false;
+  if (prev.onOpenRestaurant !== next.onOpenRestaurant) return false;
+  if (prev.onOpenCamera !== next.onOpenCamera) return false;
+  if (prev.onEdit !== next.onEdit) return false;
+  if (prev.onDelete !== next.onDelete) return false;
+  return true;
+});
 
 const styles = StyleSheet.create({
   feedCard: {
@@ -582,7 +651,7 @@ const styles = StyleSheet.create({
     top: 54,
     left: 12,
     width: 36,
-    height: 176,
+    height: 220,
     justifyContent: 'flex-start',
     alignItems: 'center',
     zIndex: 6,
@@ -595,7 +664,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
@@ -620,7 +689,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
@@ -638,7 +707,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
@@ -688,15 +757,14 @@ const styles = StyleSheet.create({
   },
   trashBadge: {
     position: 'absolute',
-    right: 16,
-    bottom: 54,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: 162,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 7,
+    zIndex: 6,
     shadowColor: theme.colors.ink,
     shadowOpacity: 0.2,
     shadowRadius: 6,
@@ -728,14 +796,23 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   ratingRow: {
-    flexDirection: 'row-reverse',
-    gap: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingTop: 10,
     paddingBottom: 6,
     alignSelf: 'flex-end',
-    justifyContent: 'flex-end',
-    paddingRight: 18,
+    width: '100%',
+    paddingRight: Platform.OS === 'ios' ? 18 : 12,
+    paddingLeft: Platform.OS === 'ios' ? 18 : 12,
     alignItems: 'center',
+  },
+  ratingRowIos: {
+    width: '100%',
+  },
+  ratingGroup: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
   },
   orderButton: {
     height: 38,
@@ -794,6 +871,7 @@ const styles = StyleSheet.create({
     flex: 0,
     minWidth: 72,
     alignItems: 'flex-end',
+    marginRight: 0,
   },
   ratingTopRow: {
     flexDirection: 'row-reverse',

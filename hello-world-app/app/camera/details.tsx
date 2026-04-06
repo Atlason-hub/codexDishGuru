@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   LayoutAnimation,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -158,11 +161,9 @@ const buildDropdownRows = (
 
 const mapRestaurantsToCategories = (restaurants: Restaurant[]): RestaurantCategory[] => {
   const categoryMap = new Map<string, RestaurantCategory>();
-  const order: string[] = [];
   const getBucket = (key: string, name: string) => {
     if (!categoryMap.has(key)) {
       categoryMap.set(key, { id: key, name, items: [] });
-      order.push(key);
     }
     return categoryMap.get(key)!;
   };
@@ -180,7 +181,15 @@ const mapRestaurantsToCategories = (restaurants: Restaurant[]): RestaurantCatego
     }
   });
 
-  return order.map((key) => categoryMap.get(key)!).filter((cat) => cat.items.length > 0);
+  return Array.from(categoryMap.values())
+    .map((cat) => ({
+      ...cat,
+      items: [...cat.items].sort((a, b) =>
+        a.RestaurantName.localeCompare(b.RestaurantName)
+      ),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter((cat) => cat.items.length > 0);
 };
 
 const getPrimaryCuisine = (cuisineList?: string | null) => {
@@ -215,6 +224,7 @@ const buildRestaurantRows = (
 export default function CameraDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const scrollRef = useRef<ScrollView | null>(null);
   const photoUri = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
   const photoBase64 = typeof params.photoBase64 === 'string' ? params.photoBase64 : '';
   const presetRestaurantId =
@@ -255,6 +265,13 @@ export default function CameraDetailsScreen() {
   const [fillingScore, setFillingScore] = useState(50);
   const [reviewText, setReviewText] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -364,8 +381,9 @@ export default function CameraDetailsScreen() {
           }))
         : [];
       setRestaurants(list);
-      setRestaurantCategories(mapRestaurantsToCategories(list));
-      setCollapsedRestaurantCategories(new Set());
+      const categories = mapRestaurantsToCategories(list);
+      setRestaurantCategories(categories);
+      setCollapsedRestaurantCategories(new Set(categories.map((cat) => cat.id)));
     } catch (err) {
       console.error(err);
     } finally {
@@ -374,8 +392,18 @@ export default function CameraDetailsScreen() {
   };
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.body}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+    >
+      <ScrollView
+        ref={scrollRef}
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pressable onPress={Keyboard.dismiss}>
         <View style={styles.headerRow}>
           <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
             <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
@@ -421,6 +449,7 @@ export default function CameraDetailsScreen() {
           textAlign="right"
           value={reviewText}
           onChangeText={setReviewText}
+          onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
         />
 
         <View style={styles.dropdownContainer}>
@@ -458,21 +487,19 @@ export default function CameraDetailsScreen() {
               {restaurants.length === 0 ? (
                 <Text style={styles.dropdownEmpty}>לא נמצאו מסעדות</Text>
               ) : (
-                <FlatList
-                  data={buildRestaurantRows(
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  contentContainerStyle={styles.dropdownScroll}
+                >
+                  {buildRestaurantRows(
                     restaurantCategories,
                     search,
                     collapsedRestaurantCategories
-                  )}
-                  keyExtractor={(item) => item.id}
-                  initialNumToRender={16}
-                  maxToRenderPerBatch={16}
-                  updateCellsBatchingPeriod={50}
-                  windowSize={6}
-                  removeClippedSubviews
-                  renderItem={({ item }) =>
+                  ).map((item) =>
                     item.type === 'header' ? (
                       <Pressable
+                        key={item.id}
                         style={styles.categoryHeader}
                         onPress={() =>
                           setCollapsedRestaurantCategories((prev) => {
@@ -505,7 +532,8 @@ export default function CameraDetailsScreen() {
                       </Pressable>
                     ) : (
                       <Pressable
-                        style={styles.searchResultCard}
+                        key={item.id}
+                        style={styles.dropdownItem}
                         onPress={() => {
                           setSelectedName(item.item.RestaurantName);
                           setSelectedRestaurantId(item.item.RestaurantId);
@@ -515,29 +543,11 @@ export default function CameraDetailsScreen() {
                           setDropdownOpen(false);
                         }}
                       >
-                        <View style={styles.searchResultInfo}>
-                          <Text style={styles.searchResultTitle}>
-                            {item.item.RestaurantName}
-                          </Text>
-                          {item.item.RestaurantCuisineList ? (
-                            <Text style={styles.searchResultSubtitle}>
-                              {getPrimaryCuisine(item.item.RestaurantCuisineList)}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <View style={styles.searchResultImageWrap}>
-                          <View style={styles.searchResultPlaceholder}>
-                            <Ionicons
-                              name="restaurant-outline"
-                              size={18}
-                              color={theme.colors.textMuted}
-                            />
-                          </View>
-                        </View>
+                        <Text style={styles.dropdownItemText}>{item.item.RestaurantName}</Text>
                       </Pressable>
                     )
-                  }
-                />
+                  )}
+                </ScrollView>
               )}
             </View>
           )}
@@ -585,78 +595,60 @@ export default function CameraDetailsScreen() {
               ) : dishCategories.length === 0 ? (
                 <Text style={styles.dropdownEmpty}>לא נמצאו מנות</Text>
               ) : (
-                <FlatList
-                  data={buildDropdownRows(dishCategories, dishSearch, collapsedDishCategories)}
-                  keyExtractor={(item) => item.id}
-                  initialNumToRender={16}
-                  maxToRenderPerBatch={16}
-                  updateCellsBatchingPeriod={50}
-                  windowSize={6}
-                  removeClippedSubviews
-                  renderItem={({ item }) =>
-                    item.type === 'header' ? (
-                      <Pressable
-                        style={styles.categoryHeader}
-                        onPress={() =>
-                          setCollapsedDishCategories((prev) => {
-                            LayoutAnimation.configureNext(
-                              LayoutAnimation.Presets.easeInEaseOut
-                            );
-                            const next = new Set(prev);
-                            const key = item.id.replace('header-', '');
-                            if (next.has(key)) {
-                              next.delete(key);
-                            } else {
-                              next.add(key);
-                            }
-                            return next;
-                          })
-                        }
-                      >
-                        <Text style={styles.categoryHeaderText}>{item.name}</Text>
-                        <View style={styles.categoryChevronCircle}>
-                          <Ionicons
-                            name={
-                              collapsedDishCategories.has(item.id.replace('header-', ''))
-                                ? 'chevron-down'
-                                : 'chevron-up'
-                            }
-                            size={14}
-                            color={theme.colors.textMuted}
-                          />
-                        </View>
-                      </Pressable>
-                    ) : (
-                      <Pressable
-                        style={styles.searchResultCard}
-                        onPress={() => {
-                          setSelectedDish(item.item);
-                          setDishDropdownOpen(false);
-                        }}
-                      >
-                        <View style={styles.searchResultInfo}>
-                          <Text style={styles.searchResultTitle}>{item.item.name}</Text>
-                          <Text style={styles.searchResultSubtitle}>
-                            {selectedName ?? 'מסעדה'}
-                          </Text>
-                        </View>
-                        <View style={styles.searchResultImageWrap}>
-                          <View style={styles.searchResultPlaceholder}>
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  contentContainerStyle={styles.dropdownScroll}
+                >
+                  {buildDropdownRows(dishCategories, dishSearch, collapsedDishCategories).map(
+                    (item) =>
+                      item.type === 'header' ? (
+                        <Pressable
+                          key={item.id}
+                          style={styles.categoryHeader}
+                          onPress={() =>
+                            setCollapsedDishCategories((prev) => {
+                              LayoutAnimation.configureNext(
+                                LayoutAnimation.Presets.easeInEaseOut
+                              );
+                              const next = new Set(prev);
+                              const key = item.id.replace('header-', '');
+                              if (next.has(key)) {
+                                next.delete(key);
+                              } else {
+                                next.add(key);
+                              }
+                              return next;
+                            })
+                          }
+                        >
+                          <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                          <View style={styles.categoryChevronCircle}>
                             <Ionicons
-                              name="fast-food-outline"
-                              size={18}
+                              name={
+                                collapsedDishCategories.has(item.id.replace('header-', ''))
+                                  ? 'chevron-down'
+                                  : 'chevron-up'
+                              }
+                              size={14}
                               color={theme.colors.textMuted}
                             />
-                            <View style={styles.searchResultOverlay}>
-                              <Ionicons name="camera" size={10} color="#ffffff" />
-                              <Text style={styles.searchResultOverlayText}>צלם מנה</Text>
-                            </View>
                           </View>
-                        </View>
-                      </Pressable>
-                    )
-                  }
-                />
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          key={item.id}
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            setSelectedDish(item.item);
+                            setDishDropdownOpen(false);
+                          }}
+                        >
+                          <Text style={styles.dropdownItemText}>{item.item.name}</Text>
+                        </Pressable>
+                      )
+                  )}
+                </ScrollView>
               )}
             </View>
           )}
@@ -786,8 +778,9 @@ export default function CameraDetailsScreen() {
             <Text style={styles.saveButtonText}>שמור</Text>
           )}
         </Pressable>
-      </View>
-    </View>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -801,6 +794,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 24,
     gap: 12,
+  },
+  bodyContent: {
+    paddingBottom: Platform.OS === 'android' ? 48 : 24,
+  },
+  scrollHint: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+    marginTop: 4,
+  },
+  scrollHintText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
   },
   headerRow: {
     width: '100%',
@@ -895,6 +906,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     paddingVertical: 6,
     marginTop: 6,
+    marginBottom: 20,
   },
   dropdownContainer: {
     width: '100%',
@@ -926,6 +938,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     maxHeight: 220,
     backgroundColor: theme.colors.card,
+  },
+  dropdownScroll: {
+    paddingBottom: 6,
   },
   searchRow: {
     flexDirection: 'row',
@@ -1055,7 +1070,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ratingHeader: {
-    marginTop: 6,
+    marginTop: 28,
     fontSize: 16,
     color: theme.colors.text,
     textAlign: 'right',
@@ -1065,6 +1080,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginBottom: 12,
   },
   slider: {
     flex: 1,
@@ -1111,3 +1127,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+        <Pressable
+          style={styles.scrollHint}
+          onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        >
+          <Text style={styles.scrollHintText}>גלול לשמירה</Text>
+        </Pressable>

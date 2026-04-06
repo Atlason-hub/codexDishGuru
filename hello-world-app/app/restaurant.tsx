@@ -1,18 +1,21 @@
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
+import { useFocusEffect } from '@react-navigation/native';
 
 type DishAssociation = {
   id: string;
@@ -183,88 +186,113 @@ export default function RestaurantScreen() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
     () => new Set()
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const appStateRef = useRef(AppState.currentState);
 
-  useEffect(() => {
+  const loadRestaurantData = useCallback(async () => {
     if (!restaurantId) {
       setError('חסרה מסעדה');
       setSummaries([]);
+      setMenuCategories([]);
+      setHasLoaded(true);
       return;
     }
-    let mounted = true;
-    const load = async () => {
-      try {
-        setHasLoaded(false);
-        setLoading(true);
-        setError(null);
-        const menuResponse = await fetch(
-          `https://www.10bis.co.il/api/GetMenu?ResId=${restaurantId}&websiteID=10bis&domainID=10bis`,
-          { headers: { Accept: 'application/json' } }
-        );
-        if (!menuResponse.ok) throw new Error(`Request failed: ${menuResponse.status}`);
-        const menuText = await menuResponse.text();
-        const menuData = JSON.parse(menuText);
-        const curatedMenu = mapMenuToCategories(menuData);
-        setMenuCategories(curatedMenu);
-        setCollapsedCategories(new Set());
+    try {
+      setHasLoaded(false);
+      setLoading(true);
+      setError(null);
+      const menuResponse = await fetch(
+        `https://www.10bis.co.il/api/GetMenu?ResId=${restaurantId}&websiteID=10bis&domainID=10bis`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!menuResponse.ok) throw new Error(`Request failed: ${menuResponse.status}`);
+      const menuText = await menuResponse.text();
+      const menuData = JSON.parse(menuText);
+      const curatedMenu = mapMenuToCategories(menuData);
+      setMenuCategories(curatedMenu);
+      setCollapsedCategories(new Set());
 
-        const { data, error: fetchError } = await supabase
-          .from('dish_associations')
-          .select(
-            'id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at'
-          )
-          .eq('restaurant_id', restaurantId)
-          .order('created_at', { ascending: false });
-        if (fetchError) throw fetchError;
-        const list = (data as DishAssociation[]) ?? [];
-        const map = new Map<string, DishSummary & { count: number }>();
+      const { data, error: fetchError } = await supabase
+        .from('dish_associations')
+        .select(
+          'id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at'
+        )
+        .eq('restaurant_id', restaurantId)
+        .order('created_at', { ascending: false });
+      if (fetchError) throw fetchError;
+      const list = (data as DishAssociation[]) ?? [];
+      const map = new Map<string, DishSummary & { count: number }>();
 
-        list.forEach((row) => {
-          const name = row.dish_name ?? 'מנה';
-          const key = row.dish_id !== null ? String(row.dish_id) : name;
-          if (!map.has(key)) {
-            map.set(key, {
-              key,
-              name,
-              imageUrl: row.image_url ?? null,
-              avgTasty: 0,
-              avgFilling: 0,
-              cuisine: row.cuisine ?? 'ללא מטבח',
-              count: 0,
-            });
-          }
-          const entry = map.get(key)!;
-          if (!entry.imageUrl && row.image_url) {
-            entry.imageUrl = row.image_url;
-          }
-          if (typeof row.tasty_score === 'number') entry.avgTasty += row.tasty_score;
-          if (typeof row.filling_score === 'number') entry.avgFilling += row.filling_score;
-          entry.count += 1;
-        });
-
-        const result: DishSummary[] = Array.from(map.values()).map((entry) => ({
-          key: entry.key,
-          name: entry.name,
-          imageUrl: entry.imageUrl,
-          avgTasty: entry.count ? entry.avgTasty / entry.count : 0,
-          avgFilling: entry.count ? entry.avgFilling / entry.count : 0,
-          cuisine: entry.cuisine,
-        }));
-
-        if (mounted) setSummaries(result);
-      } catch (err) {
-        if (mounted) setError('אירעה שגיאה. נסה שוב.');
-      } finally {
-        if (mounted) {
-          setLoading(false);
-          setHasLoaded(true);
+      list.forEach((row) => {
+        const name = row.dish_name ?? 'מנה';
+        const key = row.dish_id !== null ? String(row.dish_id) : name;
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            name,
+            imageUrl: row.image_url ?? null,
+            avgTasty: 0,
+            avgFilling: 0,
+            cuisine: row.cuisine ?? 'ללא מטבח',
+            count: 0,
+          });
         }
-      }
-    };
-    load();
-    return () => {
-      mounted = false;
-    };
+        const entry = map.get(key)!;
+        if (!entry.imageUrl && row.image_url) {
+          entry.imageUrl = row.image_url;
+        }
+        if (typeof row.tasty_score === 'number') entry.avgTasty += row.tasty_score;
+        if (typeof row.filling_score === 'number') entry.avgFilling += row.filling_score;
+        entry.count += 1;
+      });
+
+      const result: DishSummary[] = Array.from(map.values()).map((entry) => ({
+        key: entry.key,
+        name: entry.name,
+        imageUrl: entry.imageUrl,
+        avgTasty: entry.count ? entry.avgTasty / entry.count : 0,
+        avgFilling: entry.count ? entry.avgFilling / entry.count : 0,
+        cuisine: entry.cuisine,
+      }));
+
+      setSummaries(result);
+    } catch (err) {
+      setError('אירעה שגיאה. נסה שוב.');
+    } finally {
+      setLoading(false);
+      setHasLoaded(true);
+    }
   }, [restaurantId]);
+
+  useEffect(() => {
+    loadRestaurantData();
+  }, [loadRestaurantData]);
+
+  const refreshContent = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await loadRestaurantData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadRestaurantData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshContent();
+    }, [refreshContent])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const wasInactive = /inactive|background/.test(appStateRef.current);
+      if (wasInactive && nextState === 'active') {
+        refreshContent();
+      }
+      appStateRef.current = nextState;
+    });
+    return () => subscription.remove();
+  }, [refreshContent]);
 
   const rows = useMemo(
     () => buildRowsFromMenu(menuCategories, summaries, collapsedCategories),
@@ -300,7 +328,7 @@ export default function RestaurantScreen() {
         </View>
       ) : null}
 
-      {loading ? (
+      {loading && !isRefreshing ? (
         <View style={styles.results}>
           <ActivityIndicator size="large" />
         </View>
@@ -322,6 +350,14 @@ export default function RestaurantScreen() {
           windowSize={7}
           removeClippedSubviews
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={refreshContent}
+              tintColor={theme.colors.accent}
+              colors={[theme.colors.accent]}
+            />
+          }
           renderItem={({ item }) =>
             item.type === 'header' ? (
               <Pressable

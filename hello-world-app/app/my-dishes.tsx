@@ -1,12 +1,25 @@
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
+import CachedLogo from '../components/CachedLogo';
 import { theme } from '../lib/theme';
+import { useFocusEffect } from '@react-navigation/native';
 
 type DishAssociation = {
   id: string;
@@ -23,6 +36,8 @@ type DishAssociation = {
   review_text?: string | null;
 };
 
+const AVATAR_MODAL_SIZE = 220;
+
 export default function MyDishesScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -32,6 +47,11 @@ export default function MyDishesScreen() {
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const appStateRef = useRef(AppState.currentState);
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
 
   const groupedMyDishes = useMemo(() => {
     const map = new Map<string, DishAssociation[]>();
@@ -73,7 +93,7 @@ export default function MyDishesScreen() {
     }
   };
 
-  const toggleFavorite = async (dishAssociationId: string) => {
+  const toggleFavorite = useCallback(async (dishAssociationId: string) => {
     const { data } = await supabase.auth.getSession();
     const userId = data.session?.user?.id;
     if (!userId) return;
@@ -98,9 +118,9 @@ export default function MyDishesScreen() {
     } catch (err) {
       setFavorites((prev) => ({ ...prev, [dishAssociationId]: isFav }));
     }
-  };
+  }, [favorites]);
 
-  const deleteDishAssociation = async (dish: DishAssociation) => {
+  const deleteDishAssociation = useCallback(async (dish: DishAssociation) => {
     Alert.alert('מחיקת מנה', 'האם למחוק את המנה והביקורות שלה?', [
       { text: 'ביטול', style: 'cancel' },
       {
@@ -140,7 +160,7 @@ export default function MyDishesScreen() {
         },
       },
     ]);
-  };
+  }, [currentUserId]);
 
   const loadMyDishes = async (userId: string) => {
     try {
@@ -194,6 +214,132 @@ export default function MyDishesScreen() {
     };
   }, []);
 
+  const refreshContent = useCallback(async () => {
+    if (!currentUserId) return;
+    setIsRefreshing(true);
+    try {
+      await Promise.all([loadFavorites(currentUserId), loadMyDishes(currentUserId)]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [currentUserId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshContent();
+    }, [refreshContent])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const wasInactive = /inactive|background/.test(appStateRef.current);
+      if (wasInactive && nextState === 'active') {
+        refreshContent();
+      }
+      appStateRef.current = nextState;
+    });
+    return () => subscription.remove();
+  }, [refreshContent]);
+
+  const handleAvatarPress = useCallback((url: string | null, label: string | null) => {
+    setAvatarPreviewUrl(url);
+    setAvatarPreviewLabel(label);
+    setAvatarPreviewOpen(true);
+  }, []);
+
+  const handleToggleFavorite = useCallback(
+    (id: string) => {
+      toggleFavorite(id);
+    },
+    [toggleFavorite]
+  );
+
+  const handleOpenDish = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/dish',
+        params: {
+          dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
+          dishName: dish.dish_name ?? '',
+          restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+          restaurantName: dish.restaurant_name ?? '',
+        },
+      });
+    },
+    [router]
+  );
+
+  const handleOpenRestaurant = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/restaurant',
+        params: {
+          restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+          restaurantName: dish.restaurant_name ?? '',
+        },
+      });
+    },
+    [router]
+  );
+
+  const handleOpenCamera = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/camera',
+        params: {
+          restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+          restaurantName: dish.restaurant_name ?? '',
+          dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
+          dishName: dish.dish_name ?? '',
+        },
+      });
+    },
+    [router]
+  );
+
+  const handleEdit = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/edit-dish',
+        params: { id: dish.id, returnTo: 'my' },
+      });
+    },
+    [router]
+  );
+
+  const renderMyDish = useCallback(
+    ({ item }: { item: DishAssociation[] }) => (
+      <DishCard
+        items={item}
+        favorites={favorites}
+        currentUserId={currentUserId}
+        avatarUrl={avatarUrl}
+        userAvatars={{}}
+        userLabels={{}}
+        onAvatarPress={handleAvatarPress}
+        onToggleFavorite={handleToggleFavorite}
+        onOpenPhoto={handleOpenDish}
+        onOpenDish={handleOpenDish}
+        onOpenRestaurant={handleOpenRestaurant}
+        onDelete={deleteDishAssociation}
+        onOpenCamera={handleOpenCamera}
+        onEdit={handleEdit}
+      />
+    ),
+    [
+      avatarUrl,
+      currentUserId,
+      deleteDishAssociation,
+      favorites,
+      handleEdit,
+      handleOpenCamera,
+      handleOpenDish,
+      handleOpenRestaurant,
+      handleToggleFavorite,
+      handleAvatarPress,
+    ]
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
@@ -205,6 +351,14 @@ export default function MyDishesScreen() {
         windowSize={7}
         removeClippedSubviews
         contentContainerStyle={styles.feedContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={refreshContent}
+            tintColor={theme.colors.accent}
+            colors={[theme.colors.accent]}
+          />
+        }
         ListHeaderComponent={
           <View style={styles.headerRow}>
             <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -222,74 +376,62 @@ export default function MyDishesScreen() {
             </View>
           ) : null
         }
-        renderItem={({ item }) => (
-          <DishCard
-            items={item}
-            favorites={favorites}
-            currentUserId={currentUserId}
-            avatarUrl={avatarUrl}
-            userAvatars={{}}
-            userLabels={{}}
-            onToggleFavorite={(id) => toggleFavorite(id)}
-            onOpenPhoto={(dish) =>
-              router.push({
-                pathname: '/dish',
-                params: {
-                  dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
-                  dishName: dish.dish_name ?? '',
-                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                  restaurantName: dish.restaurant_name ?? '',
-                },
-              })
-            }
-            onOpenDish={(dish) =>
-              router.push({
-                pathname: '/dish',
-                params: {
-                  dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
-                  dishName: dish.dish_name ?? '',
-                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                  restaurantName: dish.restaurant_name ?? '',
-                },
-              })
-            }
-            onOpenRestaurant={(dish) =>
-              router.push({
-                pathname: '/restaurant',
-                params: {
-                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                  restaurantName: dish.restaurant_name ?? '',
-                },
-              })
-            }
-            onDelete={(dish) => deleteDishAssociation(dish)}
-            onOpenCamera={(dish) =>
-              router.push({
-                pathname: '/camera',
-                params: {
-                  restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                  restaurantName: dish.restaurant_name ?? '',
-                  dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
-                  dishName: dish.dish_name ?? '',
-                },
-              })
-            }
-            onEdit={(dish) =>
-              router.push({
-                pathname: '/edit-dish',
-                params: { id: dish.id, returnTo: 'my' },
-              })
-            }
-          />
-        )}
+        renderItem={renderMyDish}
         ListFooterComponent={
-          loading ? (
+          loading && !isRefreshing ? (
             <View style={styles.centered}>
               <ActivityIndicator />
             </View>
           ) : null
         }
       />
+      <Modal
+        visible={avatarPreviewOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setAvatarPreviewOpen(false);
+          setAvatarPreviewUrl(null);
+          setAvatarPreviewLabel(null);
+        }}
+      >
+        <View style={styles.avatarModalBackdrop}>
+          <Pressable
+            style={styles.avatarModalOverlay}
+            onPress={() => {
+              setAvatarPreviewOpen(false);
+              setAvatarPreviewUrl(null);
+              setAvatarPreviewLabel(null);
+            }}
+          />
+          <View style={styles.avatarModalWrapper}>
+            <View style={styles.avatarModalCard}>
+              {avatarPreviewUrl ? (
+                <CachedLogo uri={avatarPreviewUrl} style={styles.avatarModalImage} />
+              ) : (
+                <View style={styles.avatarModalPlaceholder}>
+                  <Ionicons name="person" size={64} color={theme.colors.textMuted} />
+                </View>
+              )}
+              {avatarPreviewLabel ? (
+                <View style={styles.avatarEmailPill}>
+                  <Text style={styles.avatarEmailText}>{avatarPreviewLabel}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Pressable
+              style={styles.avatarModalClose}
+              onPress={() => {
+                setAvatarPreviewOpen(false);
+                setAvatarPreviewUrl(null);
+                setAvatarPreviewLabel(null);
+              }}
+            >
+              <Ionicons name="close" size={18} color={theme.colors.ink} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -348,5 +490,80 @@ const styles = StyleSheet.create({
   centered: {
     paddingVertical: 20,
     alignItems: 'center',
+  },
+  avatarModalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  avatarModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  avatarModalWrapper: {
+    width: AVATAR_MODAL_SIZE,
+    height: AVATAR_MODAL_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  avatarModalCard: {
+    width: AVATAR_MODAL_SIZE,
+    height: AVATAR_MODAL_SIZE,
+    borderRadius: AVATAR_MODAL_SIZE / 2,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+  },
+  avatarModalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarModalPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.cardAlt,
+  },
+  avatarModalClose: {
+    position: 'absolute',
+    top: 8,
+    right: -36,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  avatarEmailPill: {
+    position: 'absolute',
+    bottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  avatarEmailText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

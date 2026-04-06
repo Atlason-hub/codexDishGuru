@@ -282,6 +282,8 @@ export default function SearchScreen() {
   const router = useRouter();
   const [restaurantQuery, setRestaurantQuery] = useState('');
   const [dishQuery, setDishQuery] = useState('');
+  const [debouncedRestaurant, setDebouncedRestaurant] = useState('');
+  const [debouncedDish, setDebouncedDish] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<DishAssociation[]>([]);
@@ -305,14 +307,28 @@ export default function SearchScreen() {
   );
   const [apiMenuLoading, setApiMenuLoading] = useState(false);
 
-  const trimmedRestaurant = restaurantQuery.trim();
-  const trimmedDish = dishQuery.trim();
+  const trimmedRestaurant = debouncedRestaurant.trim();
+  const trimmedDish = debouncedDish.trim();
 
   useEffect(() => {
     if (Platform.OS === 'android') {
       UIManager.setLayoutAnimationEnabledExperimental?.(true);
     }
   }, []);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedRestaurant(restaurantQuery);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [restaurantQuery]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedDish(dishQuery);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [dishQuery]);
 
   const restaurantCategories = useMemo(
     () => mapRestaurantsToCategories(restaurantResults),
@@ -634,7 +650,10 @@ export default function SearchScreen() {
         {restaurantQuery.trim().length > 0 ? (
           <Pressable
             style={styles.searchClear}
-            onPress={() => setRestaurantQuery('')}
+            onPress={() => {
+              setRestaurantQuery('');
+              setDebouncedRestaurant('');
+            }}
             hitSlop={6}
           >
             <Ionicons name="close" size={16} color={theme.colors.textMuted} />
@@ -726,7 +745,10 @@ export default function SearchScreen() {
         {dishQuery.trim().length > 0 ? (
           <Pressable
             style={styles.searchClear}
-            onPress={() => setDishQuery('')}
+            onPress={() => {
+              setDishQuery('');
+              setDebouncedDish('');
+            }}
             hitSlop={6}
           >
             <Ionicons name="close" size={16} color={theme.colors.textMuted} />

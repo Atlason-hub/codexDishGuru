@@ -1,10 +1,12 @@
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -12,17 +14,20 @@ import {
 } from 'react-native';
 import CachedLogo from '../components/CachedLogo';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { useRouter } from 'expo-router';
 import { useLocalSearchParams } from 'expo-router';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import { theme } from '../lib/theme';
+import { useFocusEffect } from '@react-navigation/native';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+const AVATAR_MODAL_SIZE = 220;
 
 type DishAssociation = {
   id: string;
@@ -64,7 +69,7 @@ export default function HomeScreen() {
   const [userLabels, setUserLabels] = useState<Record<string, string>>({});
   const avatarIdsKeyRef = useRef<string>('');
   const listRef = useRef<FlatList>(null);
-  const [scrollY, setScrollY] = useState(0);
+  const scrollYRef = useRef(0);
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -74,6 +79,13 @@ export default function HomeScreen() {
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [debouncedHomeSearch, setDebouncedHomeSearch] = useState('');
+  const appStateRef = useRef(AppState.currentState);
+  const cacheHydratedRef = useRef(false);
+  const lastRefreshRef = useRef(0);
+
+  const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v1:${userId ?? 'guest'}`;
 
   const resolveLogoUrl = (raw: string | null | undefined) => {
     if (!raw) return null;
@@ -149,14 +161,31 @@ export default function HomeScreen() {
   };
 
 
-  const loadDishAssociations = async () => {
+  const loadDishAssociations = async (options?: { useCache?: boolean; showLoading?: boolean }) => {
     try {
+      const shouldShowLoading = options?.showLoading ?? true;
       setHasLoaded(false);
-      setLoading(true);
+      if (shouldShowLoading) setLoading(true);
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       const userEmail = sessionData.session?.user?.email ?? null;
+      if (options?.useCache && userId && !cacheHydratedRef.current) {
+        const cachedRaw = await AsyncStorage.getItem(getHomeCacheKey(userId));
+        if (cachedRaw) {
+          try {
+            const cached = JSON.parse(cachedRaw);
+            if (Array.isArray(cached?.items)) {
+              setDishAssociations(cached.items as DishAssociation[]);
+              loadUserAvatars(cached.items as DishAssociation[]);
+              setHasLoaded(true);
+              cacheHydratedRef.current = true;
+            }
+          } catch (err) {
+            await AsyncStorage.removeItem(getHomeCacheKey(userId));
+          }
+        }
+      }
       let allowedUserIds: string[] | null = null;
       if (userId) {
         const { data: profile, error: profileError } = await supabase
@@ -206,6 +235,12 @@ export default function HomeScreen() {
             });
             setDishAssociations((sorted as DishAssociation[]) ?? []);
             loadUserAvatars(sorted as DishAssociation[]);
+            if (userId) {
+              await AsyncStorage.setItem(
+                getHomeCacheKey(userId),
+                JSON.stringify({ updatedAt: Date.now(), items: sorted })
+              );
+            }
             return;
           }
         }
@@ -225,6 +260,12 @@ export default function HomeScreen() {
       const rows = (data ?? []) as DishAssociation[];
       setDishAssociations(rows);
       loadUserAvatars(rows);
+      if (userId) {
+        await AsyncStorage.setItem(
+          getHomeCacheKey(userId),
+          JSON.stringify({ updatedAt: Date.now(), items: rows })
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -252,7 +293,7 @@ export default function HomeScreen() {
     }
   };
 
-  const toggleFavorite = async (dishAssociationId: string) => {
+  const toggleFavorite = useCallback(async (dishAssociationId: string) => {
     const { data } = await supabase.auth.getSession();
     const userId = data.session?.user?.id;
     if (!userId) return;
@@ -277,9 +318,9 @@ export default function HomeScreen() {
     } catch (err) {
       setFavorites((prev) => ({ ...prev, [dishAssociationId]: isFav }));
     }
-  };
+  }, [favorites]);
 
-  const deleteDishAssociation = async (dish: DishAssociation) => {
+  const deleteDishAssociation = useCallback(async (dish: DishAssociation) => {
     Alert.alert('מחיקת מנה', 'האם למחוק את המנה והביקורות שלה?', [
       { text: 'ביטול', style: 'cancel' },
       {
@@ -319,7 +360,7 @@ export default function HomeScreen() {
         },
       },
     ]);
-  };
+  }, [currentUserId]);
 
   const fetchCompanyLogoForUser = async (userId: string, fallbackDomain?: string | null) => {
     try {
@@ -434,9 +475,59 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (currentUserId) {
-      loadDishAssociations();
+      loadDishAssociations({ useCache: true, showLoading: false });
     }
   }, [refreshParam, currentUserId]);
+
+  useEffect(() => {
+    cacheHydratedRef.current = false;
+  }, [currentUserId]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedHomeSearch(homeSearch);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [homeSearch]);
+
+  const refreshContent = useCallback(
+    async (force = false) => {
+      if (!currentUserId) return;
+      const now = Date.now();
+      if (!force && now - lastRefreshRef.current < 60000) {
+        return;
+      }
+      lastRefreshRef.current = now;
+      setIsRefreshing(true);
+      try {
+        await Promise.all([
+          loadDishAssociations({ showLoading: false }),
+          loadFavorites(currentUserId),
+        ]);
+      } finally {
+        setIsRefreshing(false);
+      }
+    },
+    [currentUserId, loadDishAssociations, loadFavorites]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!currentUserId) return;
+      refreshContent();
+    }, [currentUserId, refreshContent])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const wasInactive = /inactive|background/.test(appStateRef.current);
+      if (wasInactive && nextState === 'active' && currentUserId) {
+        refreshContent();
+      }
+      appStateRef.current = nextState;
+    });
+    return () => subscription.remove();
+  }, [currentUserId, refreshContent]);
 
   useEffect(() => {
     if (!scrollParam) return;
@@ -606,7 +697,7 @@ export default function HomeScreen() {
           <Text style={styles.favoritesHeaderText}>המועדפים שלי</Text>
         </View>
       )}
-      {loading ? (
+      {loading && !isRefreshing ? (
         <View style={styles.results}>
           <ActivityIndicator size="large" />
         </View>
@@ -628,7 +719,10 @@ export default function HomeScreen() {
         {homeSearch.trim().length > 0 ? (
           <Pressable
             style={styles.homeSearchClear}
-            onPress={() => setHomeSearch('')}
+            onPress={() => {
+              setHomeSearch('');
+              setDebouncedHomeSearch('');
+            }}
             hitSlop={6}
           >
             <Ionicons name="close" size={16} color={theme.colors.textMuted} />
@@ -639,7 +733,7 @@ export default function HomeScreen() {
   );
 
   const groupedAssociations = useMemo(() => {
-    const needle = homeSearch.trim().toLowerCase();
+    const needle = debouncedHomeSearch.trim().toLowerCase();
     const filtered = needle
       ? visibleAssociations.filter((item) => {
           const dishName = (item.dish_name ?? '').toLowerCase();
@@ -680,7 +774,108 @@ export default function HomeScreen() {
         restaurantId: items[0]?.restaurant_id ?? null,
       };
     });
-  }, [homeSearch, visibleAssociations]);
+  }, [debouncedHomeSearch, visibleAssociations]);
+
+  const handleAvatarPress = useCallback((url: string | null, label: string | null) => {
+    setAvatarPreviewUrl(url);
+    setAvatarPreviewLabel(label);
+    setAvatarPreviewOpen(true);
+  }, []);
+
+  const handleToggleFavorite = useCallback(
+    (id: string) => {
+      toggleFavorite(id);
+    },
+    [toggleFavorite]
+  );
+
+  const handleOpenDish = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/dish',
+        params: {
+          dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
+          dishName: dish.dish_name ?? '',
+          restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+          restaurantName: dish.restaurant_name ?? '',
+        },
+      });
+    },
+    [router]
+  );
+
+  const handleOpenRestaurant = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/restaurant',
+        params: {
+          restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+          restaurantName: dish.restaurant_name ?? '',
+        },
+      });
+    },
+    [router]
+  );
+
+  const handleOpenCamera = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/camera',
+        params: {
+          restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
+          restaurantName: dish.restaurant_name ?? '',
+          dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
+          dishName: dish.dish_name ?? '',
+        },
+      });
+    },
+    [router]
+  );
+
+  const handleEdit = useCallback(
+    (dish: DishAssociation) => {
+      router.push({
+        pathname: '/edit-dish',
+        params: { id: dish.id, returnTo: 'main', scrollY: String(scrollYRef.current) },
+      });
+    },
+    [router]
+  );
+
+  const renderDishGroup = useCallback(
+    ({ item }: { item: { key: string; items: DishAssociation[] } }) => (
+      <DishCard
+        items={item.items}
+        favorites={favorites}
+        currentUserId={currentUserId}
+        avatarUrl={avatarUrl}
+        userAvatars={userAvatars}
+        userLabels={userLabels}
+        onAvatarPress={handleAvatarPress}
+        onToggleFavorite={handleToggleFavorite}
+        onOpenPhoto={handleOpenDish}
+        onOpenDish={handleOpenDish}
+        onOpenRestaurant={handleOpenRestaurant}
+        onDelete={deleteDishAssociation}
+        onOpenCamera={handleOpenCamera}
+        onEdit={handleEdit}
+      />
+    ),
+    [
+      avatarUrl,
+      currentUserId,
+      deleteDishAssociation,
+      favorites,
+      handleAvatarPress,
+      handleEdit,
+      handleOpenCamera,
+      handleOpenDish,
+      handleOpenRestaurant,
+      handleToggleFavorite,
+      userAvatars,
+      userLabels,
+    ]
+  );
 
   return (
     <SafeAreaView
@@ -837,7 +1032,18 @@ export default function HomeScreen() {
             styles.feedContent,
             !hasHeaderContent && styles.feedContentNoHeader,
           ]}
-          onScroll={(event) => setScrollY(event.nativeEvent.contentOffset.y)}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => refreshContent(true)}
+              tintColor={theme.colors.accent}
+              colors={[theme.colors.accent]}
+            />
+          }
+          onScroll={(event) => {
+            const y = event.nativeEvent.contentOffset.y;
+            scrollYRef.current = y;
+          }}
           scrollEventThrottle={16}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
@@ -849,71 +1055,7 @@ export default function HomeScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
-            <DishCard
-              items={item.items}
-              favorites={favorites}
-              currentUserId={currentUserId}
-              avatarUrl={avatarUrl}
-              userAvatars={userAvatars}
-              userLabels={userLabels}
-              onAvatarPress={(url, label) => {
-                setAvatarPreviewUrl(url);
-                setAvatarPreviewLabel(label);
-                setAvatarPreviewOpen(true);
-              }}
-              onToggleFavorite={(id) => toggleFavorite(id)}
-              onOpenPhoto={(dish) =>
-                router.push({
-                  pathname: '/dish',
-                  params: {
-                    dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
-                    dishName: dish.dish_name ?? '',
-                    restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                    restaurantName: dish.restaurant_name ?? '',
-                  },
-                })
-              }
-              onOpenDish={(dish) =>
-                router.push({
-                  pathname: '/dish',
-                  params: {
-                    dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
-                    dishName: dish.dish_name ?? '',
-                    restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                    restaurantName: dish.restaurant_name ?? '',
-                  },
-                })
-              }
-              onOpenRestaurant={(dish) =>
-                router.push({
-                  pathname: '/restaurant',
-                  params: {
-                    restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                    restaurantName: dish.restaurant_name ?? '',
-                  },
-                })
-              }
-              onDelete={(dish) => deleteDishAssociation(dish)}
-              onOpenCamera={(dish) =>
-                router.push({
-                  pathname: '/camera',
-                  params: {
-                    restaurantId: dish.restaurant_id ? String(dish.restaurant_id) : '',
-                    restaurantName: dish.restaurant_name ?? '',
-                    dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
-                    dishName: dish.dish_name ?? '',
-                  },
-                })
-              }
-              onEdit={(dish) =>
-                router.push({
-                  pathname: '/edit-dish',
-                  params: { id: dish.id, returnTo: 'main', scrollY: String(scrollY) },
-                })
-              }
-            />
-          )}
+          renderItem={renderDishGroup}
         />
       )}
       {isAuthenticated && (
@@ -1328,16 +1470,16 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   avatarModalWrapper: {
-    width: 220,
-    height: 220,
+    width: AVATAR_MODAL_SIZE,
+    height: AVATAR_MODAL_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   avatarModalCard: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
+    width: AVATAR_MODAL_SIZE,
+    height: AVATAR_MODAL_SIZE,
+    borderRadius: AVATAR_MODAL_SIZE / 2,
     backgroundColor: theme.colors.card,
     alignItems: 'center',
     justifyContent: 'center',
