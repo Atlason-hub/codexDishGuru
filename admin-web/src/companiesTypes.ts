@@ -3,6 +3,7 @@ export type Company = {
   companyKey: string;
   name: string;
   domain: string;
+  orderVendor: OrderVendor;
   streetId?: number | null;
   street: string;
   number: string;
@@ -11,11 +12,14 @@ export type Company = {
   logoUrl?: string;
 };
 
+export type OrderVendor = "10bis" | "Cibus" | "Wolt" | "Other";
+
 export type CompanyRow = {
   id: string;
   company_key: string;
   name: string;
   domain: string;
+  order_vendor?: OrderVendor | null;
   street_id?: number | null;
   street: string;
   number: string;

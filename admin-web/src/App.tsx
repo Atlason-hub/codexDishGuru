@@ -551,6 +551,7 @@ function CompaniesPage() {
   const generateCompanyKey = () =>
     Math.random().toString(36).slice(2, 8).toUpperCase();
   const [companyKey, setCompanyKey] = React.useState<string>(generateCompanyKey());
+  const [orderVendor, setOrderVendor] = React.useState<Company["orderVendor"]>("10bis");
   const [cityQuery, setCityQuery] = React.useState("");
   const [cityId, setCityId] = React.useState<number | null>(null);
   const [logoUrl, setLogoUrl] = React.useState<string | undefined>(undefined);
@@ -605,6 +606,7 @@ function CompaniesPage() {
   const resetForm = () => {
     setName("");
     setDomain("");
+    setOrderVendor("10bis");
     setStreet("");
     setStreetId(null);
     setNumber("");
@@ -782,6 +784,7 @@ function CompaniesPage() {
         companyKey,
         name: name.trim(),
         domain: domain.trim(),
+        orderVendor,
         streetId: resolvedStreetId,
         street: street.trim(),
         number: number.trim(),
@@ -808,6 +811,7 @@ function CompaniesPage() {
         companyKey,
         name: name.trim(),
         domain: domain.trim(),
+        orderVendor,
         streetId: resolvedStreetId,
         street: street.trim(),
         number: number.trim(),
@@ -836,6 +840,7 @@ function CompaniesPage() {
     setCompanyKey(company.companyKey);
     setName(company.name);
     setDomain(company.domain);
+    setOrderVendor(company.orderVendor);
     setStreetId(company.streetId ?? null);
     setStreet(company.street);
     setNumber(company.number);
@@ -905,6 +910,19 @@ function CompaniesPage() {
               placeholder="acmefoods.com"
               required
             />
+          </label>
+          <label className="field">
+            <span>Order Vendor</span>
+            <select
+              value={orderVendor}
+              onChange={(e) => setOrderVendor(e.target.value as Company["orderVendor"])}
+              required
+            >
+              <option value="10bis">10bis</option>
+              <option value="Cibus">Cibus</option>
+              <option value="Wolt">Wolt</option>
+              <option value="Other">Other</option>
+            </select>
           </label>
           <label className="field">
             <span>City</span>
@@ -1089,6 +1107,7 @@ function CompaniesPage() {
               </div>
             </div>
             <div className="company-fields">
+              <div><strong>Vendor:</strong> {company.orderVendor || "—"}</div>
               <div><strong>Address:</strong> {`${company.street || ""} ${company.number || ""}`.trim() || "—"}</div>
               <div dir="auto"><strong>City:</strong> {company.cityName || "—"}</div>
               <div><strong>City ID:</strong> {company.cityId ?? "—"}</div>
