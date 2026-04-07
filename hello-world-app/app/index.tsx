@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
+import { openVendorDish } from '../lib/orderVendor';
 import { useRouter } from 'expo-router';
 import { useLocalSearchParams } from 'expo-router';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
@@ -75,6 +76,7 @@ export default function HomeScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
+  const [orderVendor, setOrderVendor] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
@@ -389,6 +391,7 @@ export default function HomeScreen() {
 
       if (!companyIdValue) {
         setCompanyLogoUrl(null);
+        setOrderVendor(null);
         return;
       }
       const { data: company, error: companyError } = await supabase
@@ -398,13 +401,16 @@ export default function HomeScreen() {
         .maybeSingle();
       if (companyError || !company) {
         setCompanyLogoUrl(null);
+        setOrderVendor(null);
         return;
       }
       const rawLogo = company.logo_url ?? null;
       const absoluteLogo = resolveLogoUrl(rawLogo);
       setCompanyLogoUrl(absoluteLogo);
+      setOrderVendor(company.order_vendor ?? null);
     } catch (err) {
       setCompanyLogoUrl(null);
+      setOrderVendor(null);
     }
   };
 
@@ -458,6 +464,7 @@ export default function HomeScreen() {
         loadFavorites(session.user.id);
       } else {
         setCompanyLogoUrl(null);
+        setOrderVendor(null);
         clearCachedLogo();
       }
     });
@@ -641,6 +648,7 @@ export default function HomeScreen() {
     setAvatarPreviewOpen(false);
     setAvatarPreviewUrl(null);
     setAvatarPreviewLabel(null);
+    setOrderVendor(null);
     await cacheAvatar(currentUserId, null);
     setAvatarUrl(null);
     await clearCachedLogo();
@@ -706,29 +714,31 @@ export default function HomeScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-      <View style={styles.homeSearchBox}>
-        <Ionicons name="search" size={18} color={theme.colors.textMuted} />
-        <TextInput
-          style={styles.homeSearchInput}
-          placeholder="חיפוש מנות או מסעדות"
-          placeholderTextColor={theme.colors.textMuted}
-          value={homeSearch}
-          onChangeText={setHomeSearch}
-          textAlign="right"
-        />
-        {homeSearch.trim().length > 0 ? (
-          <Pressable
-            style={styles.homeSearchClear}
-            onPress={() => {
-              setHomeSearch('');
-              setDebouncedHomeSearch('');
-            }}
-            hitSlop={6}
-          >
-            <Ionicons name="close" size={16} color={theme.colors.textMuted} />
-          </Pressable>
-        ) : null}
-      </View>
+      {!showFavoritesOnly ? (
+        <View style={styles.homeSearchBox}>
+          <Ionicons name="search" size={16} color="#F28A1F" />
+          <TextInput
+            style={styles.homeSearchInput}
+            placeholder="חיפוש מנות או מסעדות"
+            placeholderTextColor={theme.colors.textMuted}
+            value={homeSearch}
+            onChangeText={setHomeSearch}
+            textAlign="right"
+          />
+          {homeSearch.trim().length > 0 ? (
+            <Pressable
+              style={styles.homeSearchClear}
+              onPress={() => {
+                setHomeSearch('');
+                setDebouncedHomeSearch('');
+              }}
+              hitSlop={6}
+            >
+              <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -842,6 +852,13 @@ export default function HomeScreen() {
     [router]
   );
 
+  const handleOrder = useCallback(
+    (dish: DishAssociation) => {
+      openVendorDish(orderVendor, dish.restaurant_id, dish.dish_id);
+    },
+    [orderVendor]
+  );
+
   const renderDishGroup = useCallback(
     ({ item }: { item: { key: string; items: DishAssociation[] } }) => (
       <DishCard
@@ -859,6 +876,7 @@ export default function HomeScreen() {
         onDelete={deleteDishAssociation}
         onOpenCamera={handleOpenCamera}
         onEdit={handleEdit}
+        onOrder={handleOrder}
       />
     ),
     [
@@ -872,6 +890,7 @@ export default function HomeScreen() {
       handleOpenDish,
       handleOpenRestaurant,
       handleToggleFavorite,
+      handleOrder,
       userAvatars,
       userLabels,
     ]
@@ -1046,6 +1065,7 @@ export default function HomeScreen() {
           }}
           scrollEventThrottle={16}
           ListHeaderComponent={listHeader}
+          ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
           ListEmptyComponent={
             !loading && !error && hasLoaded ? (
               <View style={styles.results}>
@@ -1060,6 +1080,12 @@ export default function HomeScreen() {
       )}
       {isAuthenticated && (
         <>
+          <Pressable
+            style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
+            onPress={() => router.push('/camera')}
+          >
+            <Ionicons name="camera" size={32} color={theme.colors.white} />
+          </Pressable>
         </>
       )}
       <Modal
@@ -1340,29 +1366,38 @@ const styles = StyleSheet.create({
   },
   feedContent: {
     paddingBottom: 120,
-    gap: 16,
   },
   feedContentNoHeader: {
     paddingTop: 16,
   },
   listHeader: {
-    gap: 10,
-    paddingBottom: 8,
+    gap: 0,
+    paddingTop: 15,
+    paddingBottom: 15,
+  },
+  cardSeparator: {
+    height: 16,
   },
   homeSearchBox: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.card,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: '#F3F3F3',
+    alignSelf: 'center',
+    width: '82%',
+    marginTop: 0,
+    marginBottom: 0,
   },
   homeSearchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 18,
     color: theme.colors.text,
+    textAlign: 'right',
   },
   homeSearchClear: {
     height: 28,
@@ -1371,7 +1406,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: '#E0E0E0',
+    backgroundColor: theme.colors.white,
+  },
+  fabButton: {
+    position: 'absolute',
+    right: 18,
+    bottom: 78,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  fabButtonPressed: {
+    transform: [{ scale: 0.96 }],
   },
   favoritesHeader: {
     flexDirection: 'row',

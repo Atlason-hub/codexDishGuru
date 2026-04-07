@@ -302,7 +302,10 @@ export default function RestaurantScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        >
           <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <Text style={styles.headerTitle}>{restaurantName || 'מסעדה'}</Text>

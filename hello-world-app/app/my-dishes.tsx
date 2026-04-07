@@ -20,6 +20,7 @@ import DishCard from '../components/DishCard';
 import CachedLogo from '../components/CachedLogo';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
+import { openVendorDish } from '../lib/orderVendor';
 
 type DishAssociation = {
   id: string;
@@ -47,6 +48,7 @@ export default function MyDishesScreen() {
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [orderVendor, setOrderVendor] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const appStateRef = useRef(AppState.currentState);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
@@ -184,6 +186,28 @@ export default function MyDishesScreen() {
     }
   };
 
+  const loadOrderVendor = useCallback(async (userId: string) => {
+    const { data: profile, error: profileError } = await supabase
+      .from('AppUsers')
+      .select('company_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (profileError || !profile?.company_id) {
+      setOrderVendor(null);
+      return;
+    }
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('order_vendor')
+      .eq('id', profile.company_id)
+      .maybeSingle();
+    if (companyError) {
+      setOrderVendor(null);
+      return;
+    }
+    setOrderVendor(company?.order_vendor ?? null);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
@@ -194,6 +218,7 @@ export default function MyDishesScreen() {
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
       if (userId) {
         await loadFavorites(userId);
+        await loadOrderVendor(userId);
         await loadMyDishes(userId);
       }
     });
@@ -202,10 +227,12 @@ export default function MyDishesScreen() {
       setCurrentUserId(userId);
       if (userId) {
         loadFavorites(userId);
+        loadOrderVendor(userId);
         loadMyDishes(userId);
       } else {
         setFavorites({});
         setDishAssociations([]);
+        setOrderVendor(null);
       }
     });
     return () => {
@@ -307,6 +334,13 @@ export default function MyDishesScreen() {
     [router]
   );
 
+  const handleOrder = useCallback(
+    (dish: DishAssociation) => {
+      openVendorDish(orderVendor, dish.restaurant_id, dish.dish_id);
+    },
+    [orderVendor]
+  );
+
   const renderMyDish = useCallback(
     ({ item }: { item: DishAssociation[] }) => (
       <DishCard
@@ -324,6 +358,7 @@ export default function MyDishesScreen() {
         onDelete={deleteDishAssociation}
         onOpenCamera={handleOpenCamera}
         onEdit={handleEdit}
+        onOrder={handleOrder}
       />
     ),
     [
@@ -335,13 +370,14 @@ export default function MyDishesScreen() {
       handleOpenCamera,
       handleOpenDish,
       handleOpenRestaurant,
+      handleOrder,
       handleToggleFavorite,
       handleAvatarPress,
     ]
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <FlatList
         data={groupedMyDishes}
         keyExtractor={(item) => item[0]?.id ?? Math.random().toString()}
@@ -351,6 +387,7 @@ export default function MyDishesScreen() {
         windowSize={7}
         removeClippedSubviews
         contentContainerStyle={styles.feedContent}
+        ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -360,12 +397,17 @@ export default function MyDishesScreen() {
           />
         }
         ListHeaderComponent={
-          <View style={styles.headerRow}>
-            <Pressable style={styles.backButton} onPress={() => router.back()}>
-              <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
-            </Pressable>
-            <View style={styles.headerTextWrap}>
-              <Text style={styles.headerTitle}>המנות שלי</Text>
+          <View style={styles.listHeader}>
+            <View style={styles.headerRow}>
+              <Pressable
+                style={styles.backButton}
+                onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+              >
+                <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+              </Pressable>
+              <View style={styles.headerTextWrap}>
+                <Text style={styles.headerTitle}>המנות שלי</Text>
+              </View>
             </View>
           </View>
         }
@@ -447,7 +489,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 6,
-    marginBottom: 10,
+    marginBottom: 0,
+  },
+  listHeader: {
+    paddingTop: 15,
+    paddingBottom: 15,
   },
   backButton: {
     height: 32,
@@ -485,7 +531,9 @@ const styles = StyleSheet.create({
   },
   feedContent: {
     paddingBottom: 120,
-    gap: 16,
+  },
+  cardSeparator: {
+    height: 16,
   },
   centered: {
     paddingVertical: 20,

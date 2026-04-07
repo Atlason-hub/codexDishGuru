@@ -116,7 +116,10 @@ export default function PhotoScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        >
           <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <View style={styles.headerTextWrap}>

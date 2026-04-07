@@ -612,7 +612,10 @@ export default function SearchScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        >
           <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <Text style={styles.headerTitle}>חיפוש</Text>
@@ -638,7 +641,7 @@ export default function SearchScreen() {
       </View>
 
       <View style={styles.searchBox}>
-        <Ionicons name="restaurant-outline" size={18} color={theme.colors.textMuted} />
+        <Ionicons name="restaurant-outline" size={16} color="#F28A1F" />
         <TextInput
           style={styles.searchInput}
           placeholder="חיפוש מסעדות"
@@ -730,7 +733,7 @@ export default function SearchScreen() {
         </View>
       ) : null}
       <View style={styles.searchBox}>
-        <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
+        <Ionicons name="fast-food-outline" size={16} color="#F28A1F" />
         <TextInput
           style={styles.searchInput}
           placeholder={
@@ -913,19 +916,23 @@ export default function SearchScreen() {
         <View style={styles.resultsBox}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
-      ) : mode === 'db' && results.length === 0 && restaurantResults.length === 0 ? (
+      ) : mode === 'db' &&
+        results.length === 0 &&
+        restaurantResults.length === 0 &&
+        (trimmedRestaurant || trimmedDish) ? (
         <View style={styles.resultsBox}>
           <Text style={styles.placeholderText}>
-            {trimmedRestaurant || trimmedDish ? 'לא נמצאו תוצאות' : 'הקלד כדי לחפש'}
+            לא נמצאו תוצאות
           </Text>
         </View>
       ) : mode === 'api' &&
         apiResults.length === 0 &&
         apiDishResults.length === 0 &&
-        restaurantResults.length === 0 ? (
+        restaurantResults.length === 0 &&
+        (trimmedRestaurant || trimmedDish) ? (
         <View style={styles.resultsBox}>
           <Text style={styles.placeholderText}>
-            {trimmedRestaurant || trimmedDish ? 'לא נמצאו מסעדות' : 'הקלד כדי לחפש'}
+            לא נמצאו מסעדות
           </Text>
         </View>
       ) : null}
@@ -968,17 +975,20 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.card,
-    marginTop: 8,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: '#F3F3F3',
+    marginTop: 15,
+    alignSelf: 'center',
+    width: '82%',
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 18,
     color: theme.colors.text,
   },
   searchClear: {
@@ -988,7 +998,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: '#E0E0E0',
+    backgroundColor: theme.colors.white,
   },
   modeRow: {
     flexDirection: 'row-reverse',

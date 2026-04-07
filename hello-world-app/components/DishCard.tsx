@@ -49,6 +49,7 @@ type DishCardProps = {
   onOpenCamera?: (item: DishCardItem) => void;
   onEdit?: (item: DishCardItem) => void;
   onDelete?: (item: DishCardItem) => void;
+  onOrder?: (item: DishCardItem) => void;
 };
 
 const isInsideLayout = (layout: Rect | undefined, x: number, y: number) => {
@@ -72,6 +73,7 @@ function DishCard({
   onOpenCamera,
   onEdit,
   onDelete,
+  onOrder,
 }: DishCardProps) {
   const [imageWidth, setImageWidth] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -435,6 +437,11 @@ function DishCard({
                 useNativeDriver: true,
               }).start()
             }
+            onPress={() => {
+              if (currentItem) {
+                onOrder?.(currentItem);
+              }
+            }}
           >
             <View pointerEvents="none" style={styles.orderButtonHighlight} />
             <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
@@ -573,6 +580,7 @@ export default React.memo(DishCard, (prev, next) => {
   if (prev.onOpenCamera !== next.onOpenCamera) return false;
   if (prev.onEdit !== next.onEdit) return false;
   if (prev.onDelete !== next.onDelete) return false;
+  if (prev.onOrder !== next.onOrder) return false;
   return true;
 });
 
@@ -580,16 +588,19 @@ const styles = StyleSheet.create({
   feedCard: {
     position: 'relative',
     backgroundColor: theme.colors.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderRadius: 22,
+    shadowColor: theme.colors.ink,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   feedImageWrap: {
     position: 'relative',
     width: '100%',
     height: IMAGE_HEIGHT,
-    backgroundColor: theme.colors.cardAlt,
-    borderRadius: 20,
+    backgroundColor: theme.colors.card,
+    borderRadius: 22,
     overflow: 'hidden',
     margin: 0,
   },
@@ -606,7 +617,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 120,
+    height: 100,
     zIndex: 2,
   },
   feedImage: {
@@ -798,8 +809,8 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingTop: 8,
+    paddingBottom: 8,
     alignSelf: 'flex-end',
     width: '100%',
     paddingRight: Platform.OS === 'ios' ? 18 : 12,
@@ -842,19 +853,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   reviewCard: {
-    marginTop: 12,
+    marginTop: 10,
     marginHorizontal: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 16,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    backgroundColor: theme.colors.cardAlt,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    backgroundColor: '#FFFDFB',
   },
   reviewLabel: {
     fontSize: 12,
@@ -882,7 +886,7 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   ratingValueInline: {
-    color: theme.colors.accent,
+    color: theme.colors.textMuted,
     fontSize: 13,
     fontWeight: '700',
   },

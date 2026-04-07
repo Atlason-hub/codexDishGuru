@@ -21,6 +21,7 @@ import DishCard from '../components/DishCard';
 import CachedLogo from '../components/CachedLogo';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
+import { openVendorDish } from '../lib/orderVendor';
 
 type DishAssociation = {
   id: string;
@@ -62,6 +63,7 @@ export default function DishScreen() {
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [orderVendor, setOrderVendor] = useState<string | null>(null);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -82,6 +84,7 @@ export default function DishScreen() {
     });
   }, [dishAssociations]);
 
+
   const loadFavorites = async (userId: string) => {
     try {
       const { data, error: favError } = await supabase
@@ -97,6 +100,28 @@ export default function DishScreen() {
     } catch (err) {
     }
   };
+
+  const loadOrderVendor = useCallback(async (userId: string) => {
+    const { data: profile, error: profileError } = await supabase
+      .from('AppUsers')
+      .select('company_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (profileError || !profile?.company_id) {
+      setOrderVendor(null);
+      return;
+    }
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('order_vendor')
+      .eq('id', profile.company_id)
+      .maybeSingle();
+    if (companyError) {
+      setOrderVendor(null);
+      return;
+    }
+    setOrderVendor(company?.order_vendor ?? null);
+  }, []);
 
   const toggleFavorite = useCallback(async (dishAssociationId: string) => {
     const { data } = await supabase.auth.getSession();
@@ -330,6 +355,7 @@ export default function DishScreen() {
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
       if (data.session?.user?.id) {
         await loadFavorites(data.session.user.id);
+        await loadOrderVendor(data.session.user.id);
       }
       await loadDishAssociations();
     });
@@ -337,8 +363,10 @@ export default function DishScreen() {
       setCurrentUserId(session?.user?.id ?? null);
       if (session?.user?.id) {
         loadFavorites(session.user.id);
+        loadOrderVendor(session.user.id);
       } else {
         setFavorites({});
+        setOrderVendor(null);
       }
     });
     return () => {
@@ -431,6 +459,13 @@ export default function DishScreen() {
     [toggleFavorite]
   );
 
+  const handleOrder = useCallback(
+    (dish: DishAssociation) => {
+      openVendorDish(orderVendor, dish.restaurant_id, dish.dish_id);
+    },
+    [orderVendor]
+  );
+
   const renderDishItem = useCallback(
     ({ item }: { item: DishAssociation }) => (
       <DishCard
@@ -448,6 +483,7 @@ export default function DishScreen() {
         onOpenCamera={handleOpenCamera}
         onDelete={deleteDishAssociation}
         onEdit={handleEdit}
+        onOrder={handleOrder}
       />
     ),
     [
@@ -460,6 +496,7 @@ export default function DishScreen() {
       handleAvatarPress,
       handleOpenPhoto,
       handleOpenRestaurant,
+      handleOrder,
       handleToggleFavorite,
       userAvatars,
       userLabels,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avata
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedLogo from './CachedLogo';
 import { theme } from '../lib/theme';
+import { applyPaletteFromLogo } from '../lib/brandPalette';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 
@@ -70,6 +71,7 @@ export default function AppHeader() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const lastPaletteLogoRef = useRef<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -83,6 +85,10 @@ export default function AppHeader() {
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
         setCompanyLogoUrl(resolved);
+        if (resolved && lastPaletteLogoRef.current !== resolved) {
+          lastPaletteLogoRef.current = resolved;
+          applyPaletteFromLogo(resolved);
+        }
       }
       const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
@@ -99,6 +105,10 @@ export default function AppHeader() {
         if (url) {
           setCompanyLogoUrl(url);
           cacheLogo({ logoUrl: url, logoPath: null });
+          if (lastPaletteLogoRef.current !== url) {
+            lastPaletteLogoRef.current = url;
+            applyPaletteFromLogo(url);
+          }
         }
       }
     });
@@ -121,11 +131,17 @@ export default function AppHeader() {
           if (url) {
             setCompanyLogoUrl(url);
             cacheLogo({ logoUrl: url, logoPath: null });
+            if (lastPaletteLogoRef.current !== url) {
+              lastPaletteLogoRef.current = url;
+              applyPaletteFromLogo(url);
+            }
           }
         });
       } else {
         setCompanyLogoUrl(null);
         clearCachedLogo();
+        lastPaletteLogoRef.current = null;
+        applyPaletteFromLogo(null);
       }
     });
 
@@ -153,9 +169,6 @@ export default function AppHeader() {
   return (
     <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
       <View style={styles.leftIcons}>
-        <Pressable style={styles.iconButton} onPress={() => router.push('/camera')}>
-          <Ionicons name="camera" size={24} color={theme.colors.ink} />
-        </Pressable>
         <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
           <Ionicons name="search" size={24} color={theme.colors.ink} />
         </Pressable>
@@ -247,7 +260,7 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.border,
     paddingHorizontal: 16,
     paddingBottom: 6,
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.white,
   },
   leftIcons: {
     flexDirection: 'row',

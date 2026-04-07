@@ -206,7 +206,10 @@ export default function CameraScreen() {
         ) : null}
       </View>
       <View style={styles.topBar}>
-        <Pressable style={styles.topButton} onPress={() => router.back()}>
+        <Pressable
+          style={styles.topButton}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        >
           <Ionicons name="close" size={20} color="#ffffff" />
           <Text style={styles.topButtonText}>ביטול</Text>
         </Pressable>
