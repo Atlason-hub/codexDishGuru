@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  I18nManager,
   PanResponder,
   Platform,
   Pressable,
@@ -12,8 +13,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SvgXml } from 'react-native-svg';
 import CachedLogo from './CachedLogo';
 import { theme } from '../lib/theme';
+import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
 
 export type DishCardItem = {
   id: string;
@@ -105,6 +108,27 @@ function DishCard({
         ? userAvatars[currentItem.user_id] ?? null
         : null;
   const avatarLabel = currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null;
+
+  const renderStars = (value: number) => {
+    const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
+    const selectedIndex = getSelectedEmojiIndex(value);
+    return (
+      <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
+        {indices.map((idx) => {
+          const opacity = selectedIndex === idx ? 1 : 0.6;
+          return (
+            <SvgXml
+              key={`face-${idx}`}
+              xml={RATING_SVGS[idx]}
+              width={30}
+              height={30}
+              style={[styles.emojiIcon, { opacity }]}
+            />
+          );
+        })}
+      </View>
+    );
+  };
 
   const bouncePress = (scale: Animated.Value) => {
     Animated.sequence([
@@ -450,63 +474,51 @@ function DishCard({
         </Animated.View>
         <View style={styles.ratingGroup}>
           <View style={styles.ratingItem}>
-            <View style={styles.ratingTopRow}>
-            <Animated.Text
-              style={[
-                styles.ratingValueInline,
-                {
-                  opacity: ratingAnim,
-                  transform: [
-                    {
-                      translateY: ratingAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [6, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {currentItem?.filling_score ?? 0}%
-            </Animated.Text>
-            <Ionicons
-              name="restaurant-outline"
-              size={18}
-              color={theme.colors.textMuted}
-              style={styles.ratingIcon}
-            />
+            <View style={styles.ratingInlineRow}>
+              <Text style={styles.ratingLabelInline}>טעים</Text>
+              <Animated.View
+                style={[
+                  styles.ratingStarWrap,
+                  {
+                    opacity: ratingAnim,
+                    transform: [
+                      {
+                        translateY: ratingAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [6, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {renderStars(scoreToStars(currentItem?.tasty_score))}
+              </Animated.View>
+            </View>
           </View>
-          <Text style={styles.ratingLabelInline}>משביע</Text>
-        </View>
-        <View style={styles.ratingItem}>
-          <View style={styles.ratingTopRow}>
-            <Animated.Text
-              style={[
-                styles.ratingValueInline,
-                {
-                  opacity: ratingAnim,
-                  transform: [
-                    {
-                      translateY: ratingAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [6, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {currentItem?.tasty_score ?? 0}%
-            </Animated.Text>
-            <Ionicons
-              name="fast-food-outline"
-              size={18}
-              color={theme.colors.textMuted}
-              style={styles.ratingIcon}
-            />
+          <View style={styles.ratingItem}>
+            <View style={styles.ratingInlineRow}>
+              <Text style={styles.ratingLabelInline}>משביע</Text>
+              <Animated.View
+                style={[
+                  styles.ratingStarWrap,
+                  {
+                    opacity: ratingAnim,
+                    transform: [
+                      {
+                        translateY: ratingAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [6, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {renderStars(scoreToStars(currentItem?.filling_score))}
+              </Animated.View>
+            </View>
           </View>
-          <Text style={styles.ratingLabelInline}>טעים</Text>
-        </View>
         </View>
       </View>
     </View>
@@ -821,9 +833,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   ratingGroup: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 6,
   },
   orderButton: {
     height: 38,
@@ -873,29 +885,45 @@ const styles = StyleSheet.create({
   },
   ratingItem: {
     flex: 0,
-    minWidth: 72,
     alignItems: 'flex-end',
     marginRight: 0,
-  },
-  ratingTopRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'baseline',
-    gap: 6,
+    alignSelf: 'flex-end',
   },
   ratingIcon: {
     marginBottom: 1,
   },
-  ratingValueInline: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: '700',
+  ratingStarWrap: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  ratingInlineRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 2,
+    alignSelf: 'flex-end',
+    justifyContent: 'flex-end',
+    paddingRight: 30,
+  },
+  starRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 0,
+  },
+  starRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  emojiIcon: {
+    marginLeft: 2,
+    marginRight: -2,
   },
   ratingLabelInline: {
-    marginTop: 4,
     fontSize: 12,
     color: theme.colors.textMuted,
     alignSelf: 'flex-end',
-    paddingRight: 8,
+    paddingRight: 0,
+    minWidth: 60,
+    textAlign: 'right',
+    lineHeight: 30,
   },
   carouselDots: {
     position: 'absolute',

@@ -3,6 +3,7 @@ import {
   Alert,
   AppState,
   FlatList,
+  I18nManager,
   Image,
   Modal,
   Pressable,
@@ -14,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { SvgXml } from 'react-native-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
@@ -22,6 +24,7 @@ import CachedLogo from '../components/CachedLogo';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
+import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
 
 type DishAssociation = {
   id: string;
@@ -75,6 +78,27 @@ export default function DishScreen() {
     tasty: number;
     filling: number;
   } | null>(null);
+
+  const renderStars = (score: number) => {
+    const indices = [4, 3, 2, 1, 0];
+    const selectedIndex = getSelectedEmojiIndex(score);
+    return (
+      <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
+        {indices.map((idx) => {
+          const opacity = selectedIndex === idx ? 1 : 0.6;
+          return (
+            <SvgXml
+              key={`face-${idx}`}
+              xml={RATING_SVGS[idx]}
+              width={30}
+              height={30}
+              style={[styles.emojiIcon, { opacity }]}
+            />
+          );
+        })}
+      </View>
+    );
+  };
 
   const sortedAssociations = useMemo(() => {
     return [...dishAssociations].sort((a, b) => {
@@ -530,18 +554,16 @@ export default function DishScreen() {
           <Text style={styles.avgHeader}>דירוג ממוצע</Text>
           <View style={styles.ratingRow}>
             <View style={styles.ratingItem}>
-              <View style={styles.ratingTopRow}>
-                <Text style={styles.ratingValueInline}>{Math.round(avgScores.tasty)}%</Text>
-                <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
+              <View style={styles.ratingInlineRow}>
+                <Text style={styles.ratingLabelInline}>טעים</Text>
+                {renderStars(scoreToStars(avgScores.tasty))}
               </View>
-              <Text style={styles.ratingLabelInline}>טעים</Text>
             </View>
             <View style={styles.ratingItem}>
-              <View style={styles.ratingTopRow}>
-                <Text style={styles.ratingValueInline}>{Math.round(avgScores.filling)}%</Text>
-                <Ionicons name="restaurant-outline" size={18} color={theme.colors.textMuted} />
+              <View style={styles.ratingInlineRow}>
+                <Text style={styles.ratingLabelInline}>משביע</Text>
+                {renderStars(scoreToStars(avgScores.filling))}
               </View>
-              <Text style={styles.ratingLabelInline}>משביע</Text>
             </View>
           </View>
         </View>
@@ -704,41 +726,63 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: theme.colors.card,
     marginBottom: 10,
+    alignItems: 'flex-end',
+    alignSelf: 'flex-end',
+    width: '100%',
   },
   avgHeader: {
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
     marginBottom: 6,
+    alignSelf: 'flex-end',
   },
   feedContent: {
     paddingBottom: 120,
     gap: 16,
   },
   ratingRow: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 10,
     paddingTop: 10,
     paddingBottom: 6,
+    alignItems: 'flex-end',
+    alignSelf: 'flex-end',
   },
   ratingItem: {
-    flex: 1,
-    alignItems: 'center',
+    alignSelf: 'flex-end',
+    alignItems: 'flex-end',
   },
-  ratingTopRow: {
-    flexDirection: 'row',
+  ratingInlineRow: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 6,
+    gap: 2,
+    alignSelf: 'flex-end',
+    width: 210,
+    justifyContent: 'flex-end',
+    paddingRight: 30,
   },
-  ratingValueInline: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
+  starRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 1,
+    width: 170,
+    justifyContent: 'flex-end',
+  },
+  starRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  emojiIcon: {
+    marginLeft: 2,
   },
   ratingLabelInline: {
-    marginTop: 2,
     fontSize: 12,
     color: theme.colors.textMuted,
+    minWidth: 44,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    width: 52,
+    lineHeight: 30,
   },
   fullscreenOverlay: {
     flex: 1,

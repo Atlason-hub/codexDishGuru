@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  I18nManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -10,9 +11,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SvgXml } from 'react-native-svg';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
+import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
 
 type DishPhoto = {
   id: string;
@@ -38,6 +41,27 @@ export default function PhotoScreen() {
     filling: number;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+
+  const renderStars = (value: number) => {
+    const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
+    const selectedIndex = getSelectedEmojiIndex(value);
+    return (
+      <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
+        {indices.map((idx) => {
+          const opacity = selectedIndex === idx ? 1 : 0.6;
+          return (
+            <SvgXml
+              key={`face-${idx}`}
+              xml={RATING_SVGS[idx]}
+              width={30}
+              height={30}
+              style={[styles.emojiIcon, { opacity }]}
+            />
+          );
+        })}
+      </View>
+    );
+  };
 
   useEffect(() => {
     if (!id) {
@@ -156,22 +180,16 @@ export default function PhotoScreen() {
               <Text style={styles.avgHeader}>ציונים ממוצעים</Text>
               <View style={styles.ratingRow}>
                 <View style={styles.ratingItem}>
-                  <View style={styles.ratingTopRow}>
-                    <Text style={styles.ratingValueInline}>
-                      {Math.round(avgScores.tasty)}%
-                    </Text>
-                    <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
+                  <View style={styles.ratingInlineRow}>
+                    <Text style={styles.ratingLabelInline}>טעים</Text>
+                    {renderStars(scoreToStars(avgScores.tasty))}
                   </View>
-                  <Text style={styles.ratingLabelInline}>טעים</Text>
                 </View>
                 <View style={styles.ratingItem}>
-                  <View style={styles.ratingTopRow}>
-                    <Text style={styles.ratingValueInline}>
-                      {Math.round(avgScores.filling)}%
-                    </Text>
-                    <Ionicons name="restaurant-outline" size={18} color={theme.colors.textMuted} />
+                  <View style={styles.ratingInlineRow}>
+                    <Text style={styles.ratingLabelInline}>משביע</Text>
+                    {renderStars(scoreToStars(avgScores.filling))}
                   </View>
-                  <Text style={styles.ratingLabelInline}>משביע</Text>
                 </View>
               </View>
             </View>
@@ -333,20 +351,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
-  ratingTopRow: {
+  ratingInlineRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 30,
+  },
+  starRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 0,
   },
-  ratingValueInline: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
+  starRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  emojiIcon: {
+    marginTop: 1,
   },
   ratingLabelInline: {
-    marginTop: 2,
     fontSize: 12,
     color: theme.colors.textMuted,
+    minWidth: 44,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    lineHeight: 30,
   },
   previewBackdrop: {
     flex: 1,

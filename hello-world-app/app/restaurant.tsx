@@ -2,6 +2,7 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
+  I18nManager,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -11,11 +12,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { SvgXml } from 'react-native-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
+import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
 
 type DishAssociation = {
   id: string;
@@ -51,6 +54,27 @@ type DishSummary = {
 type Row =
   | { type: 'header'; id: string; title: string }
   | { type: 'dish'; id: string; dish: DishSummary };
+
+const renderStars = (value: number) => {
+  const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
+  const selectedIndex = getSelectedEmojiIndex(value);
+  return (
+    <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
+      {indices.map((idx) => {
+        const opacity = selectedIndex === idx ? 1 : 0.6;
+        return (
+          <SvgXml
+            key={`face-${idx}`}
+            xml={RATING_SVGS[idx]}
+            width={24}
+            height={24}
+            style={[styles.emojiIcon, { opacity }]}
+          />
+        );
+      })}
+    </View>
+  );
+};
 
 const normalizeCategoryName = (raw: unknown) => {
   if (typeof raw !== 'string') return null;
@@ -409,12 +433,16 @@ export default function RestaurantScreen() {
                   <Text style={styles.dishName}>{item.dish.name}</Text>
                   <View style={styles.scoreRow}>
                     <View style={styles.scoreItem}>
-                      <Text style={styles.scoreValue}>{Math.round(item.dish.avgTasty)}%</Text>
-                      <Text style={styles.scoreLabel}>טעים</Text>
+                      <View style={styles.ratingInlineRow}>
+                        <Text style={styles.scoreLabel}>טעים</Text>
+                        {renderStars(scoreToStars(item.dish.avgTasty))}
+                      </View>
                     </View>
                     <View style={styles.scoreItem}>
-                      <Text style={styles.scoreValue}>{Math.round(item.dish.avgFilling)}%</Text>
-                      <Text style={styles.scoreLabel}>משביע</Text>
+                      <View style={styles.ratingInlineRow}>
+                        <Text style={styles.scoreLabel}>משביע</Text>
+                        {renderStars(scoreToStars(item.dish.avgFilling))}
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -538,14 +566,30 @@ const styles = StyleSheet.create({
   scoreItem: {
     alignItems: 'center',
   },
-  scoreValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
+  ratingInlineRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 30,
+  },
+  starRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 0,
+  },
+  starRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  emojiIcon: {
+    marginTop: 1,
   },
   scoreLabel: {
     fontSize: 11,
     color: theme.colors.textMuted,
+    minWidth: 44,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    lineHeight: 24,
   },
   imageWrap: {
     width: 110,

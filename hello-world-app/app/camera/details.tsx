@@ -16,12 +16,13 @@ import {
   UIManager,
   View,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
 import { Buffer } from 'buffer';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../lib/theme';
+import { formatStars, starsToScore } from '../../lib/ratings';
+import EmojiRatingInput from '../../components/EmojiRatingInput';
 
 type Restaurant = {
   RestaurantId: number;
@@ -261,8 +262,8 @@ export default function CameraDetailsScreen() {
   const [collapsedRestaurantCategories, setCollapsedRestaurantCategories] = useState<Set<string>>(
     () => new Set()
   );
-  const [tastyScore, setTastyScore] = useState(50);
-  const [fillingScore, setFillingScore] = useState(50);
+  const [tastyScore, setTastyScore] = useState(2.5);
+  const [fillingScore, setFillingScore] = useState(2.5);
   const [reviewText, setReviewText] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -656,45 +657,19 @@ export default function CameraDetailsScreen() {
 
         <Text style={styles.ratingHeader}>דרג את המנה</Text>
         <View style={styles.sliderRow}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={100}
-            value={tastyScore}
-            onValueChange={(v) => setTastyScore(Math.round(v))}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-          />
-          <View style={styles.sliderLabel}>
-            <Text style={styles.sliderValue}>{tastyScore}</Text>
-            <View style={styles.sliderLabelRow}>
-              <Ionicons name="fast-food-outline" size={14} color={theme.colors.textMuted} />
-              <Text style={styles.sliderText}>טעים</Text>
-            </View>
+          <View style={styles.sliderLabelRow}>
+            <Text style={styles.sliderText}>טעים</Text>
+          </View>
+          <View style={styles.starInputWrap}>
+            <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
           </View>
         </View>
         <View style={styles.sliderRow}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={100}
-            value={fillingScore}
-            onValueChange={(v) => setFillingScore(Math.round(v))}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-          />
-          <View style={styles.sliderLabel}>
-            <Text style={styles.sliderValue}>{fillingScore}</Text>
-            <View style={styles.sliderLabelRow}>
-              <Ionicons
-                name="restaurant-outline"
-                size={14}
-                color={theme.colors.textMuted}
-              />
-              <Text style={styles.sliderText}>משביע</Text>
-            </View>
+          <View style={styles.sliderLabelRow}>
+            <Text style={styles.sliderText}>משביע</Text>
+          </View>
+          <View style={styles.starInputWrap}>
+            <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
           </View>
         </View>
 
@@ -756,8 +731,8 @@ export default function CameraDetailsScreen() {
                 dish_id: selectedDish.id,
                 dish_name: selectedDish.name,
                 review_text: reviewText,
-                tasty_score: tastyScore,
-                filling_score: fillingScore,
+                tasty_score: starsToScore(tastyScore),
+                filling_score: starsToScore(fillingScore),
                 image_url: publicData?.publicUrl ?? null,
                 image_path: filePath,
                 created_at: new Date().toISOString(),
@@ -1077,14 +1052,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sliderRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 12,
+    gap: 2,
     marginBottom: 12,
+    justifyContent: 'flex-end',
+    width: '100%',
   },
-  slider: {
+  starInputWrap: {
     flex: 1,
-    height: 32,
+    alignItems: 'flex-end',
+    marginRight: 10,
   },
   sliderLabel: {
     width: 64,
@@ -1092,18 +1070,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sliderLabelRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 4,
-  },
-  sliderValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.text,
+    width: 80,
+    justifyContent: 'flex-end',
+    marginLeft: 6,
+    paddingRight: 22,
+    height: 44,
   },
   sliderText: {
     fontSize: 12,
     color: theme.colors.textMuted,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    lineHeight: 44,
   },
   saveButton: {
     marginTop: 18,
@@ -1113,6 +1093,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     alignSelf: 'flex-start',
+    marginBottom: 12,
   },
   saveButtonPressed: {
     opacity: 0.85,

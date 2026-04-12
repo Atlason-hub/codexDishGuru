@@ -11,10 +11,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Slider from '@react-native-community/slider';
 import CachedLogo from '../components/CachedLogo';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
+import { formatStars, scoreToStars, starsToScore } from '../lib/ratings';
+import EmojiRatingInput from '../components/EmojiRatingInput';
 
 type DishAssociation = {
   id: string;
@@ -44,8 +45,8 @@ export default function EditDishScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [dish, setDish] = useState<DishAssociation | null>(null);
   const [reviewText, setReviewText] = useState('');
-  const [tastyScore, setTastyScore] = useState(50);
-  const [fillingScore, setFillingScore] = useState(50);
+  const [tastyScore, setTastyScore] = useState(2.5);
+  const [fillingScore, setFillingScore] = useState(2.5);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
 
@@ -84,8 +85,8 @@ export default function EditDishScreen() {
         const dataRow = row as DishAssociation;
         setDish(dataRow);
         setReviewText(dataRow.review_text ?? '');
-        setTastyScore(dataRow.tasty_score ?? 50);
-        setFillingScore(dataRow.filling_score ?? 50);
+        setTastyScore(scoreToStars(dataRow.tasty_score ?? 50));
+        setFillingScore(scoreToStars(dataRow.filling_score ?? 50));
         if (!decodedPhotoUri) {
           setPhotoUri(dataRow.image_url ?? null);
         }
@@ -136,8 +137,8 @@ export default function EditDishScreen() {
         .from('dish_associations')
         .update({
           review_text: reviewText,
-          tasty_score: tastyScore,
-          filling_score: fillingScore,
+          tasty_score: starsToScore(tastyScore),
+          filling_score: starsToScore(fillingScore),
           image_url: imageUrl,
           image_path: imagePath,
         })
@@ -297,43 +298,19 @@ export default function EditDishScreen() {
         />
 
         <View style={styles.sliderRow}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={100}
-            step={1}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-            value={tastyScore}
-            onValueChange={setTastyScore}
-          />
-          <View style={styles.sliderLabel}>
-            <Text style={styles.sliderValue}>{tastyScore}</Text>
-            <View style={styles.sliderLabelRow}>
-              <Ionicons name="fast-food-outline" size={18} color={theme.colors.textMuted} />
-              <Text style={styles.sliderText}>טעים</Text>
-            </View>
+          <View style={styles.sliderLabelRow}>
+            <Text style={styles.sliderText}>טעים</Text>
+          </View>
+          <View style={styles.starInputWrap}>
+            <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
           </View>
         </View>
         <View style={styles.sliderRow}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={100}
-            step={1}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-            value={fillingScore}
-            onValueChange={setFillingScore}
-          />
-          <View style={styles.sliderLabel}>
-            <Text style={styles.sliderValue}>{fillingScore}</Text>
-            <View style={styles.sliderLabelRow}>
-              <Ionicons name="restaurant-outline" size={18} color={theme.colors.textMuted} />
-              <Text style={styles.sliderText}>משביע</Text>
-            </View>
+          <View style={styles.sliderLabelRow}>
+            <Text style={styles.sliderText}>משביע</Text>
+          </View>
+          <View style={styles.starInputWrap}>
+            <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
           </View>
         </View>
 
@@ -484,30 +461,36 @@ const styles = StyleSheet.create({
     minHeight: 90,
   },
   sliderRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 12,
+    gap: 2,
+    justifyContent: 'flex-end',
+    width: '100%',
   },
-  slider: {
+  starInputWrap: {
     flex: 1,
+    alignItems: 'flex-end',
+    marginRight: 10,
   },
   sliderLabel: {
     width: 70,
     alignItems: 'flex-end',
   },
   sliderLabelRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 4,
-  },
-  sliderValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
+    width: 80,
+    justifyContent: 'flex-end',
+    marginLeft: 6,
+    paddingRight: 22,
+    height: 44,
   },
   sliderText: {
     fontSize: 12,
     color: theme.colors.textMuted,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    lineHeight: 44,
   },
   saveButton: {
     alignSelf: 'flex-start',
@@ -517,6 +500,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.accent,
     zIndex: 10,
+    marginTop: 24,
   },
   saveButtonText: {
     color: theme.colors.accent,
