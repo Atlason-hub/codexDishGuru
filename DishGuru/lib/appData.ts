@@ -13,24 +13,49 @@ export const fetchFavoritesMap = async (userId: string) => {
   return map;
 };
 
-export const fetchOrderVendorForUser = async (userId: string) => {
+export const fetchCompanyIdForUser = async (userId: string) => {
   const { data: profile, error: profileError } = await supabase
     .from('AppUsers')
     .select('company_id')
     .eq('user_id', userId)
     .maybeSingle();
-  if (profileError || !profile?.company_id) {
+  if (profileError) return null;
+  return profile?.company_id ?? null;
+};
+
+export const fetchOrderVendorForUser = async (userId: string) => {
+  const companyId = await fetchCompanyIdForUser(userId);
+  if (!companyId) {
     return null;
   }
   const { data: company, error: companyError } = await supabase
     .from('companies')
     .select('order_vendor')
-    .eq('id', profile.company_id)
+    .eq('id', companyId)
     .maybeSingle();
   if (companyError) {
     return null;
   }
   return company?.order_vendor ?? null;
+};
+
+export const fetchVisibleDishes = async (companyId: string | number | null) => {
+  if (!companyId) return [];
+
+  const { data: visibleData, error: visibleError } = await supabase.rpc('get_visible_dishes', {
+    p_company_id: companyId,
+  });
+
+  if (!visibleError && Array.isArray(visibleData)) {
+    return visibleData as any[];
+  }
+
+  const { data: companyData, error: companyError } = await supabase.rpc('get_company_dishes', {
+    company_id: companyId,
+  });
+
+  if (companyError) throw companyError;
+  return (companyData as any[]) ?? [];
 };
 
 export const fetchUserAvatarMaps = async (userIds: string[]) => {
