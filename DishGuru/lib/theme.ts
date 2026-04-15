@@ -25,11 +25,24 @@ const palettes = {
     white: '#FFFFFF',
     ink: '#2E2117',
   },
+  citrusHeat: {
+    background: '#FFFFFF',
+    card: '#FFFFFF',
+    cardAlt: '#FFFFFF',
+    border: '#E5E5E5',
+    text: '#7A2D10',
+    textMuted: '#9A3B12',
+    accent: '#C84F18',
+    accentSoft: '#FFF0A3',
+    danger: '#F72808',
+    white: '#FFFFFF',
+    ink: '#7A2D10',
+  },
 };
 
 type Palette = typeof palettes.classic;
 
-let activePaletteName: keyof typeof palettes = 'lightBlue';
+let activePaletteName: keyof typeof palettes = 'citrusHeat';
 
 export const theme = {
   colors: palettes[activePaletteName] as Palette,
@@ -54,5 +67,7 @@ export const setThemeColors = (colors: Palette) => {
 
 export const subscribeTheme = (cb: () => void) => {
   listeners.add(cb);
-  return () => listeners.delete(cb);
+  return () => {
+    listeners.delete(cb);
+  };
 };

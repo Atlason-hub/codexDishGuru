@@ -242,6 +242,7 @@ const buildDishRows = (
   collapsed: Set<string>
 ): DishDropdownRow[] => {
   const needle = query.trim().toLowerCase();
+  const isSearching = needle.length > 0;
   const rows: DishDropdownRow[] = [];
   categories.forEach((cat) => {
     const filtered = needle
@@ -249,7 +250,7 @@ const buildDishRows = (
       : cat.items;
     if (filtered.length === 0) return;
     rows.push({ type: 'header', id: `header-${cat.id}`, name: cat.name });
-    if (collapsed.has(cat.id)) return;
+    if (!isSearching && collapsed.has(cat.id)) return;
     filtered.forEach((item) =>
       rows.push({ type: 'item', id: `${cat.id}-${item.id}`, item })
     );
@@ -263,6 +264,7 @@ const buildMenuRows = (
   collapsed: Set<string>
 ): MenuDropdownRow[] => {
   const needle = query.trim().toLowerCase();
+  const isSearching = needle.length > 0;
   const rows: MenuDropdownRow[] = [];
   categories.forEach((cat) => {
     const filtered = needle
@@ -270,7 +272,7 @@ const buildMenuRows = (
       : cat.items;
     if (filtered.length === 0) return;
     rows.push({ type: 'header', id: `header-${cat.id}`, name: cat.name });
-    if (collapsed.has(cat.id)) return;
+    if (!isSearching && collapsed.has(cat.id)) return;
     filtered.forEach((item) =>
       rows.push({ type: 'item', id: `${cat.id}-${item.id}`, item })
     );
@@ -280,6 +282,8 @@ const buildMenuRows = (
 
 export default function SearchScreen() {
   const router = useRouter();
+  const [restaurantDropdownOpen, setRestaurantDropdownOpen] = useState(false);
+  const [dishDropdownOpen, setDishDropdownOpen] = useState(false);
   const [restaurantQuery, setRestaurantQuery] = useState('');
   const [dishQuery, setDishQuery] = useState('');
   const [debouncedRestaurant, setDebouncedRestaurant] = useState('');
@@ -289,7 +293,7 @@ export default function SearchScreen() {
   const [results, setResults] = useState<DishAssociation[]>([]);
   const [apiResults, setApiResults] = useState<RestaurantApi[]>([]);
   const [apiDishResults, setApiDishResults] = useState<ApiDishResult[]>([]);
-  const [mode, setMode] = useState<SearchMode>('db');
+  const [mode, setMode] = useState<SearchMode>('api');
   const [companyCityId, setCompanyCityId] = useState<number | null>(null);
   const [companyStreetId, setCompanyStreetId] = useState<number | null>(null);
   const [restaurantResults, setRestaurantResults] = useState<RestaurantApi[]>([]);
@@ -500,7 +504,7 @@ export default function SearchScreen() {
             );
           }
         }
-      } catch (err) {
+      } catch {
         if (mounted) setError('אירעה שגיאה. נסה שוב.');
       } finally {
         if (mounted) setLoading(false);
@@ -548,7 +552,7 @@ export default function SearchScreen() {
           setApiDishResults([]);
           setApiResults(filteredRestaurants);
         }
-      } catch (err) {
+      } catch {
         if (mounted) setError('אירעה שגיאה. נסה שוב.');
       } finally {
         if (mounted) setLoading(false);
@@ -592,7 +596,7 @@ export default function SearchScreen() {
         const categories = mapMenuToCategories(data);
         setApiMenuCategories(categories);
         setCollapsedApiMenuCategories(new Set());
-      } catch (err) {
+      } catch {
         setApiMenuCategories([]);
       } finally {
         setApiMenuLoading(false);
@@ -623,14 +627,6 @@ export default function SearchScreen() {
 
       <View style={styles.modeRow}>
         <Pressable
-          style={[styles.modeButton, mode === 'db' && styles.modeButtonActive]}
-          onPress={() => setMode('db')}
-        >
-          <Text style={[styles.modeText, mode === 'db' && styles.modeTextActive]}>
-            מנות שהועלו
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.modeButton, mode === 'api' && styles.modeButtonActive]}
           onPress={() => setMode('api')}
         >
@@ -638,273 +634,386 @@ export default function SearchScreen() {
             כלל המנות
           </Text>
         </Pressable>
+        <Pressable
+          style={[styles.modeButton, mode === 'db' && styles.modeButtonActive]}
+          onPress={() => setMode('db')}
+        >
+          <Text style={[styles.modeText, mode === 'db' && styles.modeTextActive]}>
+            מנות שהועלו
+          </Text>
+        </Pressable>
       </View>
 
-      <View style={styles.searchBox}>
-        <Ionicons name="restaurant-outline" size={16} color="#F28A1F" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="חיפוש מסעדות"
-          placeholderTextColor={theme.colors.textMuted}
-          value={restaurantQuery}
-          onChangeText={setRestaurantQuery}
-          textAlign="right"
-        />
-        {restaurantQuery.trim().length > 0 ? (
-          <Pressable
-            style={styles.searchClear}
-            onPress={() => {
-              setRestaurantQuery('');
-              setDebouncedRestaurant('');
-            }}
-            hitSlop={6}
+      <View style={styles.dropdownContainer}>
+        <Pressable
+          style={styles.dropdownHeader}
+          onPress={() => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setRestaurantDropdownOpen((prev) => !prev);
+          }}
+        >
+          <Text
+            style={[
+              styles.dropdownText,
+              !restaurantQuery.trim() && !selectedApiRestaurantName && styles.dropdownPlaceholder,
+            ]}
           >
-            <Ionicons name="close" size={16} color={theme.colors.textMuted} />
-          </Pressable>
+            {mode === 'api'
+              ? ((selectedApiRestaurantName ?? restaurantQuery.trim()) || 'בחר מסעדה')
+              : restaurantQuery.trim() || 'בחר מסעדה'}
+          </Text>
+          <View style={styles.chevronCircle}>
+            <Ionicons
+              name={restaurantDropdownOpen ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color="theme.colors.accent"
+            />
+          </View>
+        </Pressable>
+        {restaurantDropdownOpen ? (
+          <View style={styles.dropdownList}>
+            <View style={styles.searchRow}>
+              <Ionicons name="search" size={16} color={theme.colors.textMuted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="חיפוש מסעדה…"
+                placeholderTextColor={theme.colors.textMuted}
+                value={restaurantQuery}
+                onChangeText={(text) => {
+                  setRestaurantQuery(text);
+                  if (mode === 'api') {
+                    setSelectedApiRestaurantId(null);
+                    setSelectedApiRestaurantName(null);
+                    setDishQuery('');
+                  }
+                }}
+                textAlign="right"
+              />
+              {restaurantQuery.trim().length > 0 ? (
+                <Pressable
+                  style={styles.inlineClearButton}
+                  onPress={() => {
+                    setRestaurantQuery('');
+                    setDebouncedRestaurant('');
+                    setSelectedApiRestaurantId(null);
+                    setSelectedApiRestaurantName(null);
+                    setDishQuery('');
+                  }}
+                  hitSlop={6}
+                >
+                  <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+            {restaurantRows.length > 0 ? (
+              <FlatList
+                data={restaurantRows}
+                keyExtractor={(item) => item.id}
+                initialNumToRender={16}
+                maxToRenderPerBatch={16}
+                updateCellsBatchingPeriod={50}
+                windowSize={6}
+                removeClippedSubviews
+                renderItem={({ item }) =>
+                  item.type === 'header' ? (
+                    <Pressable
+                      style={styles.categoryHeader}
+                      onPress={() =>
+                        setCollapsedRestaurantCategories((prev) => {
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          const next = new Set(prev);
+                          const key = item.id.replace('header-', '');
+                          if (next.has(key)) {
+                            next.delete(key);
+                          } else {
+                            next.add(key);
+                          }
+                          return next;
+                        })
+                      }
+                    >
+                      <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                      <View style={styles.categoryChevronCircle}>
+                        <Ionicons
+                          name={
+                            collapsedRestaurantCategories.has(item.id.replace('header-', ''))
+                              ? 'chevron-down'
+                              : 'chevron-up'
+                          }
+                          size={14}
+                          color={theme.colors.textMuted}
+                        />
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        if (mode === 'api') {
+                          setSelectedApiRestaurantId(item.item.RestaurantId);
+                          setSelectedApiRestaurantName(item.item.RestaurantName ?? '');
+                          setRestaurantQuery(item.item.RestaurantName ?? '');
+                          setDishQuery('');
+                          setRestaurantDropdownOpen(false);
+                          setDishDropdownOpen(true);
+                          return;
+                        }
+                        setRestaurantDropdownOpen(false);
+                        router.push({
+                          pathname: '/restaurant',
+                          params: {
+                            restaurantId: String(item.item.RestaurantId ?? ''),
+                            restaurantName: item.item.RestaurantName ?? '',
+                          },
+                        });
+                      }}
+                    >
+                      <Text style={styles.dropdownItemText}>{item.item.RestaurantName}</Text>
+                    </Pressable>
+                  )
+                }
+              />
+            ) : loading && trimmedRestaurant.length > 0 ? (
+              <View style={styles.dropdownLoadingRow}>
+                <ActivityIndicator size="small" color={theme.colors.textMuted} />
+                <Text style={styles.dropdownLoadingText}>מחפש מסעדות…</Text>
+              </View>
+            ) : (
+              <Text style={styles.dropdownEmpty}>לא נמצאו מסעדות</Text>
+            )}
+          </View>
         ) : null}
       </View>
-      {restaurantRows.length > 0 ? (
-        <View style={styles.dropdownList}>
-          <FlatList
-            data={restaurantRows}
-            keyExtractor={(item) => item.id}
-            initialNumToRender={16}
-            maxToRenderPerBatch={16}
-            updateCellsBatchingPeriod={50}
-            windowSize={6}
-            removeClippedSubviews
-            renderItem={({ item }) =>
-              item.type === 'header' ? (
-                <Pressable
-                  style={styles.categoryHeader}
-                  onPress={() =>
-                    setCollapsedRestaurantCategories((prev) => {
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      const next = new Set(prev);
-                      const key = item.id.replace('header-', '');
-                      if (next.has(key)) {
-                        next.delete(key);
-                      } else {
-                        next.add(key);
-                      }
-                      return next;
-                    })
-                  }
-                >
-                  <Text style={styles.categoryHeaderText}>{item.name}</Text>
-                  <View style={styles.categoryChevronCircle}>
-                    <Ionicons
-                      name={
-                        collapsedRestaurantCategories.has(item.id.replace('header-', ''))
-                          ? 'chevron-down'
-                          : 'chevron-up'
-                      }
-                      size={14}
-                      color={theme.colors.textMuted}
-                    />
-                  </View>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    if (mode === 'api') {
-                      setSelectedApiRestaurantId(item.item.RestaurantId);
-                      setSelectedApiRestaurantName(item.item.RestaurantName ?? '');
-                      setRestaurantQuery(item.item.RestaurantName ?? '');
-                      setDishQuery('');
-                      return;
-                    }
-                    setRestaurantQuery(item.item.RestaurantName ?? '');
-                  }}
-                >
-                  <Text style={styles.dropdownItemText}>{item.item.RestaurantName}</Text>
-                </Pressable>
-              )
-            }
-          />
-        </View>
-      ) : loading && trimmedRestaurant.length > 0 ? (
-        <View style={styles.dropdownList}>
-          <View style={styles.dropdownLoadingRow}>
-            <ActivityIndicator size="small" color={theme.colors.textMuted} />
-            <Text style={styles.dropdownLoadingText}>מחפש מסעדות…</Text>
-          </View>
-        </View>
-      ) : null}
-      <View style={styles.searchBox}>
-        <Ionicons name="fast-food-outline" size={16} color="#F28A1F" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={
-            mode === 'api' && !selectedApiRestaurantId ? 'בחר מסעדה קודם' : 'חיפוש מנות'
-          }
-          placeholderTextColor={theme.colors.textMuted}
-          value={dishQuery}
-          onChangeText={setDishQuery}
-          editable={mode !== 'api' || Boolean(selectedApiRestaurantId)}
-          textAlign="right"
-        />
-        {dishQuery.trim().length > 0 ? (
-          <Pressable
-            style={styles.searchClear}
-            onPress={() => {
-              setDishQuery('');
-              setDebouncedDish('');
-            }}
-            hitSlop={6}
+
+      <View style={styles.dropdownContainer}>
+        <Pressable
+          style={styles.dropdownHeader}
+          onPress={() => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setDishDropdownOpen((prev) => !prev);
+          }}
+          disabled={mode === 'api' && !selectedApiRestaurantId}
+        >
+          <Text
+            style={[
+              styles.dropdownText,
+              !dishQuery.trim() && styles.dropdownPlaceholder,
+            ]}
           >
-            <Ionicons name="close" size={16} color={theme.colors.textMuted} />
-          </Pressable>
+            {dishQuery.trim() ||
+              (mode === 'api'
+                ? !selectedApiRestaurantId
+                  ? 'בחר מסעדה קודם'
+                  : 'הכנס שם או בחר מנה'
+                : 'הכנס שם או בחר מנה')}
+          </Text>
+          <View style={styles.chevronCircle}>
+            <Ionicons
+              name={dishDropdownOpen ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color="theme.colors.accent"
+            />
+          </View>
+        </Pressable>
+        {dishDropdownOpen ? (
+          <View style={styles.dropdownList}>
+            <View style={styles.searchRow}>
+              <Ionicons name="search" size={16} color={theme.colors.textMuted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder={
+                  mode === 'api' ? 'חיפוש מנה…' : 'חיפוש מנה…'
+                }
+                placeholderTextColor={theme.colors.textMuted}
+                value={dishQuery}
+                onChangeText={setDishQuery}
+                editable={mode !== 'api' || Boolean(selectedApiRestaurantId)}
+                textAlign="right"
+              />
+              {dishQuery.trim().length > 0 ? (
+                <Pressable
+                  style={styles.inlineClearButton}
+                  onPress={() => {
+                    setDishQuery('');
+                    setDebouncedDish('');
+                  }}
+                  hitSlop={6}
+                >
+                  <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+            {mode === 'api' && apiMenuLoading ? (
+              <View style={styles.dropdownLoadingRow}>
+                <ActivityIndicator size="small" color={theme.colors.textMuted} />
+                <Text style={styles.dropdownLoadingText}>טוען מנות…</Text>
+              </View>
+            ) : mode === 'api' && apiMenuRows.length > 0 ? (
+              <>
+                <View style={styles.dropdownControlsRow}>
+                  <Pressable
+                    style={styles.dropdownControlButton}
+                    onPress={() => setCollapsedApiMenuCategories(new Set())}
+                  >
+                    <Text style={styles.dropdownControlText}>הרחב הכל</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.dropdownControlButton}
+                    onPress={() =>
+                      setCollapsedApiMenuCategories(new Set(apiMenuCategories.map((cat) => cat.id)))
+                    }
+                  >
+                    <Text style={styles.dropdownControlText}>כווץ הכל</Text>
+                  </Pressable>
+                </View>
+                <FlatList
+                  data={apiMenuRows}
+                  keyExtractor={(item) => item.id}
+                  initialNumToRender={16}
+                  maxToRenderPerBatch={16}
+                  updateCellsBatchingPeriod={50}
+                  windowSize={6}
+                  removeClippedSubviews
+                  renderItem={({ item }) =>
+                    item.type === 'header' ? (
+                      <Pressable
+                        style={styles.categoryHeader}
+                        onPress={() =>
+                          setCollapsedApiMenuCategories((prev) => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            const next = new Set(prev);
+                            const key = item.id.replace('header-', '');
+                            if (next.has(key)) {
+                              next.delete(key);
+                            } else {
+                              next.add(key);
+                            }
+                            return next;
+                          })
+                        }
+                      >
+                        <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                        <View style={styles.categoryChevronCircle}>
+                          <Ionicons
+                            name={
+                              collapsedApiMenuCategories.has(item.id.replace('header-', ''))
+                                ? 'chevron-down'
+                                : 'chevron-up'
+                            }
+                            size={14}
+                            color={theme.colors.textMuted}
+                          />
+                        </View>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          router.push({
+                            pathname: '/camera/details',
+                            params: {
+                              restaurantId: String(selectedApiRestaurantId ?? ''),
+                              restaurantName: selectedApiRestaurantName ?? '',
+                              dishName: item.item.name,
+                            },
+                          });
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{item.item.name}</Text>
+                      </Pressable>
+                    )
+                  }
+                />
+              </>
+            ) : mode === 'db' && dishRows.length > 0 ? (
+              <>
+                <View style={styles.dropdownControlsRow}>
+                  <Pressable
+                    style={styles.dropdownControlButton}
+                    onPress={() => setCollapsedDishCategories(new Set())}
+                  >
+                    <Text style={styles.dropdownControlText}>הרחב הכל</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.dropdownControlButton}
+                    onPress={() =>
+                      setCollapsedDishCategories(new Set(dishCategories.map((cat) => cat.id)))
+                    }
+                  >
+                    <Text style={styles.dropdownControlText}>כווץ הכל</Text>
+                  </Pressable>
+                </View>
+                <FlatList
+                  data={dishRows}
+                  keyExtractor={(item) => item.id}
+                  initialNumToRender={16}
+                  maxToRenderPerBatch={16}
+                  updateCellsBatchingPeriod={50}
+                  windowSize={6}
+                  removeClippedSubviews
+                  renderItem={({ item }) =>
+                    item.type === 'header' ? (
+                      <Pressable
+                        style={styles.categoryHeader}
+                        onPress={() =>
+                          setCollapsedDishCategories((prev) => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            const next = new Set(prev);
+                            const key = item.id.replace('header-', '');
+                            if (next.has(key)) {
+                              next.delete(key);
+                            } else {
+                              next.add(key);
+                            }
+                            return next;
+                          })
+                        }
+                      >
+                        <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                        <View style={styles.categoryChevronCircle}>
+                          <Ionicons
+                            name={
+                              collapsedDishCategories.has(item.id.replace('header-', ''))
+                                ? 'chevron-down'
+                                : 'chevron-up'
+                            }
+                            size={14}
+                            color={theme.colors.textMuted}
+                          />
+                        </View>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          router.push({
+                            pathname: '/dish',
+                            params: {
+                              dishId: item.item.dishId ? String(item.item.dishId) : '',
+                              dishName: item.item.name,
+                            },
+                          });
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{item.item.name}</Text>
+                      </Pressable>
+                    )
+                  }
+                />
+              </>
+            ) : mode === 'db' && loading && trimmedDish.length > 0 ? (
+              <View style={styles.dropdownLoadingRow}>
+                <ActivityIndicator size="small" color={theme.colors.textMuted} />
+                <Text style={styles.dropdownLoadingText}>מחפש מנות…</Text>
+              </View>
+            ) : (
+              <Text style={styles.dropdownEmpty}>
+                {mode === 'api' ? 'לא נמצאו מנות' : 'לא נמצאו מנות'}
+              </Text>
+            )}
+          </View>
         ) : null}
       </View>
-      {mode === 'api' && apiMenuLoading ? (
-        <View style={styles.dropdownList}>
-          <View style={styles.dropdownLoadingRow}>
-            <ActivityIndicator size="small" color={theme.colors.textMuted} />
-            <Text style={styles.dropdownLoadingText}>טוען מנות…</Text>
-          </View>
-        </View>
-      ) : mode === 'api' && apiMenuRows.length > 0 ? (
-        <View style={styles.dropdownList}>
-          <FlatList
-            data={apiMenuRows}
-            keyExtractor={(item) => item.id}
-            initialNumToRender={16}
-            maxToRenderPerBatch={16}
-            updateCellsBatchingPeriod={50}
-            windowSize={6}
-            removeClippedSubviews
-            renderItem={({ item }) =>
-              item.type === 'header' ? (
-                <Pressable
-                  style={styles.categoryHeader}
-                  onPress={() =>
-                    setCollapsedApiMenuCategories((prev) => {
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      const next = new Set(prev);
-                      const key = item.id.replace('header-', '');
-                      if (next.has(key)) {
-                        next.delete(key);
-                      } else {
-                        next.add(key);
-                      }
-                      return next;
-                    })
-                  }
-                >
-                  <Text style={styles.categoryHeaderText}>{item.name}</Text>
-                  <View style={styles.categoryChevronCircle}>
-                    <Ionicons
-                      name={
-                        collapsedApiMenuCategories.has(item.id.replace('header-', ''))
-                          ? 'chevron-down'
-                          : 'chevron-up'
-                      }
-                      size={14}
-                      color={theme.colors.textMuted}
-                    />
-                  </View>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    router.push({
-                      pathname: '/camera/details',
-                      params: {
-                        restaurantId: String(selectedApiRestaurantId ?? ''),
-                        restaurantName: selectedApiRestaurantName ?? '',
-                        dishName: item.item.name,
-                      },
-                    });
-                  }}
-                >
-                  <Text style={styles.dropdownItemText}>{item.item.name}</Text>
-                </Pressable>
-              )
-            }
-          />
-        </View>
-      ) : mode === 'db' && dishRows.length > 0 ? (
-        <View style={styles.dropdownList}>
-          <FlatList
-            data={dishRows}
-            keyExtractor={(item) => item.id}
-            initialNumToRender={16}
-            maxToRenderPerBatch={16}
-            updateCellsBatchingPeriod={50}
-            windowSize={6}
-            removeClippedSubviews
-            renderItem={({ item }) =>
-              item.type === 'header' ? (
-                <Pressable
-                  style={styles.categoryHeader}
-                  onPress={() =>
-                    setCollapsedDishCategories((prev) => {
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      const next = new Set(prev);
-                      const key = item.id.replace('header-', '');
-                      if (next.has(key)) {
-                        next.delete(key);
-                      } else {
-                        next.add(key);
-                      }
-                      return next;
-                    })
-                  }
-                >
-                  <Text style={styles.categoryHeaderText}>{item.name}</Text>
-                  <View style={styles.categoryChevronCircle}>
-                    <Ionicons
-                      name={
-                        collapsedDishCategories.has(item.id.replace('header-', ''))
-                          ? 'chevron-down'
-                          : 'chevron-up'
-                      }
-                      size={14}
-                      color={theme.colors.textMuted}
-                    />
-                  </View>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    if (item.item.isApi) {
-                      router.push({
-                        pathname: '/camera/details',
-                        params: {
-                          restaurantId: String(item.item.restaurantId ?? ''),
-                          restaurantName: item.item.restaurantName ?? '',
-                          dishName: item.item.name,
-                        },
-                      });
-                    } else {
-                      router.push({
-                        pathname: '/dish',
-                        params: {
-                          dishId: item.item.dishId ? String(item.item.dishId) : '',
-                          dishName: item.item.name,
-                        },
-                      });
-                    }
-                  }}
-                >
-                  <Text style={styles.dropdownItemText}>{item.item.name}</Text>
-                </Pressable>
-              )
-            }
-          />
-        </View>
-      ) : mode === 'db' && loading && trimmedDish.length > 0 ? (
-        <View style={styles.dropdownList}>
-          <View style={styles.dropdownLoadingRow}>
-            <ActivityIndicator size="small" color={theme.colors.textMuted} />
-            <Text style={styles.dropdownLoadingText}>מחפש מנות…</Text>
-          </View>
-        </View>
-      ) : null}
 
       {headerText ? <Text style={styles.resultsHeader}>{headerText}</Text> : null}
 
@@ -972,40 +1081,67 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
-  searchBox: {
-    flexDirection: 'row-reverse',
+  dropdownContainer: {
+    width: '100%',
+    marginTop: 10,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 0,
-    height: 42,
-    borderRadius: 999,
-    backgroundColor: '#F3F3F3',
-    marginTop: 15,
-    alignSelf: 'center',
-    width: '82%',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+  },
+  dropdownText: {
+    fontSize: 18,
+    color: theme.colors.text,
+    textAlign: 'right',
+    flex: 1,
+    marginRight: 8,
+  },
+  dropdownPlaceholder: {
+    color: theme.colors.textMuted,
+  },
+  chevronCircle: {
+    height: 28,
+    width: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.card,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
     color: theme.colors.text,
+    textAlign: 'right',
   },
-  searchClear: {
-    height: 28,
-    width: 28,
+  inlineClearButton: {
+    height: 24,
+    width: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    backgroundColor: theme.colors.white,
+    borderRadius: 12,
   },
   modeRow: {
     flexDirection: 'row-reverse',
     gap: 8,
     marginTop: 6,
-    marginBottom: 10,
+    marginBottom: 16,
   },
   modeButton: {
     paddingVertical: 6,
@@ -1040,6 +1176,27 @@ const styles = StyleSheet.create({
     maxHeight: 240,
     backgroundColor: theme.colors.card,
     marginTop: 10,
+  },
+  dropdownControlsRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 4,
+    backgroundColor: theme.colors.card,
+  },
+  dropdownControlButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+  },
+  dropdownControlText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
   },
   dropdownItem: {
     paddingVertical: 10,
@@ -1087,6 +1244,11 @@ const styles = StyleSheet.create({
   },
   dropdownLoadingText: {
     fontSize: 12,
+    color: theme.colors.textMuted,
+    textAlign: 'right',
+  },
+  dropdownEmpty: {
+    padding: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
   },

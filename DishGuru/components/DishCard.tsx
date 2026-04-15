@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
-  I18nManager,
   PanResponder,
   Platform,
   Pressable,
@@ -13,10 +12,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SvgXml } from 'react-native-svg';
 import CachedLogo from './CachedLogo';
+import RatingValueRow from './RatingValueRow';
 import { theme } from '../lib/theme';
-import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
+
+const dishActionColor = '#C75D2C';
 
 export type DishCardItem = {
   id: string;
@@ -108,27 +108,6 @@ function DishCard({
         ? userAvatars[currentItem.user_id] ?? null
         : null;
   const avatarLabel = currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null;
-
-  const renderStars = (value: number) => {
-    const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
-    const selectedIndex = getSelectedEmojiIndex(value);
-    return (
-      <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
-        {indices.map((idx) => {
-          const opacity = selectedIndex === idx ? 1 : 0.6;
-          return (
-            <SvgXml
-              key={`face-${idx}`}
-              xml={RATING_SVGS[idx]}
-              width={30}
-              height={30}
-              style={[styles.emojiIcon, { opacity }]}
-            />
-          );
-        })}
-      </View>
-    );
-  };
 
   const bouncePress = (scale: Animated.Value) => {
     Animated.sequence([
@@ -304,7 +283,7 @@ function DishCard({
                   }
                 }}
               >
-                <Ionicons name="camera" size={18} color={theme.colors.accent} />
+                <Ionicons name="camera" size={18} color={dishActionColor} />
               </Pressable>
             </Animated.View>
             <Animated.View style={[styles.heartBadge, { transform: [{ scale: heartScale }] }]}>
@@ -327,7 +306,7 @@ function DishCard({
                 <Ionicons
                   name={currentItem?.id && favorites[currentItem.id] ? 'heart' : 'heart-outline'}
                   size={18}
-                  color={theme.colors.accent}
+                  color={dishActionColor}
                 />
               </Pressable>
             </Animated.View>
@@ -345,7 +324,7 @@ function DishCard({
                     bouncePress(editScale);
                   }}
                 >
-                  <Ionicons name="create-outline" size={18} color={theme.colors.accent} />
+                  <Ionicons name="create-outline" size={18} color={dishActionColor} />
                 </Pressable>
               </Animated.View>
             ) : null}
@@ -467,57 +446,56 @@ function DishCard({
               }
             }}
           >
-            <View pointerEvents="none" style={styles.orderButtonHighlight} />
             <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
             <Text style={styles.orderButtonText}>הזמן</Text>
           </Pressable>
         </Animated.View>
         <View style={styles.ratingGroup}>
           <View style={styles.ratingItem}>
-            <View style={styles.ratingInlineRow}>
-              <Text style={styles.ratingLabelInline}>טעים</Text>
-              <Animated.View
-                style={[
-                  styles.ratingStarWrap,
-                  {
-                    opacity: ratingAnim,
-                    transform: [
-                      {
-                        translateY: ratingAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [6, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {renderStars(scoreToStars(currentItem?.tasty_score))}
-              </Animated.View>
-            </View>
+            <RatingValueRow
+              label="טעים"
+              score={currentItem?.tasty_score}
+              iconSize={30}
+              rowStyle={styles.ratingInlineRow}
+              labelStyle={styles.ratingLabelInline}
+              iconsWrapStyle={[
+                styles.ratingStarWrap,
+                {
+                  opacity: ratingAnim,
+                  transform: [
+                    {
+                      translateY: ratingAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [6, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
           </View>
           <View style={styles.ratingItem}>
-            <View style={styles.ratingInlineRow}>
-              <Text style={styles.ratingLabelInline}>משביע</Text>
-              <Animated.View
-                style={[
-                  styles.ratingStarWrap,
-                  {
-                    opacity: ratingAnim,
-                    transform: [
-                      {
-                        translateY: ratingAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [6, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {renderStars(scoreToStars(currentItem?.filling_score))}
-              </Animated.View>
-            </View>
+            <RatingValueRow
+              label="משביע"
+              score={currentItem?.filling_score}
+              iconSize={30}
+              rowStyle={styles.ratingInlineRow}
+              labelStyle={styles.ratingLabelInline}
+              iconsWrapStyle={[
+                styles.ratingStarWrap,
+                {
+                  opacity: ratingAnim,
+                  transform: [
+                    {
+                      translateY: ratingAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [6, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
           </View>
         </View>
       </View>
@@ -687,7 +665,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: theme.colors.accent,
+    borderColor: dishActionColor,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
@@ -712,7 +690,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: theme.colors.accent,
+    borderColor: dishActionColor,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
@@ -730,7 +708,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: theme.colors.accent,
+    borderColor: dishActionColor,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
@@ -745,9 +723,11 @@ const styles = StyleSheet.create({
     top: 10,
     left: 12,
     fontSize: 9,
-    color: theme.colors.accent,
+    color: theme.colors.text,
     fontWeight: '700',
-    backgroundColor: 'rgba(255,246,238,0.95)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 1,
+    borderColor: theme.colors.accentSoft,
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 16,
@@ -767,11 +747,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 7,
     borderWidth: 2,
-    borderColor: theme.colors.card,
+    borderColor: theme.colors.accentSoft,
     shadowColor: theme.colors.ink,
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
   avatarImage: {
@@ -784,7 +764,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: dishActionColor,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
@@ -841,23 +821,18 @@ const styles = StyleSheet.create({
     height: 38,
     paddingHorizontal: 16,
     borderRadius: 19,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: dishActionColor,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     justifyContent: 'center',
     marginRight: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
     overflow: 'hidden',
-  },
-  orderButtonHighlight: {
-    position: 'absolute',
-    top: 1,
-    left: 2,
-    right: 2,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    shadowColor: theme.colors.ink,
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   orderButtonText: {
     color: theme.colors.white,
@@ -902,25 +877,13 @@ const styles = StyleSheet.create({
     gap: 2,
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
-    paddingRight: 30,
-  },
-  starRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 0,
-  },
-  starRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  emojiIcon: {
-    marginLeft: 2,
-    marginRight: -2,
+    paddingRight: 64,
   },
   ratingLabelInline: {
     fontSize: 12,
     color: theme.colors.textMuted,
     alignSelf: 'flex-end',
-    paddingRight: 0,
+    paddingRight: 8,
     minWidth: 60,
     textAlign: 'right',
     lineHeight: 30,

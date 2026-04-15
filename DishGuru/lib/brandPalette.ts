@@ -47,26 +47,40 @@ const hashString = (value: string) => {
   return Math.abs(hash);
 };
 
+const normalizeLogoKey = (logoUrl: string) => {
+  const cleaned = logoUrl
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\/[^/]+/i, '')
+    .replace(/^\/storage\/v1\/object\/public\//, '')
+    .replace(/^storage\/v1\/object\/public\//, '')
+    .replace(/\?.*$/, '')
+    .replace(/^\/+/, '');
+
+  const parts = cleaned.split('/').filter(Boolean);
+  return parts.slice(-2).join('/') || cleaned;
+};
+
 const accentFromLogo = (logoUrl: string) => {
-  const hash = hashString(logoUrl);
-  const hue = hash % 360;
-  return hslToHex(hue, 0.45, 0.5);
+  const hash = hashString(normalizeLogoKey(logoUrl));
+  const hue = 16 + (hash % 18);
+  return hslToHex(hue, 0.78, 0.48);
 };
 
 export const applyPaletteFromLogo = async (logoUrl: string | null | undefined) => {
   if (!logoUrl) {
-    setThemeColors(themePalettes.lightBlue);
+    setThemeColors(themePalettes.citrusHeat);
     return;
   }
   try {
     const accent = accentFromLogo(logoUrl);
-    const base = themePalettes.lightBlue;
+    const base = themePalettes.citrusHeat;
     setThemeColors({
       ...base,
       accent,
       accentSoft: mix(base.background, accent, 0.35),
     });
   } catch (err) {
-    setThemeColors(themePalettes.lightBlue);
+    setThemeColors(themePalettes.citrusHeat);
   }
 };

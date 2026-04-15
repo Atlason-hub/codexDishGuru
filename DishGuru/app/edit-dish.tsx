@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
-import { formatStars, scoreToStars, starsToScore } from '../lib/ratings';
+import { scoreToStars, starsToScore } from '../lib/ratings';
 import EmojiRatingInput from '../components/EmojiRatingInput';
 
 type DishAssociation = {
@@ -90,7 +90,7 @@ export default function EditDishScreen() {
         if (!decodedPhotoUri) {
           setPhotoUri(dataRow.image_url ?? null);
         }
-      } catch (err) {
+      } catch {
         Alert.alert('שגיאה', 'לא ניתן לטעון את המנה.');
       } finally {
         setLoading(false);
@@ -173,7 +173,7 @@ export default function EditDishScreen() {
       } else {
         router.replace({ pathname: '/', params: { refresh: refreshToken } });
       }
-    } catch (err) {
+    } catch {
       Alert.alert('שמירה נכשלה', 'לא הצלחנו לשמור את השינויים.');
     } finally {
       setSaving(false);
@@ -466,23 +466,24 @@ const styles = StyleSheet.create({
     gap: 2,
     justifyContent: 'flex-end',
     width: '100%',
+    paddingRight: 20,
   },
   starInputWrap: {
-    flex: 1,
+    flex: 0,
     alignItems: 'flex-end',
-    marginRight: 10,
+    marginRight: 0,
   },
   sliderLabel: {
-    width: 70,
+    width: 90,
     alignItems: 'flex-end',
   },
   sliderLabelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    width: 80,
+    width: 110,
     justifyContent: 'flex-end',
     marginLeft: 6,
-    paddingRight: 22,
+    paddingRight: 36,
     height: 44,
   },
   sliderText: {

@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -21,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../lib/theme';
-import { formatStars, starsToScore } from '../../lib/ratings';
+import { starsToScore } from '../../lib/ratings';
 import EmojiRatingInput from '../../components/EmojiRatingInput';
 
 type Restaurant = {
@@ -145,6 +144,7 @@ const buildDropdownRows = (
   collapsed: Set<string>
 ): DishDropdownRow[] => {
   const needle = query.trim().toLowerCase();
+  const isSearching = needle.length > 0;
   const rows: DishDropdownRow[] = [];
   categories.forEach((cat) => {
     const filtered = needle
@@ -152,7 +152,7 @@ const buildDropdownRows = (
       : cat.items;
     if (filtered.length === 0) return;
     rows.push({ type: 'header', id: `header-${cat.id}`, name: cat.name });
-    if (collapsed.has(cat.id)) return;
+    if (!isSearching && collapsed.has(cat.id)) return;
     filtered.forEach((item) =>
       rows.push({ type: 'item', id: `${cat.id}-${item.id}`, item })
     );
@@ -242,6 +242,7 @@ export default function CameraDetailsScreen() {
     typeof params.defaultImageUrl === 'string' && params.defaultImageUrl
       ? params.defaultImageUrl
       : null;
+  const lockSelection = params.lockSelection === '1';
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [restaurantCategories, setRestaurantCategories] = useState<RestaurantCategory[]>([]);
@@ -297,21 +298,20 @@ export default function CameraDetailsScreen() {
         const curated = mapMenuToCategories(data);
         setDishCategories(curated);
         setCollapsedDishCategories(new Set());
-      } catch (error) {
+      } catch {
       } finally {
         setMenuLoading(false);
       }
     };
     fetchMenu();
-  }, [selectedRestaurantId]);
+  }, [presetDishId, selectedRestaurantId]);
 
   useEffect(() => {
-    fetchCompanyRestaurants();
-    if (presetRestaurantId) {
-      setSelectedRestaurantId(presetRestaurantId);
-      setSelectedName(presetRestaurantName);
+    if (lockSelection) {
+      setDropdownOpen(false);
+      setDishDropdownOpen(false);
     }
-  }, []);
+  }, [lockSelection]);
 
   useEffect(() => {
     if (!selectedRestaurantId) {
@@ -340,27 +340,7 @@ export default function CameraDetailsScreen() {
     if (match) setSelectedDish(match);
   }, [presetDishId, presetDishName, dishCategories]);
 
-  const fetchCompanyRestaurants = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData.session?.user?.id;
-    if (!userId) return;
-    const { data: profile } = await supabase
-      .from('AppUsers')
-      .select('company_id')
-      .eq('user_id', userId)
-      .limit(1)
-      .maybeSingle();
-    const companyId = profile?.company_id;
-    if (!companyId) return;
-    const { data: company } = await supabase
-      .from('companies')
-      .select('city_id, street_id')
-      .eq('id', companyId)
-      .maybeSingle();
-    fetchRestaurants(company?.city_id, company?.street_id);
-  };
-
-  const fetchRestaurants = async (cityId?: number, streetId?: number) => {
+  const fetchRestaurants = useCallback(async (cityId?: number, streetId?: number) => {
     try {
       setLoading(true);
       setRestaurants([]);
@@ -390,7 +370,35 @@ export default function CameraDetailsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchCompanyRestaurants = useCallback(async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user?.id;
+    if (!userId) return;
+    const { data: profile } = await supabase
+      .from('AppUsers')
+      .select('company_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle();
+    const companyId = profile?.company_id;
+    if (!companyId) return;
+    const { data: company } = await supabase
+      .from('companies')
+      .select('city_id, street_id')
+      .eq('id', companyId)
+      .maybeSingle();
+    fetchRestaurants(company?.city_id, company?.street_id);
+  }, [fetchRestaurants]);
+
+  useEffect(() => {
+    fetchCompanyRestaurants();
+    if (presetRestaurantId) {
+      setSelectedRestaurantId(presetRestaurantId);
+      setSelectedName(presetRestaurantName);
+    }
+  }, [fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
 
   return (
     <KeyboardAvoidingView
@@ -425,6 +433,7 @@ export default function CameraDetailsScreen() {
                   restaurantName: selectedName ?? '',
                   dishId: selectedDish?.id ? String(selectedDish.id) : '',
                   dishName: selectedDish?.name ?? '',
+                  lockSelection: lockSelection ? '1' : '',
                 },
               })
             }
@@ -455,25 +464,28 @@ export default function CameraDetailsScreen() {
 
         <View style={styles.dropdownContainer}>
           <Pressable
-            style={styles.dropdownHeader}
+            style={[styles.dropdownHeader, lockSelection && styles.dropdownHeaderLocked]}
             onPress={() => {
+              if (lockSelection) return;
               LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
               setDropdownOpen((prev) => !prev);
             }}
-            disabled={loading}
+            disabled={loading || lockSelection}
           >
             <Text style={[styles.dropdownText, !selectedName && styles.dropdownPlaceholder]}>
               {loading ? 'טוען מסעדות…' : selectedName ?? 'בחר מסעדה'}
             </Text>
-            <View style={styles.chevronCircle}>
-              <Ionicons
-                name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color="#9e211c"
-              />
-            </View>
+            {!lockSelection ? (
+              <View style={styles.chevronCircle}>
+                <Ionicons
+                  name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color="theme.colors.accent"
+                />
+              </View>
+            ) : null}
           </Pressable>
-          {dropdownOpen && (
+          {dropdownOpen && !lockSelection && (
             <View style={styles.dropdownList}>
                   <View style={styles.searchRow}>
                     <Ionicons name="search" size={16} color={theme.colors.textMuted} />
@@ -556,28 +568,47 @@ export default function CameraDetailsScreen() {
 
         <View style={styles.dropdownContainer}>
           <Pressable
-            style={styles.dropdownHeader}
+            style={[styles.dropdownHeader, lockSelection && styles.dropdownHeaderLocked]}
             onPress={() => {
+              if (lockSelection) return;
               LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
               setDishDropdownOpen((prev) => !prev);
             }}
-            disabled={loading || !selectedRestaurantId}
+            disabled={loading || !selectedRestaurantId || lockSelection}
           >
             <Text style={[styles.dropdownText, !selectedDish && styles.dropdownPlaceholder]}>
               {!selectedRestaurantId
                 ? 'בחר מסעדה קודם'
                 : selectedDish?.name ?? 'הכנס שם או בחר מנה'}
             </Text>
-            <View style={styles.chevronCircle}>
-              <Ionicons
-                name={dishDropdownOpen ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color="#9e211c"
-              />
-            </View>
+            {!lockSelection ? (
+              <View style={styles.chevronCircle}>
+                <Ionicons
+                  name={dishDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color="theme.colors.accent"
+                />
+              </View>
+            ) : null}
           </Pressable>
-          {dishDropdownOpen && (
+          {dishDropdownOpen && !lockSelection && (
             <View style={styles.dropdownList}>
+              <View style={styles.dropdownControlsRow}>
+                <Pressable
+                  style={styles.dropdownControlButton}
+                  onPress={() => setCollapsedDishCategories(new Set())}
+                >
+                  <Text style={styles.dropdownControlText}>הרחב הכל</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.dropdownControlButton}
+                  onPress={() =>
+                    setCollapsedDishCategories(new Set(dishCategories.map((cat) => cat.id)))
+                  }
+                >
+                  <Text style={styles.dropdownControlText}>כווץ הכל</Text>
+                </Pressable>
+              </View>
               <View style={styles.searchRow}>
                 <Ionicons name="search" size={16} color={theme.colors.textMuted} />
                 <TextInput
@@ -767,7 +798,7 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingTop: 36,
     gap: 12,
   },
   bodyContent: {
@@ -794,6 +825,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 6,
+    marginTop: 14,
     marginBottom: 10,
   },
   backButton: {
@@ -896,6 +928,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.card,
   },
+  dropdownHeaderLocked: {
+    opacity: 0.9,
+  },
   dropdownText: {
     fontSize: 18,
     color: theme.colors.text,
@@ -913,6 +948,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     maxHeight: 220,
     backgroundColor: theme.colors.card,
+  },
+  dropdownControlsRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  dropdownControlButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+  },
+  dropdownControlText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
   },
   dropdownScroll: {
     paddingBottom: 6,
@@ -1054,36 +1109,38 @@ const styles = StyleSheet.create({
   sliderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 2,
+    gap: 0,
     marginBottom: 12,
     justifyContent: 'flex-end',
     width: '100%',
+    paddingRight: 32,
   },
   starInputWrap: {
-    flex: 1,
+    flex: 0,
     alignItems: 'flex-end',
-    marginRight: 10,
+    marginRight: 0,
   },
   sliderLabel: {
-    width: 64,
-    alignItems: 'center',
+    width: 90,
+    alignItems: 'flex-end',
     justifyContent: 'center',
   },
   sliderLabelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    width: 80,
+    width: 92,
     justifyContent: 'flex-end',
-    marginLeft: 6,
-    paddingRight: 22,
+    marginLeft: 2,
+    paddingRight: 20,
     height: 44,
   },
   sliderText: {
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
-    alignSelf: 'flex-end',
+    alignSelf: 'center',
     lineHeight: 44,
+    width: '100%',
   },
   saveButton: {
     marginTop: 18,
@@ -1108,9 +1165,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-        <Pressable
-          style={styles.scrollHint}
-          onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
-        >
-          <Text style={styles.scrollHintText}>גלול לשמירה</Text>
-        </Pressable>

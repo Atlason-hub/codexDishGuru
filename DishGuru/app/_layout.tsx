@@ -26,10 +26,14 @@ export default function RootLayout() {
       try {
         let heeboFonts: Record<string, number> | null = null;
         try {
-          // Optional dependency: only load if installed.
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          heeboFonts = require('@expo-google-fonts/heebo');
-        } catch (err) {
+          const loaded = await import('@expo-google-fonts/heebo');
+          heeboFonts = {
+            Heebo_400Regular: loaded.Heebo_400Regular,
+            Heebo_500Medium: loaded.Heebo_500Medium,
+            Heebo_600SemiBold: loaded.Heebo_600SemiBold,
+            Heebo_700Bold: loaded.Heebo_700Bold,
+          };
+        } catch {
           heeboFonts = null;
         }
 
@@ -40,15 +44,19 @@ export default function RootLayout() {
             Heebo_600SemiBold: heeboFonts.Heebo_600SemiBold,
             Heebo_700Bold: heeboFonts.Heebo_700Bold,
           });
-          Text.defaultProps = Text.defaultProps ?? {};
-          Text.defaultProps.style = [
+          const DefaultText = Text as typeof Text & { defaultProps?: { style?: unknown } };
+          DefaultText.defaultProps = DefaultText.defaultProps ?? {};
+          DefaultText.defaultProps.style = [
             { fontFamily: 'Heebo_400Regular' },
-            Text.defaultProps.style,
+            DefaultText.defaultProps.style,
           ];
-          TextInput.defaultProps = TextInput.defaultProps ?? {};
-          TextInput.defaultProps.style = [
+          const DefaultTextInput = TextInput as typeof TextInput & {
+            defaultProps?: { style?: unknown };
+          };
+          DefaultTextInput.defaultProps = DefaultTextInput.defaultProps ?? {};
+          DefaultTextInput.defaultProps.style = [
             { fontFamily: 'Heebo_400Regular' },
-            TextInput.defaultProps.style,
+            DefaultTextInput.defaultProps.style,
           ];
         }
       } finally {

@@ -21,6 +21,7 @@ import CachedLogo from '../components/CachedLogo';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
+import { fetchFavoritesMap, fetchOrderVendorForUser } from '../lib/appData';
 
 type DishAssociation = {
   id: string;
@@ -51,6 +52,7 @@ export default function MyDishesScreen() {
   const [orderVendor, setOrderVendor] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const appStateRef = useRef(AppState.currentState);
+  const loadMyDishesRef = useRef<((userId: string) => Promise<void>) | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
@@ -79,21 +81,11 @@ export default function MyDishesScreen() {
     });
   }, [dishAssociations]);
 
-  const loadFavorites = async (userId: string) => {
+  const loadFavorites = useCallback(async (userId: string) => {
     try {
-      const { data, error: favError } = await supabase
-        .from('dish_favorites')
-        .select('dish_association_id')
-        .eq('user_id', userId);
-      if (favError) throw favError;
-      const map: Record<string, boolean> = {};
-      (data ?? []).forEach((row: any) => {
-        if (row?.dish_association_id) map[String(row.dish_association_id)] = true;
-      });
-      setFavorites(map);
-    } catch (err) {
-    }
-  };
+      setFavorites(await fetchFavoritesMap(userId));
+    } catch {}
+  }, []);
 
   const toggleFavorite = useCallback(async (dishAssociationId: string) => {
     const { data } = await supabase.auth.getSession();
@@ -117,7 +109,7 @@ export default function MyDishesScreen() {
         });
         if (error) throw error;
       }
-    } catch (err) {
+    } catch {
       setFavorites((prev) => ({ ...prev, [dishAssociationId]: isFav }));
     }
   }, [favorites]);
@@ -155,8 +147,8 @@ export default function MyDishesScreen() {
               delete next[dish.id];
               return next;
             });
-            loadMyDishes(currentUserId);
-          } catch (err) {
+            await loadMyDishesRef.current?.(currentUserId);
+          } catch {
             Alert.alert('שגיאה', 'מחיקה נכשלה.');
           }
         },
@@ -164,7 +156,7 @@ export default function MyDishesScreen() {
     ]);
   }, [currentUserId]);
 
-  const loadMyDishes = async (userId: string) => {
+  const loadMyDishes = useCallback(async (userId: string) => {
     try {
       setHasLoaded(false);
       setLoading(true);
@@ -178,35 +170,21 @@ export default function MyDishesScreen() {
         .order('created_at', { ascending: false });
       if (fetchError) throw fetchError;
       setDishAssociations((data as DishAssociation[]) ?? []);
-    } catch (err) {
+    } catch {
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
       setLoading(false);
       setHasLoaded(true);
     }
-  };
+  }, []);
 
   const loadOrderVendor = useCallback(async (userId: string) => {
-    const { data: profile, error: profileError } = await supabase
-      .from('AppUsers')
-      .select('company_id')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (profileError || !profile?.company_id) {
-      setOrderVendor(null);
-      return;
-    }
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .select('order_vendor')
-      .eq('id', profile.company_id)
-      .maybeSingle();
-    if (companyError) {
-      setOrderVendor(null);
-      return;
-    }
-    setOrderVendor(company?.order_vendor ?? null);
+    setOrderVendor(await fetchOrderVendorForUser(userId));
   }, []);
+
+  useEffect(() => {
+    loadMyDishesRef.current = loadMyDishes;
+  }, [loadMyDishes]);
 
   useEffect(() => {
     let mounted = true;
@@ -239,7 +217,7 @@ export default function MyDishesScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, []);
+  }, [loadFavorites, loadMyDishes, loadOrderVendor]);
 
   const refreshContent = useCallback(async () => {
     if (!currentUserId) return;
@@ -249,7 +227,7 @@ export default function MyDishesScreen() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, loadFavorites, loadMyDishes]);
 
   useFocusEffect(
     useCallback(() => {
@@ -318,6 +296,7 @@ export default function MyDishesScreen() {
           restaurantName: dish.restaurant_name ?? '',
           dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
           dishName: dish.dish_name ?? '',
+          lockSelection: '1',
         },
       });
     },

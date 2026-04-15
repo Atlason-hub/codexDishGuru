@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  I18nManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -11,11 +10,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SvgXml } from 'react-native-svg';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
-import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
+import RatingValueRow from '../components/RatingValueRow';
 
 type DishPhoto = {
   id: string;
@@ -41,27 +39,6 @@ export default function PhotoScreen() {
     filling: number;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-
-  const renderStars = (value: number) => {
-    const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
-    const selectedIndex = getSelectedEmojiIndex(value);
-    return (
-      <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
-        {indices.map((idx) => {
-          const opacity = selectedIndex === idx ? 1 : 0.6;
-          return (
-            <SvgXml
-              key={`face-${idx}`}
-              xml={RATING_SVGS[idx]}
-              width={30}
-              height={30}
-              style={[styles.emojiIcon, { opacity }]}
-            />
-          );
-        })}
-      </View>
-    );
-  };
 
   useEffect(() => {
     if (!id) {
@@ -125,7 +102,7 @@ export default function PhotoScreen() {
         } else {
           setAvgScores(null);
         }
-      } catch (err) {
+      } catch {
         if (mounted) setError('אירעה שגיאה. נסה שוב.');
       } finally {
         if (mounted) setLoading(false);
@@ -180,16 +157,22 @@ export default function PhotoScreen() {
               <Text style={styles.avgHeader}>ציונים ממוצעים</Text>
               <View style={styles.ratingRow}>
                 <View style={styles.ratingItem}>
-                  <View style={styles.ratingInlineRow}>
-                    <Text style={styles.ratingLabelInline}>טעים</Text>
-                    {renderStars(scoreToStars(avgScores.tasty))}
-                  </View>
+                  <RatingValueRow
+                    label="טעים"
+                    score={avgScores.tasty}
+                    iconSize={30}
+                    rowStyle={styles.ratingInlineRow}
+                    labelStyle={styles.ratingLabelInline}
+                  />
                 </View>
                 <View style={styles.ratingItem}>
-                  <View style={styles.ratingInlineRow}>
-                    <Text style={styles.ratingLabelInline}>משביע</Text>
-                    {renderStars(scoreToStars(avgScores.filling))}
-                  </View>
+                  <RatingValueRow
+                    label="משביע"
+                    score={avgScores.filling}
+                    iconSize={30}
+                    rowStyle={styles.ratingInlineRow}
+                    labelStyle={styles.ratingLabelInline}
+                  />
                 </View>
               </View>
             </View>
@@ -356,17 +339,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingRight: 30,
-  },
-  starRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 0,
-  },
-  starRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  emojiIcon: {
-    marginTop: 1,
   },
   ratingLabelInline: {
     fontSize: 12,

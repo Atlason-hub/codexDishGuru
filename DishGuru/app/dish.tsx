@@ -3,7 +3,6 @@ import {
   Alert,
   AppState,
   FlatList,
-  I18nManager,
   Image,
   Modal,
   Pressable,
@@ -15,16 +14,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { SvgXml } from 'react-native-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import CachedLogo from '../components/CachedLogo';
+import RatingValueRow from '../components/RatingValueRow';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
-import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
+import { fetchFavoritesMap, fetchOrderVendorForUser, fetchUserAvatarMaps } from '../lib/appData';
 
 type DishAssociation = {
   id: string;
@@ -71,6 +70,7 @@ export default function DishScreen() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const appStateRef = useRef(AppState.currentState);
+  const loadDishAssociationsRef = useRef<(() => Promise<void>) | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
@@ -78,27 +78,6 @@ export default function DishScreen() {
     tasty: number;
     filling: number;
   } | null>(null);
-
-  const renderStars = (score: number) => {
-    const indices = [4, 3, 2, 1, 0];
-    const selectedIndex = getSelectedEmojiIndex(score);
-    return (
-      <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
-        {indices.map((idx) => {
-          const opacity = selectedIndex === idx ? 1 : 0.6;
-          return (
-            <SvgXml
-              key={`face-${idx}`}
-              xml={RATING_SVGS[idx]}
-              width={30}
-              height={30}
-              style={[styles.emojiIcon, { opacity }]}
-            />
-          );
-        })}
-      </View>
-    );
-  };
 
   const sortedAssociations = useMemo(() => {
     return [...dishAssociations].sort((a, b) => {
@@ -109,42 +88,14 @@ export default function DishScreen() {
   }, [dishAssociations]);
 
 
-  const loadFavorites = async (userId: string) => {
+  const loadFavorites = useCallback(async (userId: string) => {
     try {
-      const { data, error: favError } = await supabase
-        .from('dish_favorites')
-        .select('dish_association_id')
-        .eq('user_id', userId);
-      if (favError) throw favError;
-      const map: Record<string, boolean> = {};
-      (data ?? []).forEach((row: any) => {
-        if (row?.dish_association_id) map[String(row.dish_association_id)] = true;
-      });
-      setFavorites(map);
-    } catch (err) {
-    }
-  };
+      setFavorites(await fetchFavoritesMap(userId));
+    } catch {}
+  }, []);
 
   const loadOrderVendor = useCallback(async (userId: string) => {
-    const { data: profile, error: profileError } = await supabase
-      .from('AppUsers')
-      .select('company_id')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (profileError || !profile?.company_id) {
-      setOrderVendor(null);
-      return;
-    }
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .select('order_vendor')
-      .eq('id', profile.company_id)
-      .maybeSingle();
-    if (companyError) {
-      setOrderVendor(null);
-      return;
-    }
-    setOrderVendor(company?.order_vendor ?? null);
+    setOrderVendor(await fetchOrderVendorForUser(userId));
   }, []);
 
   const toggleFavorite = useCallback(async (dishAssociationId: string) => {
@@ -169,7 +120,7 @@ export default function DishScreen() {
         });
         if (error) throw error;
       }
-    } catch (err) {
+    } catch {
       setFavorites((prev) => ({ ...prev, [dishAssociationId]: isFav }));
     }
   }, [favorites]);
@@ -207,8 +158,8 @@ export default function DishScreen() {
               delete next[dish.id];
               return next;
             });
-            loadDishAssociations();
-          } catch (err) {
+            await loadDishAssociationsRef.current?.();
+          } catch {
             Alert.alert('שגיאה', 'מחיקה נכשלה.');
           }
         },
@@ -225,44 +176,12 @@ export default function DishScreen() {
       setUserLabels({});
       return;
     }
-    const { data: profileData, error: profileError } = await supabase.rpc('get_user_profiles', {
-      user_ids: ids,
-    });
-    if (!profileError && Array.isArray(profileData)) {
-      const map: Record<string, string> = {};
-      const labels: Record<string, string> = {};
-      (profileData ?? []).forEach((row: any) => {
-        if (row?.user_id && row?.avatar_url) {
-          map[String(row.user_id)] = String(row.avatar_url);
-        }
-        if (row?.user_id && row?.email_prefix) {
-          labels[String(row.user_id)] = String(row.email_prefix);
-        }
-      });
-      setUserAvatars(map);
-      setUserLabels(labels);
-      return;
-    }
-    const { data, error: avatarError } = await supabase
-      .from('AppUsers')
-      .select('user_id, avatar_url')
-      .in('user_id', ids);
-    if (avatarError) {
-      setUserAvatars({});
-      setUserLabels({});
-      return;
-    }
-    const map: Record<string, string> = {};
-    (data ?? []).forEach((row: any) => {
-      if (row?.user_id && row?.avatar_url) {
-        map[String(row.user_id)] = String(row.avatar_url);
-      }
-    });
-    setUserAvatars(map);
-    setUserLabels({});
+    const { avatars, labels } = await fetchUserAvatarMaps(ids);
+    setUserAvatars(avatars);
+    setUserLabels(labels);
   };
 
-  const loadDishAssociations = async () => {
+  const loadDishAssociations = useCallback(async () => {
     if (!dishName && !dishQuery && dishIdParam === null) {
       setError('חסר שם מנה');
       setDishAssociations([]);
@@ -362,13 +281,13 @@ export default function DishScreen() {
       } else {
         setAvgScores(null);
       }
-    } catch (err) {
+    } catch {
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
       setLoading(false);
       setHasLoaded(true);
     }
-  };
+  }, [dishIdParam, dishName, dishQuery, restaurantIdParam, restaurantName]);
 
   useEffect(() => {
     let mounted = true;
@@ -397,7 +316,11 @@ export default function DishScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [dishName, dishQuery, dishIdParam, restaurantIdParam, restaurantName, refreshParam]);
+  }, [loadDishAssociations, loadFavorites, loadOrderVendor, refreshParam]);
+
+  useEffect(() => {
+    loadDishAssociationsRef.current = loadDishAssociations;
+  }, [loadDishAssociations]);
 
   const refreshContent = useCallback(async () => {
     setIsRefreshing(true);
@@ -409,7 +332,7 @@ export default function DishScreen() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [currentUserId, dishName, dishQuery, dishIdParam, restaurantIdParam, restaurantName]);
+  }, [currentUserId, loadDishAssociations, loadFavorites]);
 
   useFocusEffect(
     useCallback(() => {
@@ -450,6 +373,7 @@ export default function DishScreen() {
           restaurantName: dish.restaurant_name ?? '',
           dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
           dishName: dish.dish_name ?? '',
+          lockSelection: '1',
         },
       });
     },
@@ -554,16 +478,22 @@ export default function DishScreen() {
           <Text style={styles.avgHeader}>דירוג ממוצע</Text>
           <View style={styles.ratingRow}>
             <View style={styles.ratingItem}>
-              <View style={styles.ratingInlineRow}>
-                <Text style={styles.ratingLabelInline}>טעים</Text>
-                {renderStars(scoreToStars(avgScores.tasty))}
-              </View>
+              <RatingValueRow
+                label="טעים"
+                score={avgScores.tasty}
+                iconSize={30}
+                rowStyle={styles.ratingInlineRow}
+                labelStyle={styles.ratingLabelInline}
+              />
             </View>
             <View style={styles.ratingItem}>
-              <View style={styles.ratingInlineRow}>
-                <Text style={styles.ratingLabelInline}>משביע</Text>
-                {renderStars(scoreToStars(avgScores.filling))}
-              </View>
+              <RatingValueRow
+                label="משביע"
+                score={avgScores.filling}
+                iconSize={30}
+                rowStyle={styles.ratingInlineRow}
+                labelStyle={styles.ratingLabelInline}
+              />
             </View>
           </View>
         </View>
@@ -728,7 +658,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     alignItems: 'flex-end',
     alignSelf: 'flex-end',
-    width: '100%',
+    width: '98%',
+    marginRight: 6,
   },
   avgHeader: {
     fontSize: 12,
@@ -748,6 +679,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     alignItems: 'flex-end',
     alignSelf: 'flex-end',
+    marginRight: 14,
   },
   ratingItem: {
     alignSelf: 'flex-end',
@@ -760,20 +692,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     width: 210,
     justifyContent: 'flex-end',
-    paddingRight: 30,
-  },
-  starRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 1,
-    width: 170,
-    justifyContent: 'flex-end',
-  },
-  starRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  emojiIcon: {
-    marginLeft: 2,
+    paddingRight: 20,
   },
   ratingLabelInline: {
     fontSize: 12,
@@ -783,6 +702,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     width: 52,
     lineHeight: 30,
+    paddingRight: 8,
   },
   fullscreenOverlay: {
     flex: 1,

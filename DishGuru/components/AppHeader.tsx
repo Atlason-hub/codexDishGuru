@@ -11,6 +11,7 @@ import { theme } from '../lib/theme';
 import { applyPaletteFromLogo } from '../lib/brandPalette';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+let lastKnownCompanyLogoUrl: string | null = null;
 
 const resolveLogoUrl = (raw: string | null | undefined) => {
   if (!raw) return null;
@@ -65,9 +66,8 @@ const fetchCompanyLogoForUser = async (userId: string, fallbackDomain?: string |
 export default function AppHeader() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(lastKnownCompanyLogoUrl);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -80,11 +80,11 @@ export default function AppHeader() {
       const sessionEmail = data.session?.user?.email ?? null;
       setIsAuthenticated(Boolean(data.session?.user?.id));
       setCurrentUserId(data.session?.user?.id ?? null);
-      setUserEmail(sessionEmail);
       const cached = await loadCachedLogo();
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
         setCompanyLogoUrl(resolved);
+        lastKnownCompanyLogoUrl = resolved;
         if (resolved && lastPaletteLogoRef.current !== resolved) {
           lastPaletteLogoRef.current = resolved;
           applyPaletteFromLogo(resolved);
@@ -104,6 +104,7 @@ export default function AppHeader() {
         );
         if (url) {
           setCompanyLogoUrl(url);
+          lastKnownCompanyLogoUrl = url;
           cacheLogo({ logoUrl: url, logoPath: null });
           if (lastPaletteLogoRef.current !== url) {
             lastPaletteLogoRef.current = url;
@@ -117,7 +118,6 @@ export default function AppHeader() {
       const sessionEmail = session?.user?.email ?? null;
       setIsAuthenticated(Boolean(session?.user?.id));
       setCurrentUserId(session?.user?.id ?? null);
-      setUserEmail(sessionEmail);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
@@ -130,6 +130,7 @@ export default function AppHeader() {
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail)).then((url) => {
           if (url) {
             setCompanyLogoUrl(url);
+            lastKnownCompanyLogoUrl = url;
             cacheLogo({ logoUrl: url, logoPath: null });
             if (lastPaletteLogoRef.current !== url) {
               lastPaletteLogoRef.current = url;
@@ -139,6 +140,7 @@ export default function AppHeader() {
         });
       } else {
         setCompanyLogoUrl(null);
+        lastKnownCompanyLogoUrl = null;
         clearCachedLogo();
         lastPaletteLogoRef.current = null;
         applyPaletteFromLogo(null);
@@ -154,8 +156,8 @@ export default function AppHeader() {
   const signOut = async () => {
     await supabase.auth.signOut();
     setMenuVisible(false);
-    setUserEmail(null);
     setCompanyLogoUrl(null);
+    lastKnownCompanyLogoUrl = null;
     setAvatarUrl(null);
     await cacheAvatar(currentUserId, null);
     await clearCachedLogo();
@@ -252,14 +254,14 @@ export default function AppHeader() {
 
 const styles = StyleSheet.create({
   header: {
-    minHeight: 56,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     paddingHorizontal: 16,
-    paddingBottom: 6,
+    paddingBottom: 2,
     backgroundColor: theme.colors.white,
   },
   leftIcons: {
@@ -289,8 +291,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   logoImage: {
-    width: 160,
-    height: 40,
+    width: 172,
+    height: 44,
     resizeMode: 'contain',
   },
   menuContainer: {

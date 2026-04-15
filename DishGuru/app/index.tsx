@@ -1,9 +1,9 @@
 import {
   ActivityIndicator,
+  Animated,
   Alert,
   AppState,
   FlatList,
-  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -20,15 +20,16 @@ import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { openVendorDish } from '../lib/orderVendor';
-import { useRouter } from 'expo-router';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
+import { fetchFavoritesMap, fetchUserAvatarMaps } from '../lib/appData';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 const AVATAR_MODAL_SIZE = 220;
+const primaryActionColor = '#C75D2C';
 
 type DishAssociation = {
   id: string;
@@ -72,8 +73,6 @@ export default function HomeScreen() {
   const listRef = useRef<FlatList>(null);
   const scrollYRef = useRef(0);
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
-  const [favoritesLoading, setFavoritesLoading] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
   const [orderVendor, setOrderVendor] = useState<string | null>(null);
@@ -86,6 +85,11 @@ export default function HomeScreen() {
   const appStateRef = useRef(AppState.currentState);
   const cacheHydratedRef = useRef(false);
   const lastRefreshRef = useRef(0);
+  const loadDishAssociationsRef = useRef<
+    ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
+  >(null);
+  const fabPulse = useRef(new Animated.Value(1)).current;
+  const hasPulsedFabRef = useRef(false);
 
   const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v1:${userId ?? 'guest'}`;
 
@@ -125,45 +129,13 @@ export default function HomeScreen() {
       setUserLabels({});
       return;
     }
-    const { data: profileData, error: profileError } = await supabase.rpc('get_user_profiles', {
-      user_ids: ids,
-    });
-    if (!profileError && Array.isArray(profileData)) {
-      const map: Record<string, string> = {};
-      const labels: Record<string, string> = {};
-      (profileData ?? []).forEach((row: any) => {
-        if (row?.user_id && row?.avatar_url) {
-          map[String(row.user_id)] = String(row.avatar_url);
-        }
-        if (row?.user_id && row?.email_prefix) {
-          labels[String(row.user_id)] = String(row.email_prefix);
-        }
-      });
-      setUserAvatars(map);
-      setUserLabels(labels);
-      return;
-    }
-    const { data, error: avatarError } = await supabase
-      .from('AppUsers')
-      .select('user_id, avatar_url')
-      .in('user_id', ids);
-    if (avatarError) {
-      setUserAvatars({});
-      setUserLabels({});
-      return;
-    }
-    const map: Record<string, string> = {};
-    (data ?? []).forEach((row: any) => {
-      if (row?.user_id && row?.avatar_url) {
-        map[String(row.user_id)] = String(row.avatar_url);
-      }
-    });
-    setUserAvatars(map);
-    setUserLabels({});
+    const { avatars, labels } = await fetchUserAvatarMaps(ids);
+    setUserAvatars(avatars);
+    setUserLabels(labels);
   };
 
 
-  const loadDishAssociations = async (options?: { useCache?: boolean; showLoading?: boolean }) => {
+  const loadDishAssociations = useCallback(async (options?: { useCache?: boolean; showLoading?: boolean }) => {
     try {
       const shouldShowLoading = options?.showLoading ?? true;
       setHasLoaded(false);
@@ -183,7 +155,7 @@ export default function HomeScreen() {
               setHasLoaded(true);
               cacheHydratedRef.current = true;
             }
-          } catch (err) {
+          } catch {
             await AsyncStorage.removeItem(getHomeCacheKey(userId));
           }
         }
@@ -229,8 +201,23 @@ export default function HomeScreen() {
               company_id: companyId,
             }
           );
+          const { data: directData, error: directError } = await supabase
+            .from('dish_associations')
+            .select(
+              'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at'
+            )
+            .in('user_id', allowedUserIds ?? []);
           if (!rpcError && Array.isArray(rpcData)) {
-            const sorted = [...rpcData].sort((a: any, b: any) => {
+            const merged = new Map<string, DishAssociation>();
+            (rpcData as DishAssociation[]).forEach((row) => {
+              if (row?.id) merged.set(String(row.id), row);
+            });
+            if (!directError && Array.isArray(directData)) {
+              (directData as DishAssociation[]).forEach((row) => {
+                if (row?.id) merged.set(String(row.id), row);
+              });
+            }
+            const sorted = [...merged.values()].sort((a: any, b: any) => {
               const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
               const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
               return bTime - aTime;
@@ -274,26 +261,13 @@ export default function HomeScreen() {
       setLoading(false);
       setHasLoaded(true);
     }
-  };
+  }, []);
 
-  const loadFavorites = async (userId: string) => {
+  const loadFavorites = useCallback(async (userId: string) => {
     try {
-      setFavoritesLoading(true);
-      const { data, error: favError } = await supabase
-        .from('dish_favorites')
-        .select('dish_association_id')
-        .eq('user_id', userId);
-      if (favError) throw favError;
-      const map: Record<string, boolean> = {};
-      (data ?? []).forEach((row: any) => {
-        if (row?.dish_association_id) map[String(row.dish_association_id)] = true;
-      });
-      setFavorites(map);
-    } catch (err) {
-    } finally {
-      setFavoritesLoading(false);
-    }
-  };
+      setFavorites(await fetchFavoritesMap(userId));
+    } catch {}
+  }, []);
 
   const toggleFavorite = useCallback(async (dishAssociationId: string) => {
     const { data } = await supabase.auth.getSession();
@@ -317,7 +291,7 @@ export default function HomeScreen() {
         });
         if (error) throw error;
       }
-    } catch (err) {
+    } catch {
       setFavorites((prev) => ({ ...prev, [dishAssociationId]: isFav }));
     }
   }, [favorites]);
@@ -355,8 +329,8 @@ export default function HomeScreen() {
               delete next[dish.id];
               return next;
             });
-            loadDishAssociations();
-          } catch (err) {
+            await loadDishAssociationsRef.current?.();
+          } catch {
             Alert.alert('שגיאה', 'מחיקה נכשלה.');
           }
         },
@@ -364,7 +338,7 @@ export default function HomeScreen() {
     ]);
   }, [currentUserId]);
 
-  const fetchCompanyLogoForUser = async (userId: string, fallbackDomain?: string | null) => {
+  const fetchCompanyLogoForUser = useCallback(async (userId: string, fallbackDomain?: string | null) => {
     try {
       const { data: profile, error: profileError } = await supabase
         .from('AppUsers')
@@ -380,7 +354,7 @@ export default function HomeScreen() {
 
       // Fallback: if no company_id on AppUsers, try matching companies by email domain
       if (!companyIdValue && fallbackDomain) {
-        const { data: companyFromDomain, error: companyDomainError } = await supabase
+        const { data: companyFromDomain } = await supabase
           .from('companies')
           .select('id')
           .ilike('domain', fallbackDomain)
@@ -408,11 +382,11 @@ export default function HomeScreen() {
       const absoluteLogo = resolveLogoUrl(rawLogo);
       setCompanyLogoUrl(absoluteLogo);
       setOrderVendor(company.order_vendor ?? null);
-    } catch (err) {
+    } catch {
       setCompanyLogoUrl(null);
       setOrderVendor(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -421,8 +395,6 @@ export default function HomeScreen() {
       setIsAuthenticated(Boolean(data.session));
       setSessionChecked(true);
       setCurrentUserId(data.session?.user?.id ?? null);
-      const sessionEmail = data.session?.user?.email ?? null;
-      setUserEmail(sessionEmail);
       const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
       const metaAvatar = await fetchAvatarFromAuth();
@@ -448,8 +420,6 @@ export default function HomeScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
       setCurrentUserId(session?.user?.id ?? null);
-      const sessionEmail = session?.user?.email ?? null;
-      setUserEmail(sessionEmail);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
@@ -459,7 +429,7 @@ export default function HomeScreen() {
         cacheAvatar(session?.user?.id ?? null, null);
       }
       if (session?.user?.id) {
-        fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail));
+        fetchCompanyLogoForUser(session.user.id, getEmailDomain(session?.user?.email ?? null));
         loadDishAssociations();
         loadFavorites(session.user.id);
       } else {
@@ -472,7 +442,11 @@ export default function HomeScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, []);
+  }, [fetchCompanyLogoForUser, loadDishAssociations, loadFavorites]);
+
+  useEffect(() => {
+    loadDishAssociationsRef.current = loadDishAssociations;
+  }, [loadDishAssociations]);
 
   useEffect(() => {
     if (companyLogoUrl) {
@@ -484,7 +458,7 @@ export default function HomeScreen() {
     if (currentUserId) {
       loadDishAssociations({ useCache: true, showLoading: false });
     }
-  }, [refreshParam, currentUserId]);
+  }, [currentUserId, loadDishAssociations, refreshParam]);
 
   useEffect(() => {
     cacheHydratedRef.current = false;
@@ -496,6 +470,26 @@ export default function HomeScreen() {
     }, 250);
     return () => clearTimeout(handle);
   }, [homeSearch]);
+
+  useEffect(() => {
+    if (!isAuthenticated || hasPulsedFabRef.current) return;
+    hasPulsedFabRef.current = true;
+    Animated.sequence([
+      Animated.delay(450),
+      Animated.spring(fabPulse, {
+        toValue: 1.08,
+        useNativeDriver: true,
+        speed: 18,
+        bounciness: 9,
+      }),
+      Animated.spring(fabPulse, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 18,
+        bounciness: 8,
+      }),
+    ]).start();
+  }, [fabPulse, isAuthenticated]);
 
   const refreshContent = useCallback(
     async (force = false) => {
@@ -639,21 +633,6 @@ export default function HomeScreen() {
     }
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUserEmail(null);
-    setCompanyLogoUrl(null);
-    setCurrentUserId(null);
-    setUserAvatars({});
-    setAvatarPreviewOpen(false);
-    setAvatarPreviewUrl(null);
-    setAvatarPreviewLabel(null);
-    setOrderVendor(null);
-    await cacheAvatar(currentUserId, null);
-    setAvatarUrl(null);
-    await clearCachedLogo();
-  };
-
   const showFavoritesOnly =
     typeof params.favorites === 'string' ? params.favorites === '1' : false;
   const restaurantFilterId =
@@ -716,7 +695,7 @@ export default function HomeScreen() {
       ) : null}
       {!showFavoritesOnly ? (
         <View style={styles.homeSearchBox}>
-          <Ionicons name="search" size={16} color="#F28A1F" />
+          <Ionicons name="search" size={16} color="theme.colors.accent" />
           <TextInput
             style={styles.homeSearchInput}
             placeholder="חיפוש מנות או מסעדות"
@@ -836,6 +815,7 @@ export default function HomeScreen() {
           restaurantName: dish.restaurant_name ?? '',
           dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
           dishName: dish.dish_name ?? '',
+          lockSelection: '1',
         },
       });
     },
@@ -907,57 +887,44 @@ export default function HomeScreen() {
         </View>
       ) : !isAuthenticated ? (
         <View style={styles.authScreen}>
-          <Image
-            source={require('../assets/images/dishguru-logo.jpg')}
-            style={styles.authLogo}
-          />
+          <View style={styles.authHeaderWrap}>
+            <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
+          </View>
           <View style={styles.authCard}>
             <View style={styles.inputRow}>
-              <View style={styles.inputIcon}>
-                <Ionicons name="mail-outline" size={18} color="#9b4d2a" />
-              </View>
               <TextInput
                 style={styles.inputField}
-                placeholder="אימייל"
+                placeholder="אימייל מקום העבודה"
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={email}
                 onChangeText={setEmail}
-                placeholderTextColor="#a18c7b"
-                textAlign="left"
+                placeholderTextColor={theme.colors.textMuted}
+                textAlign="right"
+                selectionColor={theme.colors.accent}
               />
             </View>
             <View style={styles.inputRow}>
-              <View style={styles.inputIcon}>
-                <Ionicons name="lock-closed-outline" size={18} color="#9b4d2a" />
-              </View>
+              <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
+                <Ionicons
+                  name={showPass ? 'eye-off' : 'eye'}
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+              </Pressable>
               <TextInput
                 style={styles.inputField}
                 placeholder="סיסמה"
                 secureTextEntry={!showPass}
                 value={pass}
                 onChangeText={setPass}
-                placeholderTextColor="#a18c7b"
-                textAlign="left"
+                placeholderTextColor={theme.colors.textMuted}
+                textAlign="right"
+                selectionColor={theme.colors.accent}
               />
-              <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
-                <Ionicons name={showPass ? 'eye-off' : 'eye'} size={18} color="#9b4d2a" />
-              </Pressable>
             </View>
             {showSignup && (
               <View style={styles.inputRow}>
-                <View style={styles.inputIcon}>
-                  <Ionicons name="lock-closed-outline" size={18} color="#9b4d2a" />
-                </View>
-                <TextInput
-                  style={styles.inputField}
-                  placeholder="אישור סיסמה"
-                  secureTextEntry={!showConfirmPass}
-                  value={confirmPass}
-                  onChangeText={setConfirmPass}
-                  placeholderTextColor="#a18c7b"
-                  textAlign="left"
-                />
                 <Pressable
                   style={styles.eyeButton}
                   onPress={() => setShowConfirmPass((v) => !v)}
@@ -965,9 +932,19 @@ export default function HomeScreen() {
                   <Ionicons
                     name={showConfirmPass ? 'eye-off' : 'eye'}
                     size={18}
-                    color="#9b4d2a"
+                    color={theme.colors.textMuted}
                   />
                 </Pressable>
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="אישור סיסמה"
+                  secureTextEntry={!showConfirmPass}
+                  value={confirmPass}
+                  onChangeText={setConfirmPass}
+                  placeholderTextColor={theme.colors.textMuted}
+                  textAlign="right"
+                  selectionColor={theme.colors.accent}
+                />
               </View>
             )}
             {!showSignup && (
@@ -985,7 +962,7 @@ export default function HomeScreen() {
                   disabled={authLoading}
                 >
                   {authLoading ? (
-                    <ActivityIndicator />
+                    <ActivityIndicator color={theme.colors.white} />
                   ) : (
                     <Text style={styles.loginButtonText}>צור חשבון</Text>
                   )}
@@ -1015,7 +992,7 @@ export default function HomeScreen() {
                   disabled={authLoading}
                 >
                   {authLoading ? (
-                    <ActivityIndicator />
+                    <ActivityIndicator color={theme.colors.white} />
                   ) : (
                     <Text style={styles.loginButtonText}>התחבר</Text>
                   )}
@@ -1080,12 +1057,16 @@ export default function HomeScreen() {
       )}
       {isAuthenticated && (
         <>
-          <Pressable
-            style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
-            onPress={() => router.push('/camera')}
-          >
-            <Ionicons name="camera" size={32} color={theme.colors.white} />
-          </Pressable>
+          <Animated.View style={styles.fabWrapAnimated}>
+            <Animated.View style={{ transform: [{ scale: fabPulse }] }}>
+              <Pressable
+                style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
+                onPress={() => router.push('/camera')}
+              >
+                <Ionicons name="camera" size={38} color={theme.colors.white} />
+              </Pressable>
+            </Animated.View>
+          </Animated.View>
         </>
       )}
       <Modal
@@ -1273,16 +1254,26 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingHorizontal: 24,
-    gap: 24,
-    paddingTop: 36,
+    paddingHorizontal: 4,
+    gap: 8,
+    paddingTop: 72,
   },
-  authLogo: {
-    width: 220,
-    height: 90,
-    resizeMode: 'contain',
-    marginTop: 6,
-    marginBottom: 8,
+  authHeaderWrap: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+    paddingHorizontal: 12,
+    marginTop: 18,
+    marginBottom: 0,
+  },
+  authTitle: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: theme.colors.text,
+    textAlign: 'center',
+    fontFamily: 'Heebo_700Bold',
+    lineHeight: 40,
   },
   authCard: {
     alignSelf: 'stretch',
@@ -1290,41 +1281,51 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 16,
-    padding: 16,
-    gap: 12,
+    padding: 18,
+    gap: 14,
     shadowColor: theme.colors.ink,
     shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
+    width: '100%',
+    maxWidth: 560,
   },
   inputRow: {
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
     height: 46,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     backgroundColor: theme.colors.cardAlt,
   },
   inputIcon: {
-    width: 28,
+    display: 'none',
+    width: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inputField: {
     flex: 1,
-    fontSize: 14,
-    textAlign: 'left',
+    fontSize: 16,
+    textAlign: 'right',
     color: theme.colors.text,
+    writingDirection: 'rtl',
+    paddingLeft: 36,
   },
   eyeButton: {
+    position: 'absolute',
+    left: 10,
+    top: 7,
     height: 32,
     width: 32,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 16,
+    zIndex: 2,
   },
   forgotPasswordText: {
     fontSize: 12,
@@ -1409,21 +1410,23 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
     backgroundColor: theme.colors.white,
   },
-  fabButton: {
+  fabWrapAnimated: {
     position: 'absolute',
     right: 18,
-    bottom: 78,
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: theme.colors.accent,
+    bottom: 94,
+  },
+  fabButton: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: primaryActionColor,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
   fabButtonPressed: {
     transform: [{ scale: 0.96 }],
@@ -1467,6 +1470,9 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: 14,
+    textAlign: 'right',
+    alignSelf: 'stretch',
+    writingDirection: 'rtl',
   },
   domainCard: {
     borderWidth: 1,

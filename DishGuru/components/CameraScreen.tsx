@@ -20,6 +20,7 @@ export default function CameraScreen() {
   const editId = typeof params.editId === 'string' ? params.editId : '';
   const returnTo = typeof params.returnTo === 'string' ? params.returnTo : '';
   const returnScroll = typeof params.scrollY === 'string' ? params.scrollY : '';
+  const lockSelection = typeof params.lockSelection === 'string' ? params.lockSelection : '';
 
   const cameraRef = useRef<CameraView | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -143,6 +144,7 @@ export default function CameraScreen() {
             restaurantName,
             dishId,
             dishName,
+            lockSelection,
           },
         });
       }

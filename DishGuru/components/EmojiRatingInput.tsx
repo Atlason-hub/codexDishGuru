@@ -26,12 +26,11 @@ export default function EmojiRatingInput({
           styles.row,
           I18nManager.isRTL && styles.rowRtl,
           {
-          height: size + 8,
-          width: 240,
-          justifyContent: 'flex-end',
-        },
-      ]}
-    >
+            height: size + 8,
+            justifyContent: 'flex-end',
+          },
+        ]}
+      >
       {indices.map((idx) => {
         const xml = RATING_SVGS[idx];
         const opacity = selectedIndex === idx ? 1 : 0.6;
@@ -64,7 +63,6 @@ export default function EmojiRatingInput({
 
 const styles = StyleSheet.create({
   outer: {
-    width: '100%',
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
   },

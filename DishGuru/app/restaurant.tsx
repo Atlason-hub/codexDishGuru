@@ -2,7 +2,6 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
-  I18nManager,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -12,18 +11,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { SvgXml } from 'react-native-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
+import RatingValueRow from '../components/RatingValueRow';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
-import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
 
 type DishAssociation = {
   id: string;
+  user_id?: string | null;
   dish_id: number | null;
   dish_name: string | null;
+  restaurant_id?: number | null;
   image_url: string | null;
   cuisine: string | null;
   tasty_score: number | null;
@@ -49,32 +49,12 @@ type DishSummary = {
   avgTasty: number;
   avgFilling: number;
   cuisine: string;
+  hasUploads: boolean;
 };
 
 type Row =
   | { type: 'header'; id: string; title: string }
   | { type: 'dish'; id: string; dish: DishSummary };
-
-const renderStars = (value: number) => {
-  const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
-  const selectedIndex = getSelectedEmojiIndex(value);
-  return (
-    <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
-      {indices.map((idx) => {
-        const opacity = selectedIndex === idx ? 1 : 0.6;
-        return (
-          <SvgXml
-            key={`face-${idx}`}
-            xml={RATING_SVGS[idx]}
-            width={24}
-            height={24}
-            style={[styles.emojiIcon, { opacity }]}
-          />
-        );
-      })}
-    </View>
-  );
-};
 
 const normalizeCategoryName = (raw: unknown) => {
   if (typeof raw !== 'string') return null;
@@ -86,6 +66,16 @@ const normalizeDishName = (raw: unknown) => {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeDishLookup = (raw: unknown) => {
+  const name = normalizeDishName(raw);
+  if (!name) return null;
+  return name
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 const normalizeDishId = (raw: unknown) => {
@@ -161,19 +151,46 @@ const buildRowsFromMenu = (
   collapsed: Set<string>
 ): Row[] => {
   const rows: Row[] = [];
+  const reviewedSectionKey = 'reviewed';
   const byDishId = new Map<number, DishSummary>();
   const byDishName = new Map<string, DishSummary>();
+  const seenReviewedKeys = new Set<string>();
   summaries.forEach((dish) => {
+    const normalizedName = normalizeDishLookup(dish.name);
+    if (normalizedName) byDishName.set(normalizedName, dish);
     const id = Number(dish.key);
-    if (!Number.isNaN(id)) byDishId.set(id, dish);
-    byDishName.set(dish.name, dish);
+    if (!Number.isNaN(id) && !byDishId.has(id)) byDishId.set(id, dish);
   });
+
+  const reviewedDishes = summaries
+    .filter((dish) => dish.hasUploads)
+    .sort((left, right) => left.name.localeCompare(right.name, 'he'));
+
+  if (reviewedDishes.length > 0) {
+    rows.push({ type: 'header', id: `header-${reviewedSectionKey}`, title: 'עם ביקורות' });
+    if (!collapsed.has(reviewedSectionKey)) {
+      reviewedDishes.forEach((dish) => {
+        const reviewedKey = normalizeDishLookup(dish.name) ?? dish.key;
+        seenReviewedKeys.add(reviewedKey);
+        rows.push({
+          type: 'dish',
+          id: `reviewed-${dish.key}`,
+          dish,
+        });
+      });
+    }
+  }
 
   categories.forEach((cat) => {
     rows.push({ type: 'header', id: `header-${cat.id}`, title: cat.name });
     if (collapsed.has(cat.id)) return;
     cat.items.forEach((dish) => {
-      const summary = byDishId.get(dish.id) ?? byDishName.get(dish.name);
+      const summary =
+        byDishName.get(normalizeDishLookup(dish.name) ?? '') ?? byDishId.get(dish.id);
+      const normalizedDish = normalizeDishLookup(dish.name) ?? String(dish.id);
+      if (summary?.hasUploads && seenReviewedKeys.has(normalizedDish)) {
+        return;
+      }
       rows.push({
         type: 'dish',
         id: `${cat.id}-${dish.id}`,
@@ -184,6 +201,7 @@ const buildRowsFromMenu = (
           avgTasty: summary?.avgTasty ?? 0,
           avgFilling: summary?.avgFilling ?? 0,
           cuisine: summary?.cuisine ?? 'ללא מטבח',
+          hasUploads: summary?.hasUploads ?? false,
         },
       });
     });
@@ -225,6 +243,8 @@ export default function RestaurantScreen() {
       setHasLoaded(false);
       setLoading(true);
       setError(null);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id ?? null;
       const menuResponse = await fetch(
         `https://www.10bis.co.il/api/GetMenu?ResId=${restaurantId}&websiteID=10bis&domainID=10bis`,
         { headers: { Accept: 'application/json' } }
@@ -236,51 +256,105 @@ export default function RestaurantScreen() {
       setMenuCategories(curatedMenu);
       setCollapsedCategories(new Set());
 
-      const { data, error: fetchError } = await supabase
-        .from('dish_associations')
-        .select(
-          'id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at'
-        )
-        .eq('restaurant_id', restaurantId)
-        .order('created_at', { ascending: false });
-      if (fetchError) throw fetchError;
-      const list = (data as DishAssociation[]) ?? [];
-      const map = new Map<string, DishSummary & { count: number }>();
-
-      list.forEach((row) => {
-        const name = row.dish_name ?? 'מנה';
-        const key = row.dish_id !== null ? String(row.dish_id) : name;
-        if (!map.has(key)) {
-          map.set(key, {
-            key,
-            name,
-            imageUrl: row.image_url ?? null,
-            avgTasty: 0,
-            avgFilling: 0,
-            cuisine: row.cuisine ?? 'ללא מטבח',
-            count: 0,
+      let list: DishAssociation[] = [];
+      if (userId) {
+        const { data: profile } = await supabase
+          .from('AppUsers')
+          .select('company_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+        const companyId = profile?.company_id ?? null;
+        if (companyId) {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('get_company_dishes', {
+            company_id: companyId,
           });
+          if (rpcError) throw rpcError;
+          list = ((rpcData as DishAssociation[]) ?? []).filter(
+            (row) => row.restaurant_id === restaurantId
+          );
         }
-        const entry = map.get(key)!;
-        if (!entry.imageUrl && row.image_url) {
-          entry.imageUrl = row.image_url;
-        }
-        if (typeof row.tasty_score === 'number') entry.avgTasty += row.tasty_score;
-        if (typeof row.filling_score === 'number') entry.avgFilling += row.filling_score;
-        entry.count += 1;
+      }
+
+      if (list.length === 0) {
+        const { data, error: fetchError } = await supabase
+          .from('dish_associations')
+          .select(
+            'id, user_id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at, restaurant_id'
+          )
+          .eq('restaurant_id', restaurantId)
+          .order('created_at', { ascending: false });
+        if (fetchError) throw fetchError;
+        list = (data as DishAssociation[]) ?? [];
+      }
+      const uniqueMenuDishes = new Map<
+        string,
+        { name: string; ids: Set<number>; primaryId: number }
+      >();
+      curatedMenu.forEach((category) => {
+        category.items.forEach((dish) => {
+          const normalizedName = normalizeDishLookup(dish.name) ?? `dish:${dish.id}`;
+          if (!uniqueMenuDishes.has(normalizedName)) {
+            uniqueMenuDishes.set(normalizedName, {
+              name: dish.name,
+              ids: new Set([dish.id]),
+              primaryId: dish.id,
+            });
+          } else {
+            uniqueMenuDishes.get(normalizedName)!.ids.add(dish.id);
+          }
+        });
       });
 
-      const result: DishSummary[] = Array.from(map.values()).map((entry) => ({
-        key: entry.key,
-        name: entry.name,
-        imageUrl: entry.imageUrl,
-        avgTasty: entry.count ? entry.avgTasty / entry.count : 0,
-        avgFilling: entry.count ? entry.avgFilling / entry.count : 0,
-        cuisine: entry.cuisine,
-      }));
+      const result: DishSummary[] = Array.from(uniqueMenuDishes.values()).map((menuDish) => {
+        const normalizedMenuName = normalizeDishLookup(menuDish.name);
+        const matchingRows = list.filter((row) => {
+          if (row.dish_id !== null && menuDish.ids.has(row.dish_id)) {
+            return true;
+          }
+          if (!normalizedMenuName) return false;
+          const normalizedRowName = normalizeDishLookup(row.dish_name);
+          if (!normalizedRowName) return false;
+          return normalizedRowName === normalizedMenuName;
+        });
+
+        let tastySum = 0;
+        let tastyCount = 0;
+        let fillingSum = 0;
+        let fillingCount = 0;
+        let imageUrl: string | null = null;
+        let cuisine = 'ללא מטבח';
+        let latestCreatedAt = 0;
+
+        matchingRows.forEach((row) => {
+          if (typeof row.tasty_score === 'number') {
+            tastySum += row.tasty_score;
+            tastyCount += 1;
+          }
+          if (typeof row.filling_score === 'number') {
+            fillingSum += row.filling_score;
+            fillingCount += 1;
+          }
+          const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
+          if (createdAt >= latestCreatedAt) {
+            latestCreatedAt = createdAt;
+            imageUrl = row.image_url ?? imageUrl;
+            cuisine = row.cuisine ?? cuisine;
+          }
+        });
+
+        return {
+          key: String(menuDish.primaryId),
+          name: menuDish.name,
+          imageUrl,
+          avgTasty: tastyCount ? tastySum / tastyCount : 0,
+          avgFilling: fillingCount ? fillingSum / fillingCount : 0,
+          cuisine,
+          hasUploads: matchingRows.length > 0,
+        };
+      });
 
       setSummaries(result);
-    } catch (err) {
+    } catch {
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
       setLoading(false);
@@ -340,6 +414,7 @@ export default function RestaurantScreen() {
             style={styles.controlButton}
             onPress={() => {
               const all = new Set<string>();
+              all.add('reviewed');
               menuCategories.forEach((cat) => all.add(cat.id));
               setCollapsedCategories(all);
             }}
@@ -410,7 +485,7 @@ export default function RestaurantScreen() {
                       : 'chevron-up'
                   }
                   size={14}
-                  color="#9e211c"
+                  color="theme.colors.accent"
                 />
               </Pressable>
             ) : (
@@ -425,24 +500,36 @@ export default function RestaurantScreen() {
                       dishId: item.dish.key,
                       dishName: item.dish.name,
                       defaultImageUrl: item.dish.imageUrl ?? '',
+                      lockSelection: '1',
                     },
                   })
                 }
               >
                 <View style={styles.dishInfo}>
                   <Text style={styles.dishName}>{item.dish.name}</Text>
-                  <View style={styles.scoreRow}>
-                    <View style={styles.scoreItem}>
-                      <View style={styles.ratingInlineRow}>
-                        <Text style={styles.scoreLabel}>טעים</Text>
-                        {renderStars(scoreToStars(item.dish.avgTasty))}
-                      </View>
+                  {!item.dish.hasUploads ? (
+                    <View style={styles.statusBadge}>
+                      <Text style={styles.statusBadgeText}>אין עדיין ביקורות</Text>
                     </View>
-                    <View style={styles.scoreItem}>
-                      <View style={styles.ratingInlineRow}>
-                        <Text style={styles.scoreLabel}>משביע</Text>
-                        {renderStars(scoreToStars(item.dish.avgFilling))}
-                      </View>
+                  ) : null}
+                  <View style={styles.scoreRow}>
+                    <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
+                      <RatingValueRow
+                        label="טעים"
+                        score={item.dish.avgTasty}
+                        iconSize={24}
+                        rowStyle={styles.ratingInlineRow}
+                        labelStyle={styles.scoreLabel}
+                      />
+                    </View>
+                    <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
+                      <RatingValueRow
+                        label="משביע"
+                        score={item.dish.avgFilling}
+                        iconSize={24}
+                        rowStyle={styles.ratingInlineRow}
+                        labelStyle={styles.scoreLabel}
+                      />
                     </View>
                   </View>
                 </View>
@@ -559,37 +646,50 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginBottom: 6,
   },
+  statusBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: theme.colors.cardAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: 8,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+    textAlign: 'right',
+  },
   scoreRow: {
-    flexDirection: 'row-reverse',
-    gap: 12,
+    flexDirection: 'column',
+    gap: 8,
+    alignItems: 'flex-end',
+    alignSelf: 'flex-end',
+    marginRight: 22,
   },
   scoreItem: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
+    alignSelf: 'flex-end',
+  },
+  scoreItemMuted: {
+    opacity: 0.55,
   },
   ratingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 8,
-    paddingRight: 30,
-  },
-  starRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 0,
-  },
-  starRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  emojiIcon: {
-    marginTop: 1,
+    gap: 2,
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
   },
   scoreLabel: {
     fontSize: 11,
     color: theme.colors.textMuted,
-    minWidth: 44,
+    minWidth: 62,
     textAlign: 'right',
-    alignSelf: 'flex-end',
+    alignSelf: 'center',
     lineHeight: 24,
+    paddingRight: 10,
   },
   imageWrap: {
     width: 110,
