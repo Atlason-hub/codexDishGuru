@@ -7,6 +7,7 @@ import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedLogo from './CachedLogo';
+import LegalModal from './LegalModal';
 import { theme } from '../lib/theme';
 import { applyPaletteFromLogo } from '../lib/brandPalette';
 
@@ -69,6 +70,7 @@ export default function AppHeader() {
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(lastKnownCompanyLogoUrl);
   const [menuVisible, setMenuVisible] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [legalModal, setLegalModal] = useState<{ title: string; url: string } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const lastPaletteLogoRef = useRef<string | null>(null);
@@ -233,11 +235,29 @@ export default function AppHeader() {
               <Text style={styles.menuOption}>המועדפים שלי</Text>
               <Ionicons name="heart-outline" size={20} color={theme.colors.accent} />
             </Pressable>
-            <Pressable style={styles.menuOptionRow}>
+            <Pressable
+              style={styles.menuOptionRow}
+              onPress={() => {
+                setMenuVisible(false);
+                setLegalModal({
+                  title: 'מדיניות פרטיות',
+                  url: 'https://atlason-hub.github.io/codexDishGuru/#privacy',
+                });
+              }}
+            >
               <Text style={styles.menuOption}>מדיניות פרטיות</Text>
               <Ionicons name="megaphone-outline" size={20} color={theme.colors.accent} />
             </Pressable>
-            <Pressable style={styles.menuOptionRow}>
+            <Pressable
+              style={styles.menuOptionRow}
+              onPress={() => {
+                setMenuVisible(false);
+                setLegalModal({
+                  title: 'תנאים',
+                  url: 'https://atlason-hub.github.io/codexDishGuru/#terms',
+                });
+              }}
+            >
               <Text style={styles.menuOption}>תנאים</Text>
               <Ionicons name="document-text-outline" size={20} color={theme.colors.accent} />
             </Pressable>
@@ -248,6 +268,12 @@ export default function AppHeader() {
           </View>
         </View>
       </Modal>
+      <LegalModal
+        visible={Boolean(legalModal)}
+        title={legalModal?.title ?? ''}
+        url={legalModal?.url ?? 'https://atlason-hub.github.io/codexDishGuru/#terms'}
+        onClose={() => setLegalModal(null)}
+      />
     </View>
   );
 }

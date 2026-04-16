@@ -23,9 +23,10 @@ import { openVendorDish } from '../lib/orderVendor';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
+import LegalModal from '../components/LegalModal';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
-import { fetchFavoritesMap, fetchUserAvatarMaps } from '../lib/appData';
+import { fetchCompanyIdForUser, fetchFavoritesMap, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 const AVATAR_MODAL_SIZE = 220;
@@ -55,6 +56,8 @@ export default function HomeScreen() {
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [showSignup, setShowSignup] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [legalModal, setLegalModal] = useState<{ title: string; url: string } | null>(null);
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -113,6 +116,20 @@ export default function HomeScreen() {
     if (atIndex === -1) return null;
     const domain = value.slice(atIndex + 1).trim().toLowerCase();
     return domain.length > 0 ? domain : null;
+  };
+
+  const toHebrewAuthError = (message: string) => {
+    const lower = message.toLowerCase();
+    if (lower.includes('invalid login credentials')) return 'האימייל או הסיסמה שגויים.';
+    if (lower.includes('email not confirmed')) return 'יש לאשר את כתובת האימייל לפני ההתחברות.';
+    if (lower.includes('user already registered') || lower.includes('already registered')) return 'המשתמש כבר קיים במערכת.';
+    if (lower.includes('password should be at least')) return 'הסיסמה חייבת להכיל לפחות 6 תווים.';
+    if (lower.includes('signup is disabled')) return 'ההרשמה אינה זמינה כרגע.';
+    if (lower.includes('email rate limit exceeded')) return 'בוצעו יותר מדי ניסיונות. נסה שוב בעוד כמה דקות.';
+    if (lower.includes('database error saving new user')) return 'ההרשמה נכשלה. בדוק שכתובת האימייל שייכת לחברה קיימת.';
+    if (lower.includes('no company matches email domain')) return 'דומיין האימייל אינו משויך לחברה מוכרת.';
+    if (lower.includes('missing email domain')) return 'יש להזין כתובת אימייל מלאה של מקום העבודה.';
+    return 'אירעה שגיאה. נסה שוב.';
   };
 
   const loadUserAvatars = async (items: DishAssociation[]) => {
@@ -195,19 +212,14 @@ export default function HomeScreen() {
               .map((row: any) => row?.user_id)
               .filter(Boolean);
           }
-          const { data: rpcData, error: rpcError } = await supabase.rpc(
-            'get_company_dishes',
-            {
-              company_id: companyId,
-            }
-          );
+          const rpcData = await fetchVisibleDishes(companyId);
           const { data: directData, error: directError } = await supabase
             .from('dish_associations')
             .select(
               'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at'
             )
             .in('user_id', allowedUserIds ?? []);
-          if (!rpcError && Array.isArray(rpcData)) {
+          if (Array.isArray(rpcData)) {
             const merged = new Map<string, DishAssociation>();
             (rpcData as DishAssociation[]).forEach((row) => {
               if (row?.id) merged.set(String(row.id), row);
@@ -557,7 +569,8 @@ export default function HomeScreen() {
         throw error;
       }
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'התחברות נכשלה.');
+      const message = err instanceof Error ? err.message : 'התחברות נכשלה.';
+      setAuthError(toHebrewAuthError(message));
     } finally {
       setAuthLoading(false);
     }
@@ -566,6 +579,10 @@ export default function HomeScreen() {
   const signUp = async () => {
     if (!email.trim() || !pass.trim() || !confirmPass.trim()) {
       setAuthError('אנא הזן אימייל, סיסמה ואישור סיסמה.');
+      return;
+    }
+    if (!acceptedTerms) {
+      setAuthError('יש לאשר את תנאי השימוש כדי ליצור חשבון.');
       return;
     }
     if (pass !== confirmPass) {
@@ -616,18 +633,12 @@ export default function HomeScreen() {
       setShowSignup(false);
       setPass('');
       setConfirmPass('');
+      setAcceptedTerms(false);
     } catch (err) {
       const authApiError =
         err && typeof err === 'object' && 'name' in err ? (err as { [k: string]: any }) : null;
       const message = authApiError?.message ?? (err instanceof Error ? err.message : 'הרשמה נכשלה.');
-      const lower = message.toLowerCase();
-      if (lower.includes('no company matches email domain')) {
-        setAuthError('הרשמה נחסמה: דומיין האימייל אינו משויך לחברה.');
-      } else if (lower.includes('database error saving new user')) {
-        setAuthError('הרשמה נכשלה: דומיין האימייל חייב להתאים לחברה קיימת.');
-      } else {
-        setAuthError(message);
-      }
+      setAuthError(toHebrewAuthError(message));
     } finally {
       setAuthLoading(false);
     }
@@ -891,66 +902,101 @@ export default function HomeScreen() {
             <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
           </View>
           <View style={styles.authCard}>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.inputField}
-                placeholder="אימייל מקום העבודה"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-                placeholderTextColor={theme.colors.textMuted}
-                textAlign="right"
-                selectionColor={theme.colors.accent}
-              />
-            </View>
-            <View style={styles.inputRow}>
-              <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
-                <Ionicons
-                  name={showPass ? 'eye-off' : 'eye'}
-                  size={18}
-                  color={theme.colors.textMuted}
-                />
-              </Pressable>
-              <TextInput
-                style={styles.inputField}
-                placeholder="סיסמה"
-                secureTextEntry={!showPass}
-                value={pass}
-                onChangeText={setPass}
-                placeholderTextColor={theme.colors.textMuted}
-                textAlign="right"
-                selectionColor={theme.colors.accent}
-              />
-            </View>
-            {showSignup && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>אימייל מקום העבודה</Text>
               <View style={styles.inputRow}>
-                <Pressable
-                  style={styles.eyeButton}
-                  onPress={() => setShowConfirmPass((v) => !v)}
-                >
+                <TextInput
+                  style={styles.inputField}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder=""
+                  textAlign="left"
+                  selectionColor={theme.colors.accent}
+                  cursorColor={theme.colors.accent}
+                />
+              </View>
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>סיסמה</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.inputFieldPassword}
+                  placeholder=""
+                  secureTextEntry={!showPass}
+                  value={pass}
+                  onChangeText={setPass}
+                  textAlign="left"
+                  selectionColor={theme.colors.accent}
+                  cursorColor={theme.colors.accent}
+                />
+                <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
                   <Ionicons
-                    name={showConfirmPass ? 'eye-off' : 'eye'}
+                    name={showPass ? 'eye-off' : 'eye'}
                     size={18}
                     color={theme.colors.textMuted}
                   />
                 </Pressable>
-                <TextInput
-                  style={styles.inputField}
-                  placeholder="אישור סיסמה"
-                  secureTextEntry={!showConfirmPass}
-                  value={confirmPass}
-                  onChangeText={setConfirmPass}
-                  placeholderTextColor={theme.colors.textMuted}
-                  textAlign="right"
-                  selectionColor={theme.colors.accent}
-                />
+              </View>
+            </View>
+            {showSignup && (
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>אישור סיסמה</Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.inputFieldPassword}
+                    placeholder=""
+                    secureTextEntry={!showConfirmPass}
+                    value={confirmPass}
+                    onChangeText={setConfirmPass}
+                    textAlign="left"
+                    selectionColor={theme.colors.accent}
+                    cursorColor={theme.colors.accent}
+                  />
+                  <Pressable
+                    style={styles.eyeButton}
+                    onPress={() => setShowConfirmPass((v) => !v)}
+                  >
+                    <Ionicons
+                      name={showConfirmPass ? 'eye-off' : 'eye'}
+                      size={18}
+                      color={theme.colors.textMuted}
+                    />
+                  </Pressable>
+                </View>
               </View>
             )}
+            {showSignup ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.termsRow,
+                  pressed && styles.termsRowPressed,
+                ]}
+                onPress={() => setAcceptedTerms((value) => !value)}
+              >
+                <Pressable
+                  onPress={() =>
+                    setLegalModal({
+                      title: 'תנאים',
+                      url: 'https://atlason-hub.github.io/codexDishGuru/#terms',
+                    })
+                  }
+                  style={styles.termsTextWrap}
+                >
+                  <Text style={styles.termsText}>מאשר תנאי שימוש</Text>
+                </Pressable>
+                <View style={[styles.termsCheckbox, acceptedTerms && styles.termsCheckboxChecked]}>
+                  {acceptedTerms ? (
+                    <Ionicons name="checkmark" size={16} color={theme.colors.white} />
+                  ) : null}
+                </View>
+              </Pressable>
+            ) : null}
             {!showSignup && (
               <Text style={styles.forgotPasswordText}>שכחת סיסמה?</Text>
             )}
-            {authError && <Text style={styles.errorText}>{authError}</Text>}
+            {authError && <Text style={styles.authErrorText}>{authError}</Text>}
             {showSignup ? (
               <>
                 <Pressable
@@ -974,6 +1020,7 @@ export default function HomeScreen() {
                   ]}
                   onPress={() => {
                     setShowSignup(false);
+                    setAcceptedTerms(false);
                     setAuthError(null);
                   }}
                   disabled={authLoading}
@@ -1116,6 +1163,12 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+      <LegalModal
+        visible={Boolean(legalModal)}
+        title={legalModal?.title ?? ''}
+        url={legalModal?.url ?? 'https://atlason-hub.github.io/codexDishGuru/#terms'}
+        onClose={() => setLegalModal(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -1265,7 +1318,7 @@ const styles = StyleSheet.create({
     gap: 24,
     paddingHorizontal: 12,
     marginTop: 18,
-    marginBottom: 0,
+    marginBottom: 28,
   },
   authTitle: {
     fontSize: 34,
@@ -1280,16 +1333,26 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 16,
-    padding: 18,
-    gap: 14,
+    borderRadius: 20,
+    padding: 20,
+    gap: 16,
     shadowColor: theme.colors.ink,
     shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
     width: '100%',
-    maxWidth: 560,
+    maxWidth: 580,
+  },
+  fieldGroup: {
+    gap: 9,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    paddingRight: 4,
   },
   inputRow: {
     position: 'relative',
@@ -1298,7 +1361,7 @@ const styles = StyleSheet.create({
     height: 46,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 16,
     backgroundColor: theme.colors.cardAlt,
   },
@@ -1311,14 +1374,24 @@ const styles = StyleSheet.create({
   inputField: {
     flex: 1,
     fontSize: 16,
-    textAlign: 'right',
+    textAlign: 'left',
     color: theme.colors.text,
-    writingDirection: 'rtl',
-    paddingLeft: 36,
+    writingDirection: 'ltr',
+    paddingLeft: 4,
+    paddingRight: 4,
+  },
+  inputFieldPassword: {
+    flex: 1,
+    fontSize: 16,
+    textAlign: 'left',
+    color: theme.colors.text,
+    writingDirection: 'ltr',
+    paddingLeft: 4,
+    paddingRight: 44,
   },
   eyeButton: {
     position: 'absolute',
-    left: 10,
+    right: 10,
     top: 7,
     height: 32,
     width: 32,
@@ -1332,6 +1405,51 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     textAlign: 'right',
     marginTop: -2,
+  },
+  termsRow: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  termsRowPressed: {
+    opacity: 0.92,
+  },
+  termsTextWrap: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  termsCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.white,
+  },
+  termsCheckboxChecked: {
+    backgroundColor: theme.colors.accent,
+  },
+  termsText: {
+    color: theme.colors.text,
+    textAlign: 'right',
+    textDecorationLine: 'underline',
+    fontSize: 14,
+  },
+  authErrorText: {
+    color: theme.colors.danger,
+    fontSize: 13,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    lineHeight: 20,
   },
   loginButton: {
     height: 44,
