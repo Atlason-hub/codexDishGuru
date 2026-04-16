@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { scoreToStars, starsToScore } from '../lib/ratings';
 import EmojiRatingInput from '../components/EmojiRatingInput';
+import { showAppAlert } from '../lib/appDialog';
 
 type DishAssociation = {
   id: string;
@@ -91,7 +91,7 @@ export default function EditDishScreen() {
           setPhotoUri(dataRow.image_url ?? null);
         }
       } catch {
-        Alert.alert('שגיאה', 'לא ניתן לטעון את המנה.');
+        showAppAlert('שגיאה', 'לא ניתן לטעון את המנה.');
       } finally {
         setLoading(false);
       }
@@ -104,7 +104,7 @@ export default function EditDishScreen() {
   const handleSave = async () => {
     if (!dish || !associationId) return;
     if (!currentUserId || dish.user_id !== currentUserId) {
-      Alert.alert('אין הרשאה', 'אפשר לערוך רק מנות שהעלית.');
+      showAppAlert('אין הרשאה', 'אפשר לערוך רק מנות שהעלית.');
       return;
     }
     try {
@@ -174,7 +174,7 @@ export default function EditDishScreen() {
         router.replace({ pathname: '/', params: { refresh: refreshToken } });
       }
     } catch {
-      Alert.alert('שמירה נכשלה', 'לא הצלחנו לשמור את השינויים.');
+      showAppAlert('שמירה נכשלה', 'לא הצלחנו לשמור את השינויים.');
     } finally {
       setSaving(false);
     }

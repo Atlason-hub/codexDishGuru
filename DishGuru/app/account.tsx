@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,17 +10,34 @@ import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { theme } from '../lib/theme';
+import { showAppAlert, showAppDialog } from '../lib/appDialog';
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return 'אירעה שגיאה לא צפויה.';
+    }
+  }
+  if (typeof error === 'string' && error.trim()) return error;
+  return 'אירעה שגיאה לא צפויה.';
+};
 
 export default function AccountScreen() {
   const FRAME_SIZE = 180;
-  const MIN_ZOOM = 1;
-  const MAX_ZOOM = 3;
+  const MIN_ZOOM = 1.28;
+  const MAX_ZOOM = 5;
 
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [tempAvatarUrl, setTempAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [pendingAsset, setPendingAsset] = useState<{
     uri: string;
     width: number;
@@ -36,8 +53,9 @@ export default function AccountScreen() {
   const scaleFactor = scaleToCover * zoom;
   const displayWidth = pendingAsset ? pendingAsset.width * scaleFactor : FRAME_SIZE;
   const displayHeight = pendingAsset ? pendingAsset.height * scaleFactor : FRAME_SIZE;
-  const maxOffsetX = Math.max(0, (displayWidth - FRAME_SIZE) / 2);
-  const maxOffsetY = Math.max(0, (displayHeight - FRAME_SIZE) / 2);
+  const extraDragAllowance = pendingAsset ? FRAME_SIZE * 0.55 : 0;
+  const maxOffsetX = Math.max(FRAME_SIZE * 0.35, (displayWidth - FRAME_SIZE) / 2 + extraDragAllowance);
+  const maxOffsetY = Math.max(FRAME_SIZE * 0.35, (displayHeight - FRAME_SIZE) / 2 + extraDragAllowance);
 
   const clampOffset = (value: { x: number; y: number }) => ({
     x: Math.min(maxOffsetX, Math.max(-maxOffsetX, value.x)),
@@ -111,204 +129,264 @@ export default function AccountScreen() {
         </Pressable>
         <Text style={styles.title}>החשבון שלי</Text>
       </View>
-      <View style={styles.emailRow}>
-        <Text style={styles.emailValue}>{email ?? ''}</Text>
-        <Text style={styles.emailLabel}>אימייל</Text>
-      </View>
-      <View style={styles.divider} />
-      <View style={styles.avatarCircle} {...panResponder.panHandlers}>
-        {tempAvatarUrl ? (
-          <Image
-            source={{ uri: tempAvatarUrl }}
-            style={[
-              styles.tempAvatarImage,
-              { width: displayWidth, height: displayHeight },
-              { transform: [{ translateX: avatarOffset.x }, { translateY: avatarOffset.y }] },
-            ]}
-            contentFit="cover"
-            pointerEvents="none"
-          />
-        ) : avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-        ) : (
-          <Ionicons name="person" size={44} color="#ffffff" />
-        )}
-      </View>
-      {tempAvatarUrl ? (
-        <View style={styles.zoomRow}>
-          <Ionicons name="remove" size={16} color={theme.colors.textMuted} />
-          <Slider
-            style={styles.zoomSlider}
-            minimumValue={MIN_ZOOM}
-            maximumValue={MAX_ZOOM}
-            step={0.01}
-            value={zoom}
-            onValueChange={(value) => {
-              setZoom(value);
-              setAvatarOffset((prev) => clampOffset(prev));
-            }}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-          />
-          <Ionicons name="add" size={16} color={theme.colors.textMuted} />
+
+      <View style={styles.profileCard}>
+        <View style={styles.emailSection}>
+          <Text style={styles.emailLabel}>אימייל</Text>
+          <Text style={styles.emailValue}>{email ?? ''}</Text>
         </View>
-      ) : null}
-      <View style={styles.actionsRow}>
-        <Pressable
-          style={styles.actionButton}
-          onPress={async () => {
-            if (saving) return;
-            try {
-              const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (!permission.granted) {
-                Alert.alert('נדרש אישור', 'אנא אפשר גישה לגלריה.');
-                return;
+
+        <View style={styles.divider} />
+
+        <View style={styles.avatarSection}>
+          <View style={styles.avatarCircle} {...panResponder.panHandlers}>
+            {tempAvatarUrl ? (
+              <Image
+                source={{ uri: tempAvatarUrl }}
+                style={[
+                  styles.tempAvatarImage,
+                  { width: displayWidth, height: displayHeight },
+                  { transform: [{ translateX: avatarOffset.x }, { translateY: avatarOffset.y }] },
+                ]}
+                contentFit="cover"
+                pointerEvents="none"
+              />
+            ) : avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="person" size={44} color="#ffffff" />
+            )}
+          </View>
+
+          {tempAvatarUrl ? (
+            <View style={styles.zoomRow}>
+              <Ionicons name="remove" size={16} color={theme.colors.textMuted} />
+              <Slider
+                style={styles.zoomSlider}
+                minimumValue={MIN_ZOOM}
+                maximumValue={MAX_ZOOM}
+                step={0.01}
+                value={zoom}
+                onValueChange={(value) => {
+                  setZoom(value);
+                  setAvatarOffset((prev) => clampOffset(prev));
+                }}
+                minimumTrackTintColor={theme.colors.accent}
+                maximumTrackTintColor={theme.colors.border}
+              />
+              <Ionicons name="add" size={16} color={theme.colors.textMuted} />
+            </View>
+          ) : null}
+
+          <View style={styles.actionsRow}>
+            <Pressable
+              style={styles.actionButton}
+              onPress={async () => {
+                if (saving) return;
+                try {
+                  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                  if (!permission.granted) {
+                    showAppAlert('נדרש אישור', 'אנא אפשר גישה לגלריה.');
+                    return;
+                  }
+                  const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    quality: 0.7,
+                  });
+                  if (result.canceled || !result.assets) return;
+                  const asset = result.assets[0];
+                  if (!asset?.uri || !asset?.width || !asset?.height) return;
+                  setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
+                  setTempAvatarUrl(asset.uri);
+                  setAvatarOffset({ x: 0, y: 0 });
+                  setZoom(MIN_ZOOM);
+                  setSaving(true);
+                  const { data } = await supabase.auth.getSession();
+                  const userId = data.session?.user?.id;
+                  if (!userId) return;
+                } catch (error) {
+                  showAppAlert('העלאה נכשלה', error instanceof Error ? error.message : 'העלאה נכשלה');
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              <Ionicons name="image-outline" size={22} color={theme.colors.textMuted} />
+            </Pressable>
+
+            <Pressable
+              style={styles.actionButton}
+              onPress={async () => {
+                if (saving) return;
+                try {
+                  const permission = await ImagePicker.requestCameraPermissionsAsync();
+                  if (!permission.granted) {
+                    showAppAlert('נדרש אישור', 'אנא אפשר גישה למצלמה.');
+                    return;
+                  }
+                  const result = await ImagePicker.launchCameraAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    quality: 0.7,
+                    cameraType: ImagePicker.CameraType.front,
+                  });
+                  if (result.canceled || !result.assets) return;
+                  const asset = result.assets[0];
+                  if (!asset?.uri || !asset?.width || !asset?.height) return;
+                  setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
+                  setTempAvatarUrl(asset.uri);
+                  setAvatarOffset({ x: 0, y: 0 });
+                  setZoom(MIN_ZOOM);
+                  setSaving(true);
+                  const { data } = await supabase.auth.getSession();
+                  const userId = data.session?.user?.id;
+                  if (!userId) return;
+                } catch (error) {
+                  showAppAlert('צילום נכשל', error instanceof Error ? error.message : 'העלאה נכשלה');
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              <Ionicons name="camera-outline" size={22} color={theme.colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.saveButton,
+              pressed && !saving && pendingAsset && styles.saveButtonPressed,
+              (!pendingAsset || saving) && styles.saveButtonDisabled,
+            ]}
+            onPress={async () => {
+              if (!pendingAsset || saving) return;
+              try {
+                setSaving(true);
+                const { data } = await supabase.auth.getSession();
+                const userId = data.session?.user?.id;
+                if (!userId) return;
+                const imageLeft = FRAME_SIZE / 2 - displayWidth / 2 + avatarOffset.x;
+                const imageTop = FRAME_SIZE / 2 - displayHeight / 2 + avatarOffset.y;
+                const cropX = Math.max(0, (0 - imageLeft) / scaleFactor);
+                const cropY = Math.max(0, (0 - imageTop) / scaleFactor);
+                const cropSize = FRAME_SIZE / scaleFactor;
+                const cropWidth = Math.min(pendingAsset.width - cropX, cropSize);
+                const cropHeight = Math.min(pendingAsset.height - cropY, cropSize);
+
+                const cropped = await ImageManipulator.manipulateAsync(
+                  pendingAsset.uri,
+                  [
+                    {
+                      crop: {
+                        originX: cropX,
+                        originY: cropY,
+                        width: cropWidth,
+                        height: cropHeight,
+                      },
+                    },
+                    { resize: { width: 512, height: 512 } },
+                  ],
+                  { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+                );
+                if (!cropped.base64) {
+                  throw new Error('כשל בעיבוד התמונה');
+                }
+
+                const filePath = `${userId}/${Date.now()}.jpg`;
+                const binary = globalThis.atob
+                  ? globalThis.atob(cropped.base64)
+                  : Buffer.from(cropped.base64, 'base64').toString('binary');
+                const len = binary.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+                const upload = await supabase.storage.from('avatars').upload(filePath, bytes, {
+                  contentType: 'image/jpeg',
+                  upsert: true,
+                });
+                if (upload.error) throw upload.error;
+                const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+                const url = publicData?.publicUrl ?? null;
+                if (url) {
+                  await supabase.auth.updateUser({ data: { avatar_url: url } });
+                  const { data: sessionData } = await supabase.auth.getSession();
+                  const currentUserId = sessionData.session?.user?.id ?? null;
+                  if (currentUserId) {
+                    const { error: profileError } = await supabase
+                      .from('AppUsers')
+                      .update({ avatar_url: url })
+                      .eq('user_id', currentUserId);
+                    if (profileError) {
+                      throw profileError;
+                    }
+                  }
+                  setAvatarUrl(url);
+                  await cacheAvatar(userId, url);
+                  setPendingAsset(null);
+                  setTempAvatarUrl(null);
+                  setAvatarOffset({ x: 0, y: 0 });
+                  setZoom(MIN_ZOOM);
+                  router.replace('/');
+                }
+              } catch (error) {
+                showAppAlert('שמירה נכשלה', error instanceof Error ? error.message : 'שמירה נכשלה');
+              } finally {
+                setSaving(false);
               }
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                quality: 0.7,
-              });
-              if (result.canceled || !result.assets) return;
-              const asset = result.assets[0];
-              if (!asset?.uri || !asset?.width || !asset?.height) return;
-              setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
-              setTempAvatarUrl(asset.uri);
-              setAvatarOffset({ x: 0, y: 0 });
-              setZoom(MIN_ZOOM);
-              setSaving(true);
-              const { data } = await supabase.auth.getSession();
-              const userId = data.session?.user?.id;
-              if (!userId) return;
-              // do not upload until user presses Save
-            } catch (error) {
-              Alert.alert('העלאה נכשלה', error instanceof Error ? error.message : 'העלאה נכשלה');
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          <Ionicons name="image-outline" size={22} color={theme.colors.textMuted} />
-        </Pressable>
-        <Pressable
-          style={styles.actionButton}
-          onPress={async () => {
-            if (saving) return;
-            try {
-              const permission = await ImagePicker.requestCameraPermissionsAsync();
-              if (!permission.granted) {
-                Alert.alert('נדרש אישור', 'אנא אפשר גישה למצלמה.');
-                return;
-              }
-              const result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                quality: 0.7,
-                cameraType: ImagePicker.CameraType.front,
-              });
-              if (result.canceled || !result.assets) return;
-              const asset = result.assets[0];
-              if (!asset?.uri || !asset?.width || !asset?.height) return;
-              setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
-              setTempAvatarUrl(asset.uri);
-              setAvatarOffset({ x: 0, y: 0 });
-              setZoom(MIN_ZOOM);
-              setSaving(true);
-              const { data } = await supabase.auth.getSession();
-              const userId = data.session?.user?.id;
-              if (!userId) return;
-              // do not upload until user presses Save
-            } catch (error) {
-              Alert.alert('צילום נכשל', error instanceof Error ? error.message : 'העלאה נכשלה');
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          <Ionicons name="camera-outline" size={22} color={theme.colors.textMuted} />
-        </Pressable>
+            }}
+          >
+            <Text style={styles.saveButtonText}>שמור</Text>
+          </Pressable>
+        </View>
       </View>
+
       <Pressable
         style={({ pressed }) => [
-          styles.saveButton,
-          pressed && !saving && pendingAsset && styles.saveButtonPressed,
-          (!pendingAsset || saving) && styles.saveButtonDisabled,
+          styles.deleteAccountButton,
+          (pressed || deletingAccount) && styles.deleteAccountButtonPressed,
         ]}
-        onPress={async () => {
-          if (!pendingAsset || saving) return;
-          try {
-            setSaving(true);
-            const { data } = await supabase.auth.getSession();
-            const userId = data.session?.user?.id;
-            if (!userId) return;
-            const imageLeft = FRAME_SIZE / 2 - displayWidth / 2 + avatarOffset.x;
-            const imageTop = FRAME_SIZE / 2 - displayHeight / 2 + avatarOffset.y;
-            const cropX = Math.max(0, (0 - imageLeft) / scaleFactor);
-            const cropY = Math.max(0, (0 - imageTop) / scaleFactor);
-            const cropSize = FRAME_SIZE / scaleFactor;
-            const cropWidth = Math.min(pendingAsset.width - cropX, cropSize);
-            const cropHeight = Math.min(pendingAsset.height - cropY, cropSize);
+        onPress={() => {
+          if (saving || deletingAccount) return;
+          showAppDialog({
+            title: 'מחיקת חשבון',
+            message: 'האם למחוק את החשבון וכל המנות שהעלית?',
+            actions: [
+              { text: 'ביטול', style: 'cancel' },
+              {
+                text: 'מחק חשבון',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    setDeletingAccount(true);
+                    const { data } = await supabase.auth.getSession();
+                    const userId = data.session?.user?.id ?? null;
+                    if (!userId) {
+                      showAppAlert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק את החשבון.');
+                      return;
+                    }
 
-            const cropped = await ImageManipulator.manipulateAsync(
-              pendingAsset.uri,
-              [
-                {
-                  crop: {
-                    originX: cropX,
-                    originY: cropY,
-                    width: cropWidth,
-                    height: cropHeight,
-                  },
-                },
-                { resize: { width: 512, height: 512 } },
-              ],
-              { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-            );
-            if (!cropped.base64) {
-              throw new Error('כשל בעיבוד התמונה');
-            }
+                    const { error } = await supabase.rpc('delete_my_account');
+                    if (error) throw error;
 
-            const filePath = `${userId}/${Date.now()}.jpg`;
-            const binary = globalThis.atob
-              ? globalThis.atob(cropped.base64)
-              : Buffer.from(cropped.base64, 'base64').toString('binary');
-            const len = binary.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
-            const upload = await supabase.storage.from('avatars').upload(filePath, bytes, {
-              contentType: 'image/jpeg',
-              upsert: true,
-            });
-            if (upload.error) throw upload.error;
-            const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-            const url = publicData?.publicUrl ?? null;
-              if (url) {
-                await supabase.auth.updateUser({ data: { avatar_url: url } });
-                const { data: sessionData } = await supabase.auth.getSession();
-                const currentUserId = sessionData.session?.user?.id ?? null;
-                if (currentUserId) {
-                  const { error: profileError } = await supabase
-                    .from('AppUsers')
-                    .update({ avatar_url: url })
-                    .eq('user_id', currentUserId);
-                  if (profileError) {
-                    throw profileError;
+                    await cacheAvatar(userId, null);
+                    setAvatarUrl(null);
+                    setTempAvatarUrl(null);
+                    setPendingAsset(null);
+                    await supabase.auth.signOut();
+                    router.replace('/');
+                  } catch (error) {
+                    showAppAlert(
+                      'מחיקה נכשלה',
+                      getErrorMessage(error)
+                    );
+                  } finally {
+                    setDeletingAccount(false);
                   }
-                }
-                setAvatarUrl(url);
-                await cacheAvatar(userId, url);
-                setPendingAsset(null);
-                setTempAvatarUrl(null);
-                setAvatarOffset({ x: 0, y: 0 });
-                setZoom(MIN_ZOOM);
-                router.replace('/');
-              }
-          } catch (error) {
-            Alert.alert('שמירה נכשלה', error instanceof Error ? error.message : 'שמירה נכשלה');
-          } finally {
-            setSaving(false);
-          }
+                },
+              },
+            ],
+          });
         }}
       >
-        <Text style={styles.saveButtonText}>שמור</Text>
+        <Text style={styles.deleteAccountButtonText}>מחק חשבון</Text>
       </Pressable>
     </View>
   );
@@ -319,7 +397,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 16,
     alignItems: 'center',
   },
   title: {
@@ -329,6 +407,23 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
+  },
+  profileCard: {
+    width: '100%',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 18,
+  },
+  emailSection: {
+    width: '100%',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
   },
   headerRow: {
     width: '100%',
@@ -348,34 +443,34 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     marginTop: 2,
   },
-  emailRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   emailValue: {
-    fontSize: 18,
+    width: '100%',
+    fontSize: 17,
     color: theme.colors.text,
-    flex: 1,
-    textAlign: 'left',
+    textAlign: 'right',
+    writingDirection: 'ltr',
+    lineHeight: 24,
   },
   emailLabel: {
-    fontSize: 16,
+    fontSize: 14,
     color: theme.colors.textMuted,
-    marginLeft: 12,
+    textAlign: 'right',
   },
   divider: {
     width: '100%',
     height: 1,
     backgroundColor: theme.colors.border,
-    marginTop: 6,
-    marginBottom: 28,
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  avatarSection: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
   },
   avatarCircle: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: 188,
+    height: 188,
+    borderRadius: 94,
     backgroundColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
@@ -390,8 +485,8 @@ const styles = StyleSheet.create({
     height: 360,
   },
   zoomRow: {
-    marginTop: 14,
-    width: '85%',
+    marginTop: 16,
+    width: '88%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -401,17 +496,19 @@ const styles = StyleSheet.create({
     height: 30,
   },
   actionsRow: {
-    marginTop: 32,
+    marginTop: 30,
     flexDirection: 'row',
-    gap: 28,
+    gap: 22,
   },
   saveButton: {
-    marginTop: 18,
+    alignSelf: 'flex-start',
+    marginTop: 22,
+    marginLeft: 12,
+    paddingHorizontal: 24,
     paddingVertical: 10,
-    paddingHorizontal: 28,
-    borderRadius: 999,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.accent,
   },
   saveButtonPressed: {
     opacity: 0.85,
@@ -421,15 +518,37 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   saveButtonText: {
-    fontSize: 16,
-    color: theme.colors.text,
-    fontWeight: '600',
+    color: theme.colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  deleteAccountButton: {
+    marginTop: 18,
+    marginBottom: 8,
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(199, 93, 44, 0.45)',
+    backgroundColor: 'rgba(199, 93, 44, 0.04)',
+  },
+  deleteAccountButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
+  },
+  deleteAccountButtonText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '500',
   },
   actionButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: theme.colors.cardAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },

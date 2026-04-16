@@ -83,6 +83,7 @@ function DishCard({
   const scrollRef = useRef<ScrollView | null>(null);
   const ratingAnim = useRef(new Animated.Value(0)).current;
   const dotAnim = useRef(new Animated.Value(0)).current;
+  const contentDirectionRef = useRef(1);
   const heartScale = useRef(new Animated.Value(1)).current;
   const cameraScale = useRef(new Animated.Value(1)).current;
   const editScale = useRef(new Animated.Value(1)).current;
@@ -133,7 +134,7 @@ function DishCard({
     ratingAnim.setValue(0);
     Animated.timing(ratingAnim, {
       toValue: 1,
-      duration: 220,
+      duration: 240,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -190,6 +191,7 @@ function DishCard({
                 next = current - 1;
               }
               if (next !== current) {
+                contentDirectionRef.current = next > current ? 1 : -1;
                 setCurrentIndex(next);
                 scrollRef.current?.scrollTo({ x: next * width, animated: true });
               }
@@ -269,7 +271,7 @@ function DishCard({
             <Animated.View style={[styles.cameraBadge, { transform: [{ scale: cameraScale }] }]}>
               <Pressable
                 style={styles.badgePressable}
-                hitSlop={8}
+                hitSlop={12}
                 onStartShouldSetResponder={() => true}
                 onStartShouldSetResponderCapture={() => true}
                 onLayout={(event) => {
@@ -289,7 +291,7 @@ function DishCard({
             <Animated.View style={[styles.heartBadge, { transform: [{ scale: heartScale }] }]}>
               <Pressable
                 style={styles.badgePressable}
-                hitSlop={8}
+                hitSlop={12}
                 onStartShouldSetResponder={() => true}
                 onStartShouldSetResponderCapture={() => true}
                 onLayout={(event) => {
@@ -314,7 +316,7 @@ function DishCard({
               <Animated.View style={[styles.editBadge, { transform: [{ scale: editScale }] }]}>
                 <Pressable
                   style={styles.badgePressable}
-                  hitSlop={8}
+                  hitSlop={12}
                   onLayout={(event) => {
                     const { x, y, width, height } = event.nativeEvent.layout;
                     setButtonLayouts((prev) => ({ ...prev, edit: { x, y, width, height } }));
@@ -332,7 +334,7 @@ function DishCard({
               <Animated.View style={[styles.trashBadge, { transform: [{ scale: trashScale }] }]}>
                 <Pressable
                   style={styles.badgePressable}
-                  hitSlop={8}
+                  hitSlop={12}
                   onLayout={(event) => {
                     const { x, y, width, height } = event.nativeEvent.layout;
                     setButtonLayouts((prev) => ({ ...prev, trash: { x, y, width, height } }));
@@ -414,9 +416,24 @@ function DishCard({
         </View>
       </View>
       {shouldShowReview ? (
-        <View style={styles.reviewCard}>
+        <Animated.View
+          style={[
+            styles.reviewCard,
+            {
+              opacity: ratingAnim,
+              transform: [
+                {
+                  translateX: ratingAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [contentDirectionRef.current * 26, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           <Text style={styles.reviewText}>{reviewValue}</Text>
-        </View>
+        </Animated.View>
       ) : null}
       <View style={[styles.ratingRow, Platform.OS === 'ios' && styles.ratingRowIos]}>
         <Animated.View style={{ transform: [{ scale: orderScale }] }}>
@@ -450,7 +467,22 @@ function DishCard({
             <Text style={styles.orderButtonText}>הזמן</Text>
           </Pressable>
         </Animated.View>
-        <View style={styles.ratingGroup}>
+        <Animated.View
+          style={[
+            styles.ratingGroup,
+            {
+              opacity: ratingAnim,
+              transform: [
+                {
+                  translateX: ratingAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [contentDirectionRef.current * 26, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           <View style={styles.ratingItem}>
             <RatingValueRow
               label="טעים"
@@ -497,7 +529,7 @@ function DishCard({
               ]}
             />
           </View>
-        </View>
+        </Animated.View>
       </View>
     </View>
   );
@@ -638,8 +670,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    left: 0,
-    right: 0,
+    left: 60,
+    right: 60,
     zIndex: 4,
   },
   imageOverlay: {
@@ -895,13 +927,13 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
+    gap: 7,
     zIndex: 6,
   },
   carouselDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.6)',
   },
   carouselDotActive: {

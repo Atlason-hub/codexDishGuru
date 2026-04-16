@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -22,6 +21,7 @@ import { supabase } from '../../lib/supabase';
 import { theme } from '../../lib/theme';
 import { starsToScore } from '../../lib/ratings';
 import EmojiRatingInput from '../../components/EmojiRatingInput';
+import { showAppAlert } from '../../lib/appDialog';
 
 type Restaurant = {
   RestaurantId: number;
@@ -713,15 +713,15 @@ export default function CameraDetailsScreen() {
           onPress={async () => {
             if (saving) return;
             if (!photoUri) {
-              Alert.alert('חסרה תמונה', 'אנא צלם תמונה תחילה.');
+              showAppAlert('חסרה תמונה', 'אנא צלם תמונה תחילה.');
               return;
             }
             if (!selectedRestaurantId) {
-              Alert.alert('חסרה מסעדה', 'אנא בחר מסעדה.');
+              showAppAlert('חסרה מסעדה', 'אנא בחר מסעדה.');
               return;
             }
             if (!selectedDish?.id) {
-              Alert.alert('חסרה מנה', 'אנא בחר מנה.');
+              showAppAlert('חסרה מנה', 'אנא בחר מנה.');
               return;
             }
             try {
@@ -729,11 +729,11 @@ export default function CameraDetailsScreen() {
               const { data: sessionData } = await supabase.auth.getSession();
               const userId = sessionData.session?.user?.id;
               if (!userId) {
-                Alert.alert('לא מחובר', 'אנא התחבר שוב.');
+                showAppAlert('לא מחובר', 'אנא התחבר שוב.');
                 return;
               }
             if (!photoBase64) {
-                Alert.alert('חסרה תמונה', 'אנא צלם מחדש.');
+                showAppAlert('חסרה תמונה', 'אנא צלם מחדש.');
               return;
             }
               const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
@@ -772,7 +772,7 @@ export default function CameraDetailsScreen() {
               router.replace('/');
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
-              Alert.alert('שמירה נכשלה', message);
+              showAppAlert('שמירה נכשלה', message);
             } finally {
               setSaving(false);
             }

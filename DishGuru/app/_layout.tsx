@@ -5,10 +5,12 @@ import 'react-native-reanimated';
 
 import { Text, TextInput, useColorScheme } from 'react-native';
 import AppHeader from '../components/AppHeader';
+import AppDialogHost from '../components/AppDialogHost';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import * as Font from 'expo-font';
+import { deactivateKeepAwake } from 'expo-keep-awake';
 import { subscribeTheme } from '../lib/theme';
 
 export default function RootLayout() {
@@ -18,6 +20,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
+  }, []);
+
+  useEffect(() => {
+    deactivateKeepAwake();
+    return () => {
+      deactivateKeepAwake();
+    };
   }, []);
 
   useEffect(() => {
@@ -92,6 +101,7 @@ export default function RootLayout() {
           <Stack.Screen name="camera/result" options={{ headerShown: false }} />
           <Stack.Screen name="camera/details" options={{ headerShown: false }} />
         </Stack>
+        <AppDialogHost />
         <StatusBar style="auto" />
       </ThemeProvider>
     </GestureHandlerRootView>

@@ -1,6 +1,4 @@
 import {
-  ActivityIndicator,
-  Alert,
   AppState,
   FlatList,
   Image,
@@ -18,12 +16,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
-import CachedLogo from '../components/CachedLogo';
+import AvatarPreviewModal from '../components/AvatarPreviewModal';
 import RatingValueRow from '../components/RatingValueRow';
+import { DishScreenSkeleton } from '../components/LoadingSkeleton';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
-import { fetchFavoritesMap, fetchOrderVendorForUser, fetchUserAvatarMaps } from '../lib/appData';
+import { showAppAlert, showAppDialog } from '../lib/appDialog';
+import { fetchCompanyIdForUser, fetchFavoritesMap, fetchOrderVendorForUser, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
 
 type DishAssociation = {
   id: string;
@@ -39,8 +39,6 @@ type DishAssociation = {
   created_at: string | null;
   review_text?: string | null;
 };
-
-const AVATAR_MODAL_SIZE = 220;
 
 export default function DishScreen() {
   const router = useRouter();
@@ -70,7 +68,7 @@ export default function DishScreen() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const appStateRef = useRef(AppState.currentState);
-  const loadDishAssociationsRef = useRef<(() => Promise<void>) | null>(null);
+  const loadDishAssociationsRef = useRef<((options?: { showLoading?: boolean }) => Promise<void>) | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
@@ -126,45 +124,49 @@ export default function DishScreen() {
   }, [favorites]);
 
   const deleteDishAssociation = useCallback(async (dish: DishAssociation) => {
-    Alert.alert('מחיקת מנה', 'האם למחוק את המנה והביקורות שלה?', [
-      { text: 'ביטול', style: 'cancel' },
-      {
-        text: 'מחק',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            if (!currentUserId) {
-              Alert.alert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
-              return;
-            }
-            if (dish.user_id !== currentUserId) {
-              Alert.alert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
-              return;
-            }
-            if (dish.image_path) {
-              await supabase.storage.from('dish-images').remove([dish.image_path]);
-            }
-            await supabase.from('dish_favorites').delete().eq('dish_association_id', dish.id);
-            const { error } = await supabase
-              .from('dish_associations')
-              .delete()
-              .eq('id', dish.id)
-              .eq('user_id', currentUserId);
-            if (error) throw error;
+    showAppDialog({
+      title: 'מחיקת מנה',
+      message: 'האם למחוק את המנה והביקורות שלה?',
+      actions: [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!currentUserId) {
+                showAppAlert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
+                return;
+              }
+              if (dish.user_id !== currentUserId) {
+                showAppAlert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
+                return;
+              }
+              if (dish.image_path) {
+                await supabase.storage.from('dish-images').remove([dish.image_path]);
+              }
+              await supabase.from('dish_favorites').delete().eq('dish_association_id', dish.id);
+              const { error } = await supabase
+                .from('dish_associations')
+                .delete()
+                .eq('id', dish.id)
+                .eq('user_id', currentUserId);
+              if (error) throw error;
 
-            setDishAssociations((prev) => prev.filter((item) => item.id !== dish.id));
-            setFavorites((prev) => {
-              const next = { ...prev };
-              delete next[dish.id];
-              return next;
-            });
-            await loadDishAssociationsRef.current?.();
-          } catch {
-            Alert.alert('שגיאה', 'מחיקה נכשלה.');
-          }
+              setDishAssociations((prev) => prev.filter((item) => item.id !== dish.id));
+              setFavorites((prev) => {
+                const next = { ...prev };
+                delete next[dish.id];
+                return next;
+              });
+              await loadDishAssociationsRef.current?.({ showLoading: false });
+            } catch {
+              showAppAlert('שגיאה', 'מחיקה נכשלה.');
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   }, [currentUserId]);
 
   const loadUserAvatars = async (items: DishAssociation[]) => {
@@ -181,7 +183,7 @@ export default function DishScreen() {
     setUserLabels(labels);
   };
 
-  const loadDishAssociations = useCallback(async () => {
+  const loadDishAssociations = useCallback(async (options?: { showLoading?: boolean }) => {
     if (!dishName && !dishQuery && dishIdParam === null) {
       setError('חסר שם מנה');
       setDishAssociations([]);
@@ -189,27 +191,22 @@ export default function DishScreen() {
       return;
     }
     try {
-      setHasLoaded(false);
-      setLoading(true);
+      const shouldShowLoading = options?.showLoading ?? true;
+      if (shouldShowLoading) {
+        setHasLoaded(false);
+        setLoading(true);
+      }
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id ?? null;
       let list: DishAssociation[] = [];
 
+      let hasScopedSource = false;
       if (userId) {
-        const { data: profile } = await supabase
-          .from('AppUsers')
-          .select('company_id')
-          .eq('user_id', userId)
-          .maybeSingle();
-        const companyId = profile?.company_id ?? null;
+        const companyId = await fetchCompanyIdForUser(userId);
         if (companyId) {
-          const { data: rpcData, error: rpcError } = await supabase.rpc(
-            'get_company_dishes',
-            { company_id: companyId }
-          );
-          if (rpcError) throw rpcError;
-          const allRows = (rpcData as DishAssociation[]) ?? [];
+          hasScopedSource = true;
+          const allRows = (await fetchVisibleDishes(companyId)) as DishAssociation[];
           const normalizedQuery = dishQuery.trim().toLowerCase();
           list = allRows.filter((row) => {
             if (dishIdParam !== null) {
@@ -223,7 +220,7 @@ export default function DishScreen() {
         }
       }
 
-      if (list.length === 0) {
+      if (list.length === 0 && !hasScopedSource) {
         let query = supabase
           .from('dish_associations')
           .select(
@@ -284,7 +281,9 @@ export default function DishScreen() {
     } catch {
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
-      setLoading(false);
+      if (options?.showLoading ?? true) {
+        setLoading(false);
+      }
       setHasLoaded(true);
     }
   }, [dishIdParam, dishName, dishQuery, restaurantIdParam, restaurantName]);
@@ -300,7 +299,7 @@ export default function DishScreen() {
         await loadFavorites(data.session.user.id);
         await loadOrderVendor(data.session.user.id);
       }
-      await loadDishAssociations();
+      await loadDishAssociations({ showLoading: dishAssociations.length === 0 });
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setCurrentUserId(session?.user?.id ?? null);
@@ -316,7 +315,7 @@ export default function DishScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [loadDishAssociations, loadFavorites, loadOrderVendor, refreshParam]);
+  }, [dishAssociations.length, loadDishAssociations, loadFavorites, loadOrderVendor, refreshParam]);
 
   useEffect(() => {
     loadDishAssociationsRef.current = loadDishAssociations;
@@ -500,7 +499,7 @@ export default function DishScreen() {
       ) : null}
       {loading && !isRefreshing ? (
         <View style={styles.results}>
-          <ActivityIndicator size="large" />
+          <DishScreenSkeleton />
         </View>
       ) : error ? (
         <View style={styles.results}>
@@ -549,53 +548,16 @@ export default function DishScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-      <Modal
+      <AvatarPreviewModal
         visible={avatarPreviewOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
+        avatarUrl={avatarPreviewUrl}
+        label={avatarPreviewLabel}
+        onClose={() => {
           setAvatarPreviewOpen(false);
           setAvatarPreviewUrl(null);
           setAvatarPreviewLabel(null);
         }}
-      >
-        <View style={styles.avatarModalBackdrop}>
-          <Pressable
-            style={styles.avatarModalOverlay}
-            onPress={() => {
-              setAvatarPreviewOpen(false);
-              setAvatarPreviewUrl(null);
-              setAvatarPreviewLabel(null);
-            }}
-          />
-          <View style={styles.avatarModalWrapper}>
-            <View style={styles.avatarModalCard}>
-              {avatarPreviewUrl ? (
-                <CachedLogo uri={avatarPreviewUrl} style={styles.avatarModalImage} />
-              ) : (
-                <View style={styles.avatarModalPlaceholder}>
-                  <Ionicons name="person" size={64} color={theme.colors.textMuted} />
-                </View>
-              )}
-              {avatarPreviewLabel ? (
-                <View style={styles.avatarEmailPill}>
-                  <Text style={styles.avatarEmailText}>{avatarPreviewLabel}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Pressable
-              style={styles.avatarModalClose}
-              onPress={() => {
-                setAvatarPreviewOpen(false);
-                setAvatarPreviewUrl(null);
-                setAvatarPreviewLabel(null);
-              }}
-            >
-              <Ionicons name="close" size={18} color={theme.colors.ink} />
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      />
     </SafeAreaView>
   );
 }
@@ -732,81 +694,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-  avatarModalBackdrop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  avatarModalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  avatarModalWrapper: {
-    width: AVATAR_MODAL_SIZE,
-    height: AVATAR_MODAL_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  avatarModalCard: {
-    width: AVATAR_MODAL_SIZE,
-    height: AVATAR_MODAL_SIZE,
-    borderRadius: AVATAR_MODAL_SIZE / 2,
-    backgroundColor: theme.colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: theme.colors.border,
-  },
-  avatarModalImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarModalPlaceholder: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.cardAlt,
-  },
-  avatarModalClose: {
-    position: 'absolute',
-    top: 8,
-    right: -36,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  avatarEmailPill: {
-    position: 'absolute',
-    bottom: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  avatarEmailText: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   placeholderText: {
     color: theme.colors.textMuted,

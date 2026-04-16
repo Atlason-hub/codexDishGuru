@@ -1,21 +1,19 @@
-import {
-  ActivityIndicator,
-  AppState,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
+import { RestaurantScreenSkeleton } from '../components/LoadingSkeleton';
 import RatingValueRow from '../components/RatingValueRow';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
+import {
+  fetchCompanyIdForUser,
+  fetchVisibleDishes,
+  loadCachedRestaurantMenu,
+  saveCachedRestaurantMenu,
+} from '../lib/appData';
 import { useFocusEffect } from '@react-navigation/native';
 
 type DishAssociation = {
@@ -210,6 +208,76 @@ const buildRowsFromMenu = (
   return rows;
 };
 
+const summarizeMenuDishes = (categories: MenuCategory[], list: DishAssociation[]) => {
+  const uniqueMenuDishes = new Map<
+    string,
+    { name: string; ids: Set<number>; primaryId: number }
+  >();
+
+  categories.forEach((category) => {
+    category.items.forEach((dish) => {
+      const normalizedName = normalizeDishLookup(dish.name) ?? `dish:${dish.id}`;
+      if (!uniqueMenuDishes.has(normalizedName)) {
+        uniqueMenuDishes.set(normalizedName, {
+          name: dish.name,
+          ids: new Set([dish.id]),
+          primaryId: dish.id,
+        });
+      } else {
+        uniqueMenuDishes.get(normalizedName)!.ids.add(dish.id);
+      }
+    });
+  });
+
+  return Array.from(uniqueMenuDishes.values()).map((menuDish) => {
+    const normalizedMenuName = normalizeDishLookup(menuDish.name);
+    const matchingRows = list.filter((row) => {
+      if (row.dish_id !== null && menuDish.ids.has(row.dish_id)) {
+        return true;
+      }
+      if (!normalizedMenuName) return false;
+      const normalizedRowName = normalizeDishLookup(row.dish_name);
+      if (!normalizedRowName) return false;
+      return normalizedRowName === normalizedMenuName;
+    });
+
+    let tastySum = 0;
+    let tastyCount = 0;
+    let fillingSum = 0;
+    let fillingCount = 0;
+    let imageUrl: string | null = null;
+    let cuisine = 'ללא מטבח';
+    let latestCreatedAt = 0;
+
+    matchingRows.forEach((row) => {
+      if (typeof row.tasty_score === 'number') {
+        tastySum += row.tasty_score;
+        tastyCount += 1;
+      }
+      if (typeof row.filling_score === 'number') {
+        fillingSum += row.filling_score;
+        fillingCount += 1;
+      }
+      const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
+      if (createdAt >= latestCreatedAt) {
+        latestCreatedAt = createdAt;
+        imageUrl = row.image_url ?? imageUrl;
+        cuisine = row.cuisine ?? cuisine;
+      }
+    });
+
+    return {
+      key: String(menuDish.primaryId),
+      name: menuDish.name,
+      imageUrl,
+      avgTasty: tastyCount ? tastySum / tastyCount : 0,
+      avgFilling: fillingCount ? fillingSum / fillingCount : 0,
+      cuisine,
+      hasUploads: matchingRows.length > 0,
+    };
+  });
+};
+
 export default function RestaurantScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -245,37 +313,38 @@ export default function RestaurantScreen() {
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id ?? null;
-      const menuResponse = await fetch(
+      const cachedMenu = await loadCachedRestaurantMenu<MenuCategory[]>(restaurantId);
+      const fetchMenuPromise = fetch(
         `https://www.10bis.co.il/api/GetMenu?ResId=${restaurantId}&websiteID=10bis&domainID=10bis`,
         { headers: { Accept: 'application/json' } }
-      );
-      if (!menuResponse.ok) throw new Error(`Request failed: ${menuResponse.status}`);
-      const menuText = await menuResponse.text();
-      const menuData = JSON.parse(menuText);
-      const curatedMenu = mapMenuToCategories(menuData);
+      )
+        .then(async (response) => {
+          if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+          const menuText = await response.text();
+          const menuData = JSON.parse(menuText);
+          const mappedMenu = mapMenuToCategories(menuData);
+          await saveCachedRestaurantMenu(restaurantId, mappedMenu);
+          return mappedMenu;
+        })
+        .catch(() => cachedMenu ?? []);
+
+      const curatedMenu = cachedMenu ?? (await fetchMenuPromise);
       setMenuCategories(curatedMenu);
       setCollapsedCategories(new Set());
 
       let list: DishAssociation[] = [];
+      let hasScopedSource = false;
       if (userId) {
-        const { data: profile } = await supabase
-          .from('AppUsers')
-          .select('company_id')
-          .eq('user_id', userId)
-          .maybeSingle();
-        const companyId = profile?.company_id ?? null;
+        const companyId = await fetchCompanyIdForUser(userId);
         if (companyId) {
-          const { data: rpcData, error: rpcError } = await supabase.rpc('get_company_dishes', {
-            company_id: companyId,
-          });
-          if (rpcError) throw rpcError;
-          list = ((rpcData as DishAssociation[]) ?? []).filter(
+          hasScopedSource = true;
+          list = ((await fetchVisibleDishes(companyId)) as DishAssociation[]).filter(
             (row) => row.restaurant_id === restaurantId
           );
         }
       }
 
-      if (list.length === 0) {
+      if (list.length === 0 && !hasScopedSource) {
         const { data, error: fetchError } = await supabase
           .from('dish_associations')
           .select(
@@ -286,74 +355,16 @@ export default function RestaurantScreen() {
         if (fetchError) throw fetchError;
         list = (data as DishAssociation[]) ?? [];
       }
-      const uniqueMenuDishes = new Map<
-        string,
-        { name: string; ids: Set<number>; primaryId: number }
-      >();
-      curatedMenu.forEach((category) => {
-        category.items.forEach((dish) => {
-          const normalizedName = normalizeDishLookup(dish.name) ?? `dish:${dish.id}`;
-          if (!uniqueMenuDishes.has(normalizedName)) {
-            uniqueMenuDishes.set(normalizedName, {
-              name: dish.name,
-              ids: new Set([dish.id]),
-              primaryId: dish.id,
-            });
-          } else {
-            uniqueMenuDishes.get(normalizedName)!.ids.add(dish.id);
-          }
-        });
-      });
-
-      const result: DishSummary[] = Array.from(uniqueMenuDishes.values()).map((menuDish) => {
-        const normalizedMenuName = normalizeDishLookup(menuDish.name);
-        const matchingRows = list.filter((row) => {
-          if (row.dish_id !== null && menuDish.ids.has(row.dish_id)) {
-            return true;
-          }
-          if (!normalizedMenuName) return false;
-          const normalizedRowName = normalizeDishLookup(row.dish_name);
-          if (!normalizedRowName) return false;
-          return normalizedRowName === normalizedMenuName;
-        });
-
-        let tastySum = 0;
-        let tastyCount = 0;
-        let fillingSum = 0;
-        let fillingCount = 0;
-        let imageUrl: string | null = null;
-        let cuisine = 'ללא מטבח';
-        let latestCreatedAt = 0;
-
-        matchingRows.forEach((row) => {
-          if (typeof row.tasty_score === 'number') {
-            tastySum += row.tasty_score;
-            tastyCount += 1;
-          }
-          if (typeof row.filling_score === 'number') {
-            fillingSum += row.filling_score;
-            fillingCount += 1;
-          }
-          const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
-          if (createdAt >= latestCreatedAt) {
-            latestCreatedAt = createdAt;
-            imageUrl = row.image_url ?? imageUrl;
-            cuisine = row.cuisine ?? cuisine;
-          }
-        });
-
-        return {
-          key: String(menuDish.primaryId),
-          name: menuDish.name,
-          imageUrl,
-          avgTasty: tastyCount ? tastySum / tastyCount : 0,
-          avgFilling: fillingCount ? fillingSum / fillingCount : 0,
-          cuisine,
-          hasUploads: matchingRows.length > 0,
-        };
-      });
-
-      setSummaries(result);
+      setSummaries(summarizeMenuDishes(curatedMenu, list));
+      if (cachedMenu) {
+        const refreshedMenu = await fetchMenuPromise;
+        const menuChanged = JSON.stringify(refreshedMenu) !== JSON.stringify(cachedMenu);
+        if (menuChanged) {
+          setMenuCategories(refreshedMenu);
+          setCollapsedCategories(new Set());
+          setSummaries(summarizeMenuDishes(refreshedMenu, list));
+        }
+      }
     } catch {
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
@@ -432,7 +443,7 @@ export default function RestaurantScreen() {
 
       {loading && !isRefreshing ? (
         <View style={styles.results}>
-          <ActivityIndicator size="large" />
+          <RestaurantScreenSkeleton />
         </View>
       ) : error ? (
         <View style={styles.results}>
@@ -485,13 +496,26 @@ export default function RestaurantScreen() {
                       : 'chevron-up'
                   }
                   size={14}
-                  color="theme.colors.accent"
+                  color={theme.colors.accent}
                 />
               </Pressable>
             ) : (
               <Pressable
                 style={styles.dishCard}
-                onPress={() =>
+                onPress={() => {
+                  if (item.dish.hasUploads) {
+                    router.push({
+                      pathname: '/dish',
+                      params: {
+                        restaurantId: restaurantId ? String(restaurantId) : '',
+                        restaurantName,
+                        dishId: item.dish.key,
+                        dishName: item.dish.name,
+                      },
+                    });
+                    return;
+                  }
+
                   router.push({
                     pathname: '/camera/details',
                     params: {
@@ -502,8 +526,8 @@ export default function RestaurantScreen() {
                       defaultImageUrl: item.dish.imageUrl ?? '',
                       lockSelection: '1',
                     },
-                  })
-                }
+                  });
+                }}
               >
                 <View style={styles.dishInfo}>
                   <Text style={styles.dishName}>{item.dish.name}</Text>

@@ -1,10 +1,8 @@
 import {
-  ActivityIndicator,
   Animated,
-  Alert,
+  ActivityIndicator,
   AppState,
   FlatList,
-  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -12,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import CachedLogo from '../components/CachedLogo';
+import AvatarPreviewModal from '../components/AvatarPreviewModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,12 +22,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import LegalModal from '../components/LegalModal';
+import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchCompanyIdForUser, fetchFavoritesMap, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
+import { showAppAlert, showAppDialog } from '../lib/appDialog';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
-const AVATAR_MODAL_SIZE = 220;
 const primaryActionColor = '#C75D2C';
 
 type DishAssociation = {
@@ -94,7 +93,7 @@ export default function HomeScreen() {
   const fabPulse = useRef(new Animated.Value(1)).current;
   const hasPulsedFabRef = useRef(false);
 
-  const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v1:${userId ?? 'guest'}`;
+  const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v2:${userId ?? 'guest'}`;
 
   const resolveLogoUrl = (raw: string | null | undefined) => {
     if (!raw) return null;
@@ -155,7 +154,9 @@ export default function HomeScreen() {
   const loadDishAssociations = useCallback(async (options?: { useCache?: boolean; showLoading?: boolean }) => {
     try {
       const shouldShowLoading = options?.showLoading ?? true;
-      setHasLoaded(false);
+      if (shouldShowLoading) {
+        setHasLoaded(false);
+      }
       if (shouldShowLoading) setLoading(true);
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
@@ -216,7 +217,7 @@ export default function HomeScreen() {
           const { data: directData, error: directError } = await supabase
             .from('dish_associations')
             .select(
-              'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at'
+              'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
             )
             .in('user_id', allowedUserIds ?? []);
           if (Array.isArray(rpcData)) {
@@ -253,7 +254,7 @@ export default function HomeScreen() {
       const { data, error: fetchError } = await supabase
         .from('dish_associations')
         .select(
-          'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at'
+          'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
         )
         .in('user_id', allowedUserIds)
         .order('created_at', { ascending: false });
@@ -309,45 +310,49 @@ export default function HomeScreen() {
   }, [favorites]);
 
   const deleteDishAssociation = useCallback(async (dish: DishAssociation) => {
-    Alert.alert('מחיקת מנה', 'האם למחוק את המנה והביקורות שלה?', [
-      { text: 'ביטול', style: 'cancel' },
-      {
-        text: 'מחק',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            if (!currentUserId) {
-              Alert.alert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
-              return;
-            }
-            if (dish.user_id !== currentUserId) {
-              Alert.alert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
-              return;
-            }
-            if (dish.image_path) {
-              await supabase.storage.from('dish-images').remove([dish.image_path]);
-            }
-            await supabase.from('dish_favorites').delete().eq('dish_association_id', dish.id);
-            const { error } = await supabase
-              .from('dish_associations')
-              .delete()
-              .eq('id', dish.id)
-              .eq('user_id', currentUserId);
-            if (error) throw error;
+    showAppDialog({
+      title: 'מחיקת מנה',
+      message: 'האם למחוק את המנה והביקורות שלה?',
+      actions: [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!currentUserId) {
+                showAppAlert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
+                return;
+              }
+              if (dish.user_id !== currentUserId) {
+                showAppAlert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
+                return;
+              }
+              if (dish.image_path) {
+                await supabase.storage.from('dish-images').remove([dish.image_path]);
+              }
+              await supabase.from('dish_favorites').delete().eq('dish_association_id', dish.id);
+              const { error } = await supabase
+                .from('dish_associations')
+                .delete()
+                .eq('id', dish.id)
+                .eq('user_id', currentUserId);
+              if (error) throw error;
 
-            setDishAssociations((prev) => prev.filter((item) => item.id !== dish.id));
-            setFavorites((prev) => {
-              const next = { ...prev };
-              delete next[dish.id];
-              return next;
-            });
-            await loadDishAssociationsRef.current?.();
-          } catch {
-            Alert.alert('שגיאה', 'מחיקה נכשלה.');
-          }
+              setDishAssociations((prev) => prev.filter((item) => item.id !== dish.id));
+              setFavorites((prev) => {
+                const next = { ...prev };
+                delete next[dish.id];
+                return next;
+              });
+              await loadDishAssociationsRef.current?.({ showLoading: false });
+            } catch {
+              showAppAlert('שגיאה', 'מחיקה נכשלה.');
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   }, [currentUserId]);
 
   const fetchCompanyLogoForUser = useCallback(async (userId: string, fallbackDomain?: string | null) => {
@@ -697,7 +702,7 @@ export default function HomeScreen() {
       )}
       {loading && !isRefreshing ? (
         <View style={styles.results}>
-          <ActivityIndicator size="large" />
+          <HomeFeedSkeleton />
         </View>
       ) : error ? (
         <View style={styles.results}>
@@ -706,7 +711,7 @@ export default function HomeScreen() {
       ) : null}
       {!showFavoritesOnly ? (
         <View style={styles.homeSearchBox}>
-          <Ionicons name="search" size={16} color="theme.colors.accent" />
+          <Ionicons name="search" size={16} color={theme.colors.accent} />
           <TextInput
             style={styles.homeSearchInput}
             placeholder="חיפוש מנות או מסעדות"
@@ -894,7 +899,7 @@ export default function HomeScreen() {
     >
       {!sessionChecked ? (
         <View style={styles.results}>
-          <ActivityIndicator size="large" />
+          <HomeFeedSkeleton />
         </View>
       ) : !isAuthenticated ? (
         <View style={styles.authScreen}>
@@ -1116,53 +1121,16 @@ export default function HomeScreen() {
           </Animated.View>
         </>
       )}
-      <Modal
+      <AvatarPreviewModal
         visible={avatarPreviewOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
+        avatarUrl={avatarPreviewUrl}
+        label={avatarPreviewLabel}
+        onClose={() => {
           setAvatarPreviewOpen(false);
           setAvatarPreviewUrl(null);
           setAvatarPreviewLabel(null);
         }}
-      >
-        <View style={styles.avatarModalBackdrop}>
-          <Pressable
-            style={styles.avatarModalOverlay}
-            onPress={() => {
-              setAvatarPreviewOpen(false);
-              setAvatarPreviewUrl(null);
-              setAvatarPreviewLabel(null);
-            }}
-          />
-          <View style={styles.avatarModalWrapper}>
-            <View style={styles.avatarModalCard}>
-              {avatarPreviewUrl ? (
-                <CachedLogo uri={avatarPreviewUrl} style={styles.avatarModalImage} />
-              ) : (
-                <View style={styles.avatarModalPlaceholder}>
-                  <Ionicons name="person" size={64} color={theme.colors.textMuted} />
-                </View>
-              )}
-              {avatarPreviewLabel ? (
-                <View style={styles.avatarEmailPill}>
-                  <Text style={styles.avatarEmailText}>{avatarPreviewLabel}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Pressable
-              style={styles.avatarModalClose}
-              onPress={() => {
-                setAvatarPreviewOpen(false);
-                setAvatarPreviewUrl(null);
-                setAvatarPreviewLabel(null);
-              }}
-            >
-              <Ionicons name="close" size={18} color={theme.colors.ink} />
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      />
       <LegalModal
         visible={Boolean(legalModal)}
         title={legalModal?.title ?? ''}
@@ -1634,81 +1602,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: theme.colors.textMuted,
-  },
-  avatarModalBackdrop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  avatarModalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  avatarModalWrapper: {
-    width: AVATAR_MODAL_SIZE,
-    height: AVATAR_MODAL_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  avatarModalCard: {
-    width: AVATAR_MODAL_SIZE,
-    height: AVATAR_MODAL_SIZE,
-    borderRadius: AVATAR_MODAL_SIZE / 2,
-    backgroundColor: theme.colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: theme.colors.border,
-  },
-  avatarModalImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarModalPlaceholder: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.cardAlt,
-  },
-  avatarModalClose: {
-    position: 'absolute',
-    top: 8,
-    right: -36,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  avatarEmailPill: {
-    position: 'absolute',
-    bottom: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  avatarEmailText: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   editBadge: {
     position: 'absolute',

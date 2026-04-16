@@ -1,4 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
+
+const RESTAURANT_MENU_CACHE_PREFIX = 'restaurant_menu_cache:v1:';
+const RESTAURANT_MENU_TTL_MS = 15 * 60 * 1000;
 
 export const fetchFavoritesMap = async (userId: string) => {
   const { data, error } = await supabase
@@ -100,4 +104,33 @@ export const fetchUserAvatarMaps = async (userIds: string[]) => {
     }
   });
   return { avatars, labels: {} };
+};
+
+export const loadCachedRestaurantMenu = async <T>(restaurantId: number) => {
+  try {
+    const raw = await AsyncStorage.getItem(`${RESTAURANT_MENU_CACHE_PREFIX}${restaurantId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt?: number; data?: T };
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > RESTAURANT_MENU_TTL_MS) {
+      await AsyncStorage.removeItem(`${RESTAURANT_MENU_CACHE_PREFIX}${restaurantId}`);
+      return null;
+    }
+    return parsed.data ?? null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveCachedRestaurantMenu = async <T>(restaurantId: number, data: T) => {
+  try {
+    await AsyncStorage.setItem(
+      `${RESTAURANT_MENU_CACHE_PREFIX}${restaurantId}`,
+      JSON.stringify({
+        savedAt: Date.now(),
+        data,
+      })
+    );
+  } catch {
+    // Ignore cache write failures and let the live fetch drive the UI.
+  }
 };

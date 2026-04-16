@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
+import { fetchCompanyIdForUser, fetchVisibleDishes } from '../lib/appData';
 
 type DishAssociation = {
   id: string;
@@ -437,19 +438,9 @@ export default function SearchScreen() {
         const userId = sessionData.session?.user?.id ?? null;
         let companyRows: DishAssociation[] = [];
         if (userId) {
-          const { data: profile } = await supabase
-            .from('AppUsers')
-            .select('company_id')
-            .eq('user_id', userId)
-            .maybeSingle();
-          const companyId = profile?.company_id ?? null;
+          const companyId = await fetchCompanyIdForUser(userId);
           if (companyId) {
-            const { data: rpcData, error: rpcError } = await supabase.rpc(
-              'get_company_dishes',
-              { company_id: companyId }
-            );
-            if (rpcError) throw rpcError;
-            companyRows = (rpcData as DishAssociation[]) ?? [];
+            companyRows = (await fetchVisibleDishes(companyId)) as DishAssociation[];
           }
         }
 
