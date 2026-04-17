@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import * as Font from 'expo-font';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { subscribeTheme } from '../lib/theme';
+import { clearInvalidStoredSession } from '../lib/supabase';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -27,6 +28,10 @@ export default function RootLayout() {
     return () => {
       deactivateKeepAwake();
     };
+  }, []);
+
+  useEffect(() => {
+    clearInvalidStoredSession();
   }, []);
 
   useEffect(() => {

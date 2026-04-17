@@ -12,3 +12,21 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+
+const isInvalidRefreshTokenError = (message: string | undefined) =>
+  typeof message === 'string' && /invalid refresh token|refresh token not found/i.test(message);
+
+export async function clearInvalidStoredSession() {
+  try {
+    const { error } = await supabase.auth.getSession();
+    if (error && isInvalidRefreshTokenError(error.message)) {
+      await supabase.auth.signOut({ scope: 'local' });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isInvalidRefreshTokenError(message)) {
+      await supabase.auth.signOut({ scope: 'local' });
+    }
+  }
+}

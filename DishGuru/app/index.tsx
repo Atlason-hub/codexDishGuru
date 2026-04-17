@@ -898,8 +898,12 @@ export default function HomeScreen() {
       edges={['left', 'right', 'bottom']}
     >
       {!sessionChecked ? (
-        <View style={styles.results}>
-          <HomeFeedSkeleton />
+        <View style={styles.launchScreen}>
+          <View style={styles.launchCard}>
+            <Text style={styles.launchTitle}>DishGuru</Text>
+            <Text style={styles.launchSubtitle}>טוען את סביבת העבודה שלך</Text>
+            <ActivityIndicator size="small" color={theme.colors.accent} style={styles.launchSpinner} />
+          </View>
         </View>
       ) : !isAuthenticated ? (
         <View style={styles.authScreen}>
@@ -1559,6 +1563,43 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     alignSelf: 'stretch',
     writingDirection: 'rtl',
+  },
+  launchScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  launchCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 28,
+    paddingVertical: 36,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    shadowColor: theme.colors.ink,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  launchTitle: {
+    fontSize: 34,
+    fontFamily: 'Heebo_700Bold',
+    color: theme.colors.text,
+    textAlign: 'center',
+  },
+  launchSubtitle: {
+    marginTop: 10,
+    fontSize: 15,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+  },
+  launchSpinner: {
+    marginTop: 18,
   },
   domainCard: {
     borderWidth: 1,

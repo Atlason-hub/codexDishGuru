@@ -370,7 +370,7 @@ export default function AccountScreen() {
                     setAvatarUrl(null);
                     setTempAvatarUrl(null);
                     setPendingAsset(null);
-                    await supabase.auth.signOut();
+                    await supabase.auth.signOut({ scope: 'local' });
                     router.replace('/');
                   } catch (error) {
                     showAppAlert(

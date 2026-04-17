@@ -1,4 +1,4 @@
-import { AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -146,10 +146,12 @@ const mapMenuToCategories = (data: any): MenuCategory[] => {
 const buildRowsFromMenu = (
   categories: MenuCategory[],
   summaries: DishSummary[],
-  collapsed: Set<string>
+  collapsed: Set<string>,
+  searchQuery: string
 ): Row[] => {
   const rows: Row[] = [];
   const reviewedSectionKey = 'reviewed';
+  const needle = normalizeDishLookup(searchQuery) ?? '';
   const byDishId = new Map<number, DishSummary>();
   const byDishName = new Map<string, DishSummary>();
   const seenReviewedKeys = new Set<string>();
@@ -162,6 +164,7 @@ const buildRowsFromMenu = (
 
   const reviewedDishes = summaries
     .filter((dish) => dish.hasUploads)
+    .filter((dish) => !needle || (normalizeDishLookup(dish.name) ?? '').includes(needle))
     .sort((left, right) => left.name.localeCompare(right.name, 'he'));
 
   if (reviewedDishes.length > 0) {
@@ -180,9 +183,15 @@ const buildRowsFromMenu = (
   }
 
   categories.forEach((cat) => {
+    const filteredItems = cat.items.filter((dish) => {
+      if (!needle) return true;
+      return (normalizeDishLookup(dish.name) ?? '').includes(needle);
+    });
+    if (filteredItems.length === 0) return;
+
     rows.push({ type: 'header', id: `header-${cat.id}`, title: cat.name });
     if (collapsed.has(cat.id)) return;
-    cat.items.forEach((dish) => {
+    filteredItems.forEach((dish) => {
       const summary =
         byDishName.get(normalizeDishLookup(dish.name) ?? '') ?? byDishId.get(dish.id);
       const normalizedDish = normalizeDishLookup(dish.name) ?? String(dish.id);
@@ -297,6 +306,7 @@ export default function RestaurantScreen() {
     () => new Set()
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dishSearch, setDishSearch] = useState('');
   const appStateRef = useRef(AppState.currentState);
 
   const loadRestaurantData = useCallback(async () => {
@@ -404,8 +414,8 @@ export default function RestaurantScreen() {
   }, [refreshContent]);
 
   const rows = useMemo(
-    () => buildRowsFromMenu(menuCategories, summaries, collapsedCategories),
-    [menuCategories, summaries, collapsedCategories]
+    () => buildRowsFromMenu(menuCategories, summaries, collapsedCategories, dishSearch),
+    [menuCategories, summaries, collapsedCategories, dishSearch]
   );
 
   return (
@@ -418,6 +428,22 @@ export default function RestaurantScreen() {
           <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
         </Pressable>
         <Text style={styles.headerTitle}>{restaurantName || 'מסעדה'}</Text>
+      </View>
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={16} color={theme.colors.accent} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="חיפוש מנות"
+          placeholderTextColor={theme.colors.textMuted}
+          value={dishSearch}
+          onChangeText={setDishSearch}
+          textAlign="right"
+        />
+        {dishSearch.trim().length > 0 ? (
+          <Pressable style={styles.searchClear} onPress={() => setDishSearch('')} hitSlop={6}>
+            <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+          </Pressable>
+        ) : null}
       </View>
       {menuCategories.length > 0 ? (
         <View style={styles.controlsRow}>
@@ -613,6 +639,35 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
+  },
+  searchBox: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: '#F3F3F3',
+    alignSelf: 'center',
+    width: '82%',
+    marginBottom: 14,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.text,
+    textAlign: 'right',
+  },
+  searchClear: {
+    height: 28,
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: theme.colors.white,
   },
   controlsRow: {
     flexDirection: 'row-reverse',
