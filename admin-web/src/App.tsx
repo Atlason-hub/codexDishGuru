@@ -1046,7 +1046,7 @@ function CompaniesPage() {
               required
             />
           </label>
-          <label className="field">
+          <label className="field logo-upload-field">
             <span>Logo</span>
             <input
               type="file"
@@ -1055,23 +1055,25 @@ function CompaniesPage() {
             />
           </label>
           {logoError && <div className="error">{logoError}</div>}
-          {logoUrl && (
-            <div className="logo-preview" aria-label="Logo preview">
-              <img src={logoUrl} alt="Company logo preview" />
+          <div className="company-form-footer">
+            {logoUrl && (
+              <div className="logo-preview" aria-label="Logo preview">
+                <img src={logoUrl} alt="Company logo preview" />
+              </div>
+            )}
+            <div className="form-actions company-form-actions">
+              <button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <span className="spinner" aria-hidden="true" />}
+                {isSubmitting
+                  ? "Saving..."
+                  : editingId
+                  ? "Update Company"
+                  : "Add Company"}
+              </button>
+              <button type="button" className="ghost" onClick={resetForm}>
+                Cancel
+              </button>
             </div>
-          )}
-          <div className="form-actions">
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <span className="spinner" aria-hidden="true" />}
-              {isSubmitting
-                ? "Saving..."
-                : editingId
-                ? "Update Company"
-                : "Add Company"}
-            </button>
-            <button type="button" className="ghost" onClick={resetForm}>
-              Cancel
-            </button>
           </div>
         </form>
       )}
