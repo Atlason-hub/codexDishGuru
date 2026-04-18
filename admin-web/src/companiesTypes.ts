@@ -3,6 +3,7 @@ export type Company = {
   companyKey: string;
   name: string;
   domain: string;
+  usersCount: number;
   orderVendor: OrderVendor;
   streetId?: number | null;
   street: string;
@@ -19,6 +20,7 @@ export type CompanyRow = {
   company_key: string;
   name: string;
   domain: string;
+  users_count?: number | null;
   order_vendor?: OrderVendor | null;
   street_id?: number | null;
   street: string;

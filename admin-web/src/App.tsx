@@ -776,6 +776,8 @@ function CompaniesPage() {
         companyKey,
         name: name.trim(),
         domain: domain.trim(),
+        usersCount:
+          companies.find((company) => company.id === editingId)?.usersCount ?? 0,
         orderVendor,
         streetId: resolvedStreetId,
         street: street.trim(),
@@ -803,6 +805,7 @@ function CompaniesPage() {
         companyKey,
         name: name.trim(),
         domain: domain.trim(),
+        usersCount: 0,
         orderVendor,
         streetId: resolvedStreetId,
         street: street.trim(),
@@ -1080,6 +1083,7 @@ function CompaniesPage() {
         <div className="company-table">
           <div className="company-table-row company-table-header">
             <span>Company</span>
+            <span>#Users</span>
             <span>Vendor</span>
             <span>Address</span>
             <span>City</span>
@@ -1109,6 +1113,9 @@ function CompaniesPage() {
                     <div className="logo-thumb company-logo-fallback">Logo</div>
                   )}
                 </div>
+              </div>
+              <div className="company-cell company-users-cell" data-label="#Users">
+                <span className="users-count">{company.usersCount ?? 0}</span>
               </div>
               <div className="company-cell" data-label="Vendor">
                 <span className="vendor-badge">{company.orderVendor || "—"}</span>
