@@ -1083,46 +1083,66 @@ function CompaniesPage() {
           </div>
         </form>
       )}
-      <div className="company-cards">
-        {companies.length === 0 && (
-          <div className="company-card">
-            <div className="muted">No companies yet.</div>
+      <div className="company-table-shell">
+        <div className="company-table">
+          <div className="company-table-row company-table-header">
+            <span>Company</span>
+            <span>Vendor</span>
+            <span>Address</span>
+            <span>City</span>
+            <span>IDs</span>
+            <span>Actions</span>
           </div>
-        )}
-        {companies.map((company) => (
-          <article className="company-card" key={company.id}>
-            <div className="company-head">
-              <div className="company-title">
-                <strong>{company.name}</strong>
-                <span className="muted">{company.domain}</span>
+          {companies.length === 0 && (
+            <div className="company-table-empty">
+              <div className="muted">No companies yet.</div>
+            </div>
+          )}
+          {companies.map((company) => (
+            <article className="company-table-row company-table-item" key={company.id}>
+              <div className="company-cell company-company-cell" data-label="Company">
+                <div className="company-identity">
+                  <div className="company-title">
+                    <strong>{company.name}</strong>
+                    <span className="muted">{company.domain}</span>
+                  </div>
+                  {company.logoUrl ? (
+                    <img
+                      className="logo-thumb"
+                      src={company.logoUrl}
+                      alt={`${company.name} logo`}
+                    />
+                  ) : (
+                    <div className="logo-thumb company-logo-fallback">Logo</div>
+                  )}
+                </div>
               </div>
-              {company.logoUrl ? (
-                <img
-                  className="logo-thumb"
-                  src={company.logoUrl}
-                  alt={`${company.name} logo`}
-                />
-              ) : (
-                <div className="logo-thumb company-logo-fallback">Logo</div>
-              )}
-            </div>
-            <div className="company-fields">
-              <div><strong>Vendor:</strong> {company.orderVendor || "—"}</div>
-              <div><strong>Address:</strong> {`${company.street || ""} ${company.number || ""}`.trim() || "—"}</div>
-              <div dir="auto"><strong>City:</strong> {company.cityName || "—"}</div>
-              <div><strong>City ID:</strong> {company.cityId ?? "—"}</div>
-              <div><strong>Street ID:</strong> {company.streetId ?? "—"}</div>
-            </div>
-            <div className="row-actions">
-              <button type="button" className="ghost" onClick={() => handleEdit(company)}>
-                Edit
-              </button>
-              <button type="button" className="ghost" onClick={() => handleDelete(company.id)}>
-                Delete
-              </button>
-            </div>
-          </article>
-        ))}
+              <div className="company-cell" data-label="Vendor">
+                <span className="vendor-badge">{company.orderVendor || "—"}</span>
+              </div>
+              <div className="company-cell" data-label="Address">
+                {`${company.street || ""} ${company.number || ""}`.trim() || "—"}
+              </div>
+              <div className="company-cell" data-label="City" dir="auto">
+                {company.cityName || "—"}
+              </div>
+              <div className="company-cell company-id-cell" data-label="IDs">
+                <span>City: {company.cityId ?? "—"}</span>
+                <span>Street: {company.streetId ?? "—"}</span>
+              </div>
+              <div className="company-cell company-actions-cell" data-label="Actions">
+                <div className="row-actions">
+                  <button type="button" className="ghost" onClick={() => handleEdit(company)}>
+                    Edit
+                  </button>
+                  <button type="button" className="ghost" onClick={() => handleDelete(company.id)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
