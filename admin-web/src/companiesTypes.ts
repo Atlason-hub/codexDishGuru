@@ -5,7 +5,6 @@ export type Company = {
   domain: string;
   usersCount: number;
   createdAt?: string;
-  updatedAt?: string;
   orderVendor: OrderVendor;
   streetId?: number | null;
   street: string;
@@ -31,7 +30,6 @@ export type CompanyRow = {
   city_name: string;
   logo_url?: string | null;
   created_at?: string;
-  updated_at?: string;
 };
 
 export type CityOption = {
