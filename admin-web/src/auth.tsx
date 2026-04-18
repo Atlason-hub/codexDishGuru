@@ -8,6 +8,7 @@ type AuthContextValue = {
   role: Role | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  confirmPassword: (password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -90,8 +91,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const confirmPassword = async (password: string) => {
+    if (!user?.email) {
+      throw new Error("Missing user email. Please log in again.");
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password
+    });
+
+    if (error) {
+      throw new Error("Incorrect password.");
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, role, loading, login, confirmPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

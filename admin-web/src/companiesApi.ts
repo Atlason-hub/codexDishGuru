@@ -13,21 +13,27 @@ export async function fetchCompanies(): Promise<Company[]> {
   } catch {
     throw new Error(text || "Invalid JSON response from /api/companies");
   }
-  return rows.map((row) => ({
-    id: row.id,
-    companyKey: row.company_key,
-    name: row.name,
-    domain: row.domain,
-    usersCount: row.users_count ?? 0,
-    createdAt: row.created_at,
-    orderVendor: row.order_vendor ?? "Other",
-    streetId: row.street_id ?? null,
-    street: row.street,
-    number: row.number,
-    cityId: row.city_id,
-    cityName: row.city_name,
-    logoUrl: row.logo_url ?? undefined
-  }));
+  return rows
+    .map((row) => ({
+      id: row.id,
+      companyKey: row.company_key,
+      name: row.name,
+      domain: row.domain,
+      usersCount: row.users_count ?? 0,
+      createdAt: row.created_at,
+      orderVendor: row.order_vendor ?? "Other",
+      streetId: row.street_id ?? null,
+      street: row.street,
+      number: row.number,
+      cityId: row.city_id,
+      cityName: row.city_name,
+      logoUrl: row.logo_url ?? undefined
+    }))
+    .sort((left, right) => {
+      const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+      const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+      return rightTime - leftTime;
+    });
 }
 
 export async function createCompany(company: Company): Promise<Company[]> {

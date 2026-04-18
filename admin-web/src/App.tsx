@@ -530,7 +530,7 @@ function ContentPage() {
 }
 
 function CompaniesPage() {
-  const { user } = useAuth();
+  const { user, confirmPassword } = useAuth();
   const MAX_LOGO_BYTES = 200 * 1024;
   const [companies, setCompanies] = React.useState<Company[]>([]);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -563,6 +563,10 @@ function CompaniesPage() {
   const streetRef = React.useRef<HTMLDivElement | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
+  const [deletePassword, setDeletePassword] = React.useState("");
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = React.useState(false);
 
   const withTimeout = async <T,>(promise: Promise<T>, label: string, ms = 12000) => {
     let timeoutId: number | undefined;
@@ -615,6 +619,13 @@ function CompaniesPage() {
     setIsStreetOpen(false);
     setStreetOptions([]);
     setFormError(null);
+  };
+
+  const closeDeleteModal = () => {
+    setPendingDeleteId(null);
+    setDeletePassword("");
+    setDeleteError(null);
+    setIsConfirmingDelete(false);
   };
 
   React.useEffect(() => {
@@ -856,24 +867,38 @@ function CompaniesPage() {
   };
 
   const handleDelete = (id: string) => {
-    const confirmed = window.confirm(
-      "Delete this company? This action cannot be undone."
-    );
-    if (!confirmed) {
+    setPendingDeleteId(id);
+    setDeletePassword("");
+    setDeleteError(null);
+  };
+
+  const confirmDelete = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!pendingDeleteId) {
       return;
     }
-    const remove = async () => {
-      try {
-        const next = await deleteCompany(id);
-        setCompanies(next);
-        setApiError(null);
-      } catch (err) {
-        setApiError(err instanceof Error ? err.message : "Failed to delete company.");
+    if (!deletePassword.trim()) {
+      setDeleteError("Enter your password to confirm deletion.");
+      return;
+    }
+
+    setIsConfirmingDelete(true);
+    setDeleteError(null);
+    try {
+      await confirmPassword(deletePassword);
+      const next = await deleteCompany(pendingDeleteId);
+      setCompanies(next);
+      setApiError(null);
+      if (editingId === pendingDeleteId) {
+        resetForm();
       }
-    };
-    void remove();
-    if (editingId === id) {
-      resetForm();
+      closeDeleteModal();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to confirm company deletion."
+      );
+    } finally {
+      setIsConfirmingDelete(false);
     }
   };
 
@@ -1158,6 +1183,43 @@ function CompaniesPage() {
           ))}
         </div>
       </div>
+      {pendingDeleteId && (
+        <div className="modal-overlay" onClick={closeDeleteModal}>
+          <div className="confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Confirm Company Deletion</h3>
+            <p className="muted">
+              Enter your login password to permanently delete this company.
+            </p>
+            <form onSubmit={confirmDelete} className="form">
+              <label className="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                  placeholder="Enter your password"
+                  autoFocus
+                  required
+                />
+              </label>
+              {deleteError && <div className="error">{deleteError}</div>}
+              <div className="form-actions confirm-modal-actions">
+                <button type="submit" disabled={isConfirmingDelete}>
+                  {isConfirmingDelete ? "Deleting..." : "Delete Company"}
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={closeDeleteModal}
+                  disabled={isConfirmingDelete}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
