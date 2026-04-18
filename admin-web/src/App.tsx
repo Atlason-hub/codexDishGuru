@@ -3,7 +3,6 @@ import {
   Navigate,
   Route,
   Routes,
-  NavLink,
   useLocation,
   useNavigate
 } from "react-router-dom";
@@ -114,30 +113,23 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { logout } = useAuth();
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-mark">
-            <img src="/dishguru-logo.svg" alt="DishGuru logo" />
-          </div>
-          <div>
-            <div className="brand-name">DishGuru</div>
-            <div className="brand-sub">Admin Console</div>
-          </div>
-        </div>
-        <nav className="nav">
-          <NavLink to="/companies">Companies</NavLink>
-        </nav>
-        <button className="ghost" onClick={logout}>
-          Sign out
-        </button>
-      </aside>
       <main className="main">
         <header className="topbar">
-          <div>
-            <div className="topbar-title">Welcome back</div>
-            <div className="muted">Monitor activity and shape the platform.</div>
+          <div className="topbar-brand">
+            <div className="brand-mark">
+              <img src="/dishguru-logo.svg" alt="DishGuru logo" />
+            </div>
+            <div>
+              <div className="topbar-title">DishGuru Admin</div>
+              <div className="muted">Company management console.</div>
+            </div>
           </div>
-          <div className="topbar-chip">Live</div>
+          <div className="topbar-actions">
+            <div className="topbar-chip">Live</div>
+            <button type="button" className="ghost topbar-logout" onClick={logout}>
+              Logout
+            </button>
+          </div>
         </header>
         <div className="content">{children}</div>
       </main>
