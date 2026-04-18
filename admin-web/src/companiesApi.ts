@@ -19,6 +19,8 @@ export async function fetchCompanies(): Promise<Company[]> {
     name: row.name,
     domain: row.domain,
     usersCount: row.users_count ?? 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
     orderVendor: row.order_vendor ?? "Other",
     streetId: row.street_id ?? null,
     street: row.street,

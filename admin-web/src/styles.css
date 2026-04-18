@@ -426,11 +426,13 @@ h1 {
 .company-table-item {
   background: rgba(255, 255, 255, 0.86);
   border-bottom: 1px solid rgba(23, 32, 51, 0.06);
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
 }
 
 .company-table-item:hover {
   background: #fcfdff;
+  box-shadow: inset 0 0 0 1px rgba(36, 107, 255, 0.08);
 }
 
 .company-table-item:last-child {
@@ -506,6 +508,115 @@ h1 {
   font-weight: 700;
   font-size: 0.85rem;
   color: var(--text);
+}
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 40;
+}
+
+.company-drawer {
+  width: min(460px, 92vw);
+  height: 100vh;
+  background: #ffffff;
+  border-left: 1px solid var(--line);
+  box-shadow: -20px 0 50px rgba(15, 23, 42, 0.12);
+  padding: 1.4rem;
+  display: grid;
+  align-content: start;
+  gap: 1.1rem;
+  overflow-y: auto;
+}
+
+.company-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.company-drawer-title {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.company-drawer-title h3 {
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.company-drawer-hero {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f6f9fc 100%);
+}
+
+.company-drawer-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  padding: 0.45rem;
+}
+
+.company-drawer-stats {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.drawer-stat {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.85rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.drawer-stat-label,
+.drawer-detail-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.drawer-stat strong {
+  font-size: 1.25rem;
+}
+
+.company-drawer-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.drawer-detail {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: #fbfcfe;
+}
+
+.company-drawer-actions {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
 }
 
 .company-actions-cell {
@@ -727,6 +838,24 @@ h1 {
 
   .company-actions-cell {
     justify-content: flex-start;
+  }
+
+  .drawer-overlay {
+    justify-content: center;
+    padding: 1rem 0.5rem;
+  }
+
+  .company-drawer {
+    width: 100%;
+    height: auto;
+    max-height: calc(100vh - 2rem);
+    border-radius: 24px;
+    border: 1px solid var(--line);
+  }
+
+  .company-drawer-hero,
+  .company-drawer-grid {
+    grid-template-columns: 1fr;
   }
 
   .topbar {

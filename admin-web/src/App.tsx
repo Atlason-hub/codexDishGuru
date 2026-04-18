@@ -533,6 +533,7 @@ function CompaniesPage() {
   const { user } = useAuth();
   const MAX_LOGO_BYTES = 200 * 1024;
   const [companies, setCompanies] = React.useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = React.useState<string | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [showForm, setShowForm] = React.useState(false);
   const [name, setName] = React.useState("");
@@ -629,6 +630,32 @@ function CompaniesPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedCompanyId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const selectedCompany = React.useMemo(
+    () => companies.find((company) => company.id === selectedCompanyId) ?? null,
+    [companies, selectedCompanyId]
+  );
+
+  const formatTimestamp = (value?: string) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(date);
+  };
 
   React.useEffect(() => {
     if (!showForm) {
@@ -842,6 +869,7 @@ function CompaniesPage() {
     setCityId(company.cityId);
     setCityQuery(company.cityName);
     setLogoUrl(company.logoUrl);
+    setSelectedCompanyId(company.id);
     setShowForm(true);
   };
 
@@ -864,6 +892,9 @@ function CompaniesPage() {
     void remove();
     if (editingId === id) {
       resetForm();
+    }
+    if (selectedCompanyId === id) {
+      setSelectedCompanyId(null);
     }
   };
 
@@ -1096,7 +1127,11 @@ function CompaniesPage() {
             </div>
           )}
           {companies.map((company) => (
-            <article className="company-table-row company-table-item" key={company.id}>
+            <article
+              className="company-table-row company-table-item"
+              key={company.id}
+              onClick={() => setSelectedCompanyId(company.id)}
+            >
               <div className="company-cell company-company-cell" data-label="Company">
                 <div className="company-identity">
                   <div className="company-title">
@@ -1132,10 +1167,24 @@ function CompaniesPage() {
               </div>
               <div className="company-cell company-actions-cell" data-label="Actions">
                 <div className="row-actions">
-                  <button type="button" className="ghost" onClick={() => handleEdit(company)}>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleEdit(company);
+                    }}
+                  >
                     Edit
                   </button>
-                  <button type="button" className="ghost" onClick={() => handleDelete(company.id)}>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDelete(company.id);
+                    }}
+                  >
                     Delete
                   </button>
                 </div>
@@ -1144,6 +1193,88 @@ function CompaniesPage() {
           ))}
         </div>
       </div>
+      {selectedCompany && (
+        <div className="drawer-overlay" onClick={() => setSelectedCompanyId(null)}>
+          <aside
+            className="company-drawer"
+            onClick={(event) => event.stopPropagation()}
+            aria-label={`${selectedCompany.name} details`}
+          >
+            <div className="company-drawer-header">
+              <div className="company-drawer-title">
+                <h3>{selectedCompany.name}</h3>
+                <span className="muted">{selectedCompany.domain}</span>
+              </div>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setSelectedCompanyId(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="company-drawer-hero">
+              {selectedCompany.logoUrl ? (
+                <img
+                  className="company-drawer-logo"
+                  src={selectedCompany.logoUrl}
+                  alt={`${selectedCompany.name} logo`}
+                />
+              ) : (
+                <div className="company-drawer-logo company-logo-fallback">Logo</div>
+              )}
+              <div className="company-drawer-stats">
+                <div className="drawer-stat">
+                  <span className="drawer-stat-label">Users</span>
+                  <strong>{selectedCompany.usersCount ?? 0}</strong>
+                </div>
+                <div className="drawer-stat">
+                  <span className="drawer-stat-label">Vendor</span>
+                  <strong>{selectedCompany.orderVendor || "—"}</strong>
+                </div>
+              </div>
+            </div>
+            <div className="company-drawer-grid">
+              <div className="drawer-detail">
+                <span className="drawer-detail-label">Address</span>
+                <strong>{`${selectedCompany.street || ""} ${selectedCompany.number || ""}`.trim() || "—"}</strong>
+              </div>
+              <div className="drawer-detail">
+                <span className="drawer-detail-label">City</span>
+                <strong dir="auto">{selectedCompany.cityName || "—"}</strong>
+              </div>
+              <div className="drawer-detail">
+                <span className="drawer-detail-label">City ID</span>
+                <strong>{selectedCompany.cityId ?? "—"}</strong>
+              </div>
+              <div className="drawer-detail">
+                <span className="drawer-detail-label">Street ID</span>
+                <strong>{selectedCompany.streetId ?? "—"}</strong>
+              </div>
+              <div className="drawer-detail">
+                <span className="drawer-detail-label">Created</span>
+                <strong>{formatTimestamp(selectedCompany.createdAt)}</strong>
+              </div>
+              <div className="drawer-detail">
+                <span className="drawer-detail-label">Updated</span>
+                <strong>{formatTimestamp(selectedCompany.updatedAt)}</strong>
+              </div>
+            </div>
+            <div className="company-drawer-actions">
+              <button type="button" onClick={() => handleEdit(selectedCompany)}>
+                Edit Company
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => handleDelete(selectedCompany.id)}
+              >
+                Delete Company
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
     </section>
   );
 }
