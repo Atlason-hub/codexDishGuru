@@ -1011,7 +1011,6 @@ function CompaniesPage() {
                 disabled={!cityId}
                 required
               />
-              {!cityId && <div className="muted">Select a city to search streets.</div>}
               {streetLoading && cityId && <div className="muted">Searching streets...</div>}
               {streetApiError && <div className="error">{streetApiError}</div>}
               {isStreetOpen && streetOptions.length > 0 && (
