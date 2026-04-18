@@ -1,4 +1,6 @@
 import React from "react";
+import { createClient } from "@supabase/supabase-js";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config";
 import { supabase } from "./supabaseClient";
 
 export type Role = "admin" | "viewer";
@@ -96,7 +98,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Missing user email. Please log in again.");
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      throw new Error("Supabase auth is not configured.");
+    }
+
+    const verificationClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    });
+
+    const { error } = await verificationClient.auth.signInWithPassword({
       email: user.email,
       password
     });
@@ -104,6 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       throw new Error("Incorrect password.");
     }
+
+    await verificationClient.auth.signOut();
   };
 
   return (
