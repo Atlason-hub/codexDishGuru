@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const TABLE = "companies";
+const APP_USERS_TABLE = "AppUsers";
 
 function json(res: VercelResponse, status: number, body: unknown) {
   res.status(status).json(body);
@@ -24,7 +25,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       });
       const text = await response.text();
-      return res.status(response.status).send(text);
+      if (!response.ok) {
+        return res.status(response.status).send(text);
+      }
+
+      const companies = JSON.parse(text) as Array<Record<string, unknown>>;
+      const usersResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/${APP_USERS_TABLE}?select=company_id`,
+        {
+          headers: {
+            apikey: SERVICE_ROLE,
+            Authorization: `Bearer ${SERVICE_ROLE}`
+          }
+        }
+      );
+      const usersText = await usersResponse.text();
+      if (!usersResponse.ok) {
+        return res.status(usersResponse.status).send(usersText);
+      }
+
+      const appUsers = JSON.parse(usersText) as Array<{ company_id?: string | null }>;
+      const counts = new Map<string, number>();
+
+      for (const user of appUsers) {
+        const companyId = user.company_id;
+        if (!companyId) continue;
+        counts.set(companyId, (counts.get(companyId) ?? 0) + 1);
+      }
+
+      const enriched = companies.map((company) => ({
+        ...company,
+        users_count: counts.get(String(company.id)) ?? 0
+      }));
+
+      return json(res, 200, enriched);
     }
 
     if (req.method === "POST") {
