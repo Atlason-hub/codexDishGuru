@@ -445,8 +445,7 @@ h1 {
 
 .company-company-cell {
   padding-right: 0;
-  width: fit-content;
-  max-width: 100%;
+  width: 100%;
   overflow: visible;
 }
 
@@ -455,6 +454,7 @@ h1 {
   grid-template-columns: minmax(0, 1fr) 60px;
   align-items: center;
   gap: 0.3rem;
+  justify-content: start;
   width: 100%;
   min-width: 0;
 }
