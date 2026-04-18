@@ -405,13 +405,16 @@ h1 {
 
 .company-head {
   display: flex;
-  align-items: center;
-  gap: 0.7rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .company-title {
   display: grid;
   gap: 0.15rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .company-fields {
@@ -455,9 +458,11 @@ h1 {
 
 .logo-preview img,
 .logo-thumb {
-  width: 48px;
-  height: 48px;
-  object-fit: cover;
+  width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.72);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
 }

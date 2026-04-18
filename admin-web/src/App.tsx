@@ -1092,6 +1092,10 @@ function CompaniesPage() {
         {companies.map((company) => (
           <article className="company-card" key={company.id}>
             <div className="company-head">
+              <div className="company-title">
+                <strong>{company.name}</strong>
+                <span className="muted">{company.domain}</span>
+              </div>
               {company.logoUrl ? (
                 <img
                   className="logo-thumb"
@@ -1101,10 +1105,6 @@ function CompaniesPage() {
               ) : (
                 <div className="logo-thumb company-logo-fallback">Logo</div>
               )}
-              <div className="company-title">
-                <strong>{company.name}</strong>
-                <span className="muted">{company.domain}</span>
-              </div>
             </div>
             <div className="company-fields">
               <div><strong>Vendor:</strong> {company.orderVendor || "—"}</div>
