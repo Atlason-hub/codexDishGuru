@@ -392,7 +392,8 @@ h1 {
   margin-top: 0.4rem;
   border: 1px solid var(--line);
   border-radius: 20px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.36)),
     linear-gradient(120deg, rgba(252, 114, 114, 0.08), rgba(255, 255, 255, 0));
@@ -401,12 +402,13 @@ h1 {
 
 .company-table {
   display: grid;
+  min-width: 1220px;
 }
 
 .company-table-row {
   display: grid;
-  grid-template-columns: minmax(260px, 2.2fr) minmax(110px, 0.9fr) minmax(160px, 1.2fr) minmax(120px, 1fr) minmax(120px, 0.9fr) minmax(160px, 1fr);
-  gap: 1rem;
+  grid-template-columns: minmax(320px, 2.4fr) minmax(120px, 0.9fr) minmax(170px, 1.2fr) minmax(170px, 1.1fr) minmax(130px, 0.9fr) minmax(190px, 1fr);
+  gap: 1.25rem;
   align-items: center;
   padding: 1rem 1.2rem;
 }
@@ -419,6 +421,7 @@ h1 {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .company-table-item {
@@ -433,18 +436,20 @@ h1 {
 .company-cell {
   min-width: 0;
   font-size: 0.95rem;
+  justify-self: start;
 }
 
 .company-company-cell {
   display: flex;
   align-items: center;
+  padding-right: 1rem;
 }
 
 .company-identity {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.4rem;
   width: 100%;
   min-width: 0;
 }
@@ -467,11 +472,13 @@ h1 {
   color: var(--muted);
   font-size: 0.82rem;
   font-family: "IBM Plex Mono", monospace;
+  white-space: nowrap;
 }
 
 .company-actions-cell {
   display: flex;
   justify-content: flex-end;
+  width: 100%;
 }
 
 .vendor-badge {
@@ -511,7 +518,7 @@ h1 {
 .row-actions {
   display: flex;
   gap: 0.4rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .logo-preview {
@@ -526,9 +533,9 @@ h1 {
 
 .logo-preview img,
 .logo-thumb {
-  width: 88px;
-  height: 88px;
-  flex: 0 0 88px;
+  width: 76px;
+  height: 76px;
+  flex: 0 0 76px;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.72);
   border-radius: 12px;
@@ -627,6 +634,7 @@ h1 {
 
   .company-table {
     gap: 0.9rem;
+    min-width: 0;
   }
 
   .company-table-header {
