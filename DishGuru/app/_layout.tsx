@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { Text, TextInput, useColorScheme } from 'react-native';
+import { I18nManager, Platform, Text, TextInput, useColorScheme } from 'react-native';
 import AppHeader from '../components/AppHeader';
 import AppDialogHost from '../components/AppDialogHost';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -18,6 +18,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [, setThemeTick] = useState(0);
+  const primaryScreenAnimation = I18nManager.isRTL ? 'slide_from_left' : 'slide_from_right';
 
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
@@ -100,8 +101,34 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ header: () => <AppHeader /> }}>
+        <Stack
+          screenOptions={{
+            header: () => <AppHeader />,
+            animationDuration: 95,
+            animation: Platform.OS === 'ios' ? 'simple_push' : primaryScreenAnimation,
+            fullScreenGestureEnabled: true,
+            animationMatchesGesture: true,
+          }}
+        >
           <Stack.Screen name="index" />
+          <Stack.Screen
+            name="restaurant"
+            options={{
+              animation: primaryScreenAnimation,
+            }}
+          />
+          <Stack.Screen
+            name="dish"
+            options={{
+              animation: primaryScreenAnimation,
+            }}
+          />
+          <Stack.Screen
+            name="edit-dish"
+            options={{
+              animation: primaryScreenAnimation,
+            }}
+          />
           <Stack.Screen name="camera" options={{ headerShown: false }} />
           <Stack.Screen name="camera/result" options={{ headerShown: false }} />
           <Stack.Screen name="camera/details" options={{ headerShown: false }} />

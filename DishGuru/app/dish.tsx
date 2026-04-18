@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
+import CrossfadeView from '../components/CrossfadeView';
 import RatingValueRow from '../components/RatingValueRow';
 import { DishScreenSkeleton } from '../components/LoadingSkeleton';
 import { theme } from '../lib/theme';
@@ -457,6 +458,8 @@ export default function DishScreen() {
       : restaurantIdParam
         ? `מסעדה ${restaurantIdParam}`
         : null);
+  const headerRestaurantTarget =
+    dishAssociations.find((item) => item.restaurant_id || item.restaurant_name) ?? null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -469,7 +472,20 @@ export default function DishScreen() {
         </Pressable>
         <View style={styles.headerTextWrap}>
           <Text style={styles.headerTitle}>{dishQuery || dishName || 'מנה'}</Text>
-          <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
+          {headerRestaurantTarget ? (
+            <Pressable
+              hitSlop={10}
+              onPress={() => handleOpenRestaurant(headerRestaurantTarget)}
+              style={({ pressed }) => [
+                styles.headerSubtitlePressable,
+                pressed && styles.headerSubtitlePressablePressed,
+              ]}
+            >
+              <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
+          )}
         </View>
       </View>
       {avgScores ? (
@@ -498,34 +514,36 @@ export default function DishScreen() {
         </View>
       ) : null}
       {loading && !isRefreshing ? (
-        <View style={styles.results}>
+        <CrossfadeView style={styles.results}>
           <DishScreenSkeleton />
-        </View>
+        </CrossfadeView>
       ) : error ? (
         <View style={styles.results}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
       {sortedAssociations.length > 0 ? (
-        <FlatList
-          data={sortedAssociations}
-          keyExtractor={(item) => item.id}
-          initialNumToRender={4}
-          maxToRenderPerBatch={4}
-          updateCellsBatchingPeriod={50}
-          windowSize={7}
-          removeClippedSubviews
-          contentContainerStyle={styles.feedContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={refreshContent}
-              tintColor={theme.colors.accent}
-              colors={[theme.colors.accent]}
-            />
-          }
-          renderItem={renderDishItem}
-        />
+        <CrossfadeView>
+          <FlatList
+            data={sortedAssociations}
+            keyExtractor={(item) => item.id}
+            initialNumToRender={4}
+            maxToRenderPerBatch={4}
+            updateCellsBatchingPeriod={50}
+            windowSize={7}
+            removeClippedSubviews
+            contentContainerStyle={styles.feedContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={refreshContent}
+                tintColor={theme.colors.accent}
+                colors={[theme.colors.accent]}
+              />
+            }
+            renderItem={renderDishItem}
+          />
+        </CrossfadeView>
       ) : !loading && !error && hasLoaded ? (
         <View style={styles.results}>
           <Text style={styles.placeholderText}>אין מנות להצגה</Text>
@@ -601,6 +619,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
+  },
+  headerSubtitlePressable: {
+    marginTop: 2,
+    borderRadius: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  headerSubtitlePressablePressed: {
+    opacity: 0.72,
   },
   results: {
     alignSelf: 'stretch',

@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     gap: 2,
     justifyContent: 'flex-end',
     width: '100%',
-    paddingRight: 20,
+    paddingRight: 6,
   },
   starInputWrap: {
     flex: 0,
@@ -480,17 +480,17 @@ const styles = StyleSheet.create({
   sliderLabelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    width: 110,
+    width: 76,
     justifyContent: 'flex-end',
-    marginLeft: 6,
-    paddingRight: 36,
+    marginLeft: 2,
+    paddingRight: 0,
     height: 44,
   },
   sliderText: {
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
-    alignSelf: 'flex-end',
+    width: '100%',
     lineHeight: 44,
   },
   saveButton: {

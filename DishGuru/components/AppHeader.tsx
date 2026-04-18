@@ -179,7 +179,14 @@ export default function AppHeader() {
       </View>
       <Pressable style={styles.logoContainer} onPress={() => router.push('/')}>
         {companyLogoUrl ? (
-          <CachedLogo uri={companyLogoUrl} style={styles.logoImage} />
+          <CachedLogo
+            uri={companyLogoUrl}
+            style={styles.logoImage}
+            contentFit="contain"
+            priority="high"
+            transition={90}
+            allowDownscaling={false}
+          />
         ) : (
           <Text style={styles.logoText}>DishGuru</Text>
         )}

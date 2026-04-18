@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
+import CrossfadeView from '../components/CrossfadeView';
 import { theme } from '../lib/theme';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
 import { useFocusEffect } from '@react-navigation/native';
@@ -390,9 +391,9 @@ export default function MyDishesScreen() {
         }
         ListEmptyComponent={
           loading && !isRefreshing && !hasLoaded ? (
-            <View style={styles.results}>
+            <CrossfadeView style={styles.results}>
               <HomeFeedSkeleton />
-            </View>
+            </CrossfadeView>
           ) : !loading && !error && hasLoaded ? (
             <View style={styles.results}>
               <Text style={styles.placeholderText}>אין מנות להצגה</Text>

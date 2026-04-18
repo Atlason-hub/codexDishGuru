@@ -21,6 +21,7 @@ import { openVendorDish } from '../lib/orderVendor';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
+import StaggeredEntrance from '../components/StaggeredEntrance';
 import LegalModal from '../components/LegalModal';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
 import { theme } from '../lib/theme';
@@ -856,24 +857,26 @@ export default function HomeScreen() {
   );
 
   const renderDishGroup = useCallback(
-    ({ item }: { item: { key: string; items: DishAssociation[] } }) => (
-      <DishCard
-        items={item.items}
-        favorites={favorites}
-        currentUserId={currentUserId}
-        avatarUrl={avatarUrl}
-        userAvatars={userAvatars}
-        userLabels={userLabels}
-        onAvatarPress={handleAvatarPress}
-        onToggleFavorite={handleToggleFavorite}
-        onOpenPhoto={handleOpenDish}
-        onOpenDish={handleOpenDish}
-        onOpenRestaurant={handleOpenRestaurant}
-        onDelete={deleteDishAssociation}
-        onOpenCamera={handleOpenCamera}
-        onEdit={handleEdit}
-        onOrder={handleOrder}
-      />
+    ({ item, index }: { item: { key: string; items: DishAssociation[] }; index: number }) => (
+      <StaggeredEntrance index={index}>
+        <DishCard
+          items={item.items}
+          favorites={favorites}
+          currentUserId={currentUserId}
+          avatarUrl={avatarUrl}
+          userAvatars={userAvatars}
+          userLabels={userLabels}
+          onAvatarPress={handleAvatarPress}
+          onToggleFavorite={handleToggleFavorite}
+          onOpenPhoto={handleOpenDish}
+          onOpenDish={handleOpenDish}
+          onOpenRestaurant={handleOpenRestaurant}
+          onDelete={deleteDishAssociation}
+          onOpenCamera={handleOpenCamera}
+          onEdit={handleEdit}
+          onOrder={handleOrder}
+        />
+      </StaggeredEntrance>
     ),
     [
       avatarUrl,

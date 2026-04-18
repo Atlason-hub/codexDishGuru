@@ -1,11 +1,26 @@
-import { AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Animated,
+  AppState,
+  FlatList,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  UIManager,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
+import CrossfadeView from '../components/CrossfadeView';
 import { RestaurantScreenSkeleton } from '../components/LoadingSkeleton';
 import RatingValueRow from '../components/RatingValueRow';
+import StaggeredEntrance from '../components/StaggeredEntrance';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import {
@@ -53,6 +68,29 @@ type DishSummary = {
 type Row =
   | { type: 'header'; id: string; title: string }
   | { type: 'dish'; id: string; dish: DishSummary };
+
+function SectionChevron({ collapsed }: { collapsed: boolean }) {
+  const rotation = useRef(new Animated.Value(collapsed ? 0 : 1)).current;
+
+  useEffect(() => {
+    Animated.timing(rotation, {
+      toValue: collapsed ? 0 : 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [collapsed, rotation]);
+
+  const spin = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ rotate: spin }] }}>
+      <Ionicons name="chevron-down" size={14} color={theme.colors.accent} />
+    </Animated.View>
+  );
+}
 
 const normalizeCategoryName = (raw: unknown) => {
   if (typeof raw !== 'string') return null;
@@ -309,6 +347,12 @@ export default function RestaurantScreen() {
   const [dishSearch, setDishSearch] = useState('');
   const appStateRef = useRef(AppState.currentState);
 
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      UIManager.setLayoutAnimationEnabledExperimental?.(true);
+    }
+  }, []);
+
   const loadRestaurantData = useCallback(async () => {
     if (!restaurantId) {
       setError('חסרה מסעדה');
@@ -418,6 +462,52 @@ export default function RestaurantScreen() {
     [menuCategories, summaries, collapsedCategories, dishSearch]
   );
 
+  const animateSectionChange = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 220,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+      delete: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+    });
+  }, []);
+
+  const toggleSection = useCallback(
+    (sectionKey: string) => {
+      animateSectionChange();
+      setCollapsedCategories((prev) => {
+        const next = new Set(prev);
+        if (next.has(sectionKey)) {
+          next.delete(sectionKey);
+        } else {
+          next.add(sectionKey);
+        }
+        return next;
+      });
+    },
+    [animateSectionChange]
+  );
+
+  const collapseAllSections = useCallback(() => {
+    animateSectionChange();
+    const all = new Set<string>();
+    all.add('reviewed');
+    menuCategories.forEach((cat) => all.add(cat.id));
+    setCollapsedCategories(all);
+  }, [animateSectionChange, menuCategories]);
+
+  const expandAllSections = useCallback(() => {
+    animateSectionChange();
+    setCollapsedCategories(new Set());
+  }, [animateSectionChange]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
@@ -449,18 +539,13 @@ export default function RestaurantScreen() {
         <View style={styles.controlsRow}>
           <Pressable
             style={styles.controlButton}
-            onPress={() => {
-              const all = new Set<string>();
-              all.add('reviewed');
-              menuCategories.forEach((cat) => all.add(cat.id));
-              setCollapsedCategories(all);
-            }}
+            onPress={collapseAllSections}
           >
             <Text style={styles.controlText}>כווץ הכל</Text>
           </Pressable>
           <Pressable
             style={styles.controlButton}
-            onPress={() => setCollapsedCategories(new Set())}
+            onPress={expandAllSections}
           >
             <Text style={styles.controlText}>הרחב הכל</Text>
           </Pressable>
@@ -468,9 +553,9 @@ export default function RestaurantScreen() {
       ) : null}
 
       {loading && !isRefreshing ? (
-        <View style={styles.results}>
+        <CrossfadeView style={styles.results}>
           <RestaurantScreenSkeleton />
-        </View>
+        </CrossfadeView>
       ) : error ? (
         <View style={styles.results}>
           <Text style={styles.errorText}>{error}</Text>
@@ -480,130 +565,115 @@ export default function RestaurantScreen() {
           <Text style={styles.placeholderText}>אין מנות להצגה</Text>
         </View>
       ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={(item) => item.id}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          updateCellsBatchingPeriod={50}
-          windowSize={7}
-          removeClippedSubviews
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={refreshContent}
-              tintColor={theme.colors.accent}
-              colors={[theme.colors.accent]}
-            />
-          }
-          renderItem={({ item }) =>
-            item.type === 'header' ? (
-              <Pressable
-                style={styles.sectionHeader}
-                onPress={() =>
-                  setCollapsedCategories((prev) => {
-                    const next = new Set(prev);
-                    const key = item.id.replace('header-', '');
-                    if (next.has(key)) {
-                      next.delete(key);
-                    } else {
-                      next.add(key);
-                    }
-                    return next;
-                  })
-                }
-              >
-                <Text style={styles.sectionHeaderText}>{item.title}</Text>
-                <Ionicons
-                  name={
-                    collapsedCategories.has(item.id.replace('header-', ''))
-                      ? 'chevron-down'
-                      : 'chevron-up'
-                  }
-                  size={14}
-                  color={theme.colors.accent}
-                />
-              </Pressable>
-            ) : (
-              <Pressable
-                style={styles.dishCard}
-                onPress={() => {
-                  if (item.dish.hasUploads) {
-                    router.push({
-                      pathname: '/dish',
-                      params: {
-                        restaurantId: restaurantId ? String(restaurantId) : '',
-                        restaurantName,
-                        dishId: item.dish.key,
-                        dishName: item.dish.name,
-                      },
-                    });
-                    return;
-                  }
+        <CrossfadeView>
+          <FlatList
+            data={rows}
+            keyExtractor={(item) => item.id}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            updateCellsBatchingPeriod={50}
+            windowSize={7}
+            removeClippedSubviews
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={refreshContent}
+                tintColor={theme.colors.accent}
+                colors={[theme.colors.accent]}
+              />
+            }
+            renderItem={({ item, index }) =>
+              item.type === 'header' ? (
+                <Pressable
+                  style={styles.sectionHeader}
+                  onPress={() => toggleSection(item.id.replace('header-', ''))}
+                >
+                  <Text style={styles.sectionHeaderText}>{item.title}</Text>
+                  <SectionChevron collapsed={collapsedCategories.has(item.id.replace('header-', ''))} />
+                </Pressable>
+              ) : (
+                <StaggeredEntrance index={index}>
+                  <Pressable
+                    style={styles.dishCard}
+                    onPress={() => {
+                      if (item.dish.hasUploads) {
+                        router.push({
+                          pathname: '/dish',
+                          params: {
+                            restaurantId: restaurantId ? String(restaurantId) : '',
+                            restaurantName,
+                            dishId: item.dish.key,
+                            dishName: item.dish.name,
+                          },
+                        });
+                        return;
+                      }
 
-                  router.push({
-                    pathname: '/camera/details',
-                    params: {
-                      restaurantId: restaurantId ? String(restaurantId) : '',
-                      restaurantName,
-                      dishId: item.dish.key,
-                      dishName: item.dish.name,
-                      defaultImageUrl: item.dish.imageUrl ?? '',
-                      lockSelection: '1',
-                    },
-                  });
-                }}
-              >
-                <View style={styles.dishInfo}>
-                  <Text style={styles.dishName}>{item.dish.name}</Text>
-                  {!item.dish.hasUploads ? (
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusBadgeText}>אין עדיין ביקורות</Text>
-                    </View>
-                  ) : null}
-                  <View style={styles.scoreRow}>
-                    <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
-                      <RatingValueRow
-                        label="טעים"
-                        score={item.dish.avgTasty}
-                        iconSize={24}
-                        rowStyle={styles.ratingInlineRow}
-                        labelStyle={styles.scoreLabel}
-                      />
-                    </View>
-                    <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
-                      <RatingValueRow
-                        label="משביע"
-                        score={item.dish.avgFilling}
-                        iconSize={24}
-                        rowStyle={styles.ratingInlineRow}
-                        labelStyle={styles.scoreLabel}
-                      />
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.imageWrap}>
-                  {item.dish.imageUrl ? (
-                    <CachedLogo uri={item.dish.imageUrl} style={styles.image} />
-                  ) : (
-                    <View style={styles.placeholderImage}>
-                      <Ionicons
-                        name="image-outline"
-                        size={20}
-                        color={theme.colors.textMuted}
-                      />
-                      <View style={styles.placeholderOverlay}>
-                        <Ionicons name="camera" size={10} color="#ffffff" />
-                        <Text style={styles.placeholderOverlayText}>צלם מנה</Text>
+                      router.push({
+                        pathname: '/camera/details',
+                        params: {
+                          restaurantId: restaurantId ? String(restaurantId) : '',
+                          restaurantName,
+                          dishId: item.dish.key,
+                          dishName: item.dish.name,
+                          defaultImageUrl: item.dish.imageUrl ?? '',
+                          lockSelection: '1',
+                        },
+                      });
+                    }}
+                  >
+                    <View style={styles.dishInfo}>
+                      <Text style={styles.dishName}>{item.dish.name}</Text>
+                      {!item.dish.hasUploads ? (
+                        <View style={styles.statusBadge}>
+                          <Text style={styles.statusBadgeText}>אין עדיין ביקורות</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.scoreRow}>
+                        <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
+                          <RatingValueRow
+                            label="טעים"
+                            score={item.dish.avgTasty}
+                            iconSize={24}
+                            rowStyle={styles.ratingInlineRow}
+                            labelStyle={styles.scoreLabel}
+                          />
+                        </View>
+                        <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
+                          <RatingValueRow
+                            label="משביע"
+                            score={item.dish.avgFilling}
+                            iconSize={24}
+                            rowStyle={styles.ratingInlineRow}
+                            labelStyle={styles.scoreLabel}
+                          />
+                        </View>
                       </View>
                     </View>
-                  )}
-                </View>
-              </Pressable>
-            )
-          }
-        />
+                    <View style={styles.imageWrap}>
+                      {item.dish.imageUrl ? (
+                        <CachedLogo uri={item.dish.imageUrl} style={styles.image} />
+                      ) : (
+                        <View style={styles.placeholderImage}>
+                          <Ionicons
+                            name="image-outline"
+                            size={20}
+                            color={theme.colors.textMuted}
+                          />
+                          <View style={styles.placeholderOverlay}>
+                            <Ionicons name="camera" size={10} color="#ffffff" />
+                            <Text style={styles.placeholderOverlayText}>צלם מנה</Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </Pressable>
+                </StaggeredEntrance>
+              )
+            }
+          />
+        </CrossfadeView>
       )}
     </SafeAreaView>
   );

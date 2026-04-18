@@ -109,6 +109,9 @@ function DishCard({
         ? userAvatars[currentItem.user_id] ?? null
         : null;
   const avatarLabel = currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null;
+  const hasRestaurantTarget = Boolean(
+    currentItem && (currentItem.restaurant_id || currentItem.restaurant_name)
+  );
 
   const bouncePress = (scale: Animated.Value) => {
     Animated.sequence([
@@ -382,8 +385,20 @@ function DishCard({
                 {currentItem?.dish_name ?? 'מנה'}
               </Text>
             </Pressable>
-            <Pressable onPress={() => currentItem && onOpenRestaurant?.(currentItem)}>
-              <Text style={styles.imageRestaurantText} numberOfLines={1} ellipsizeMode="tail">
+            <Pressable
+              hitSlop={10}
+              disabled={!hasRestaurantTarget || !onOpenRestaurant}
+              onPress={() => currentItem && onOpenRestaurant?.(currentItem)}
+              style={({ pressed }) => [
+                styles.restaurantLinkPressable,
+                pressed && hasRestaurantTarget && styles.restaurantLinkPressablePressed,
+              ]}
+            >
+              <Text
+                style={styles.imageRestaurantText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {currentItem?.restaurant_name ??
                   (currentItem?.restaurant_id ? `מסעדה ${currentItem.restaurant_id}` : 'מסעדה')}
               </Text>
@@ -829,6 +844,15 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 2,
     writingDirection: 'rtl',
+  },
+  restaurantLinkPressable: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  restaurantLinkPressablePressed: {
+    opacity: 0.75,
   },
   ratingRow: {
     flexDirection: 'row',
