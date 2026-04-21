@@ -16,6 +16,7 @@ import { theme } from '../lib/theme';
 import { scoreToStars, starsToScore } from '../lib/ratings';
 import EmojiRatingInput from '../components/EmojiRatingInput';
 import { showAppAlert } from '../lib/appDialog';
+import { useLocale } from '../lib/locale';
 
 type DishAssociation = {
   id: string;
@@ -33,6 +34,7 @@ type DishAssociation = {
 
 export default function EditDishScreen() {
   const router = useRouter();
+  const { isRTL, t } = useLocale();
   const params = useLocalSearchParams();
   const associationId = typeof params.id === 'string' ? params.id : '';
   const photoUriParam = typeof params.photoUri === 'string' ? params.photoUri : '';
@@ -191,14 +193,14 @@ export default function EditDishScreen() {
   if (!dish) {
     return (
       <SafeAreaView style={styles.centered}>
-        <Text style={styles.placeholderText}>המנה לא נמצאה.</Text>
+        <Text style={styles.placeholderText}>{t('editDishNotFound')}</Text>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerRow} pointerEvents="box-none">
+      <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]} pointerEvents="box-none">
         <View style={styles.backButtonWrap}>
           <Pressable
             style={styles.backButtonHit}
@@ -252,12 +254,14 @@ export default function EditDishScreen() {
               }
             }}
           >
-            <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
           </Pressable>
         </View>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.headerTitle}>עריכת מנה</Text>
-          <Text style={styles.headerSubtitle}>
+        <View style={[styles.headerTextWrap, !isRTL && styles.headerTextWrapLtr]}>
+          <Text style={[styles.headerTitle, !isRTL && styles.headerTitleLtr]}>
+            {t('editDishTitle')}
+          </Text>
+          <Text style={[styles.headerSubtitle, !isRTL && styles.headerSubtitleLtr]}>
             {dish.dish_name ?? ''} {dish.restaurant_name ? `| ${dish.restaurant_name}` : ''}
           </Text>
         </View>
@@ -270,7 +274,7 @@ export default function EditDishScreen() {
           ) : (
             <View style={styles.photoPlaceholder}>
               <Ionicons name="camera" size={24} color={theme.colors.accent} />
-              <Text style={styles.photoPlaceholderText}>צלם מחדש</Text>
+              <Text style={styles.photoPlaceholderText}>{t('cameraRetake')}</Text>
             </View>
           )}
           <Pressable
@@ -283,31 +287,31 @@ export default function EditDishScreen() {
             }
           >
             <Ionicons name="camera" size={18} color={theme.colors.white} />
-            <Text style={styles.photoOverlayText}>צלם מחדש</Text>
+            <Text style={styles.photoOverlayText}>{t('cameraRetake')}</Text>
           </Pressable>
         </View>
 
         <TextInput
           style={styles.input}
-          placeholder="כתוב דעתך על המנה"
+          placeholder={t('cameraReviewPlaceholder')}
           placeholderTextColor="#9CA3AF"
           value={reviewText}
           onChangeText={setReviewText}
           multiline
-          textAlign="right"
+          textAlign={isRTL ? 'right' : 'left'}
         />
 
-        <View style={styles.sliderRow}>
+        <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
           <View style={styles.sliderLabelRow}>
-            <Text style={styles.sliderText}>טעים</Text>
+            <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
           </View>
           <View style={styles.starInputWrap}>
             <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
           </View>
         </View>
-        <View style={styles.sliderRow}>
+        <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
           <View style={styles.sliderLabelRow}>
-            <Text style={styles.sliderText}>משביע</Text>
+            <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingSize')}</Text>
           </View>
           <View style={styles.starInputWrap}>
             <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
@@ -315,7 +319,7 @@ export default function EditDishScreen() {
         </View>
 
         <Pressable
-          style={styles.saveButton}
+          style={[styles.saveButton, !isRTL && styles.saveButtonLtr]}
           onPress={handleSave}
           hitSlop={8}
           disabled={saving}
@@ -323,7 +327,7 @@ export default function EditDishScreen() {
           {saving ? (
             <ActivityIndicator color={theme.colors.accent} />
           ) : (
-            <Text style={styles.saveButtonText}>שמור</Text>
+            <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
           )}
         </Pressable>
       </View>
@@ -362,6 +366,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 10,
   },
+  headerRowLtr: {
+    flexDirection: 'row-reverse',
+  },
   backButton: {
     height: 32,
     width: 32,
@@ -393,17 +400,28 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginRight: 8,
   },
+  headerTextWrapLtr: {
+    alignItems: 'flex-start',
+    marginRight: 0,
+    marginLeft: 8,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: theme.colors.text,
     textAlign: 'right',
   },
+  headerTitleLtr: {
+    textAlign: 'left',
+  },
   headerSubtitle: {
     marginTop: 2,
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
+  },
+  headerSubtitleLtr: {
+    textAlign: 'left',
   },
   body: {
     flex: 1,
@@ -468,6 +486,12 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingRight: 6,
   },
+  sliderRowLtr: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    paddingRight: 0,
+    paddingLeft: 6,
+  },
   starInputWrap: {
     flex: 0,
     alignItems: 'flex-end',
@@ -487,11 +511,14 @@ const styles = StyleSheet.create({
     height: 44,
   },
   sliderText: {
-    fontSize: 12,
+    fontSize: 14,
     color: theme.colors.textMuted,
     textAlign: 'right',
     width: '100%',
     lineHeight: 44,
+  },
+  sliderTextLtr: {
+    textAlign: 'left',
   },
   saveButton: {
     alignSelf: 'flex-start',
@@ -502,6 +529,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accent,
     zIndex: 10,
     marginTop: 24,
+  },
+  saveButtonLtr: {
+    alignSelf: 'flex-end',
   },
   saveButtonText: {
     color: theme.colors.accent,

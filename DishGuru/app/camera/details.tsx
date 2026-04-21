@@ -22,6 +22,7 @@ import { theme } from '../../lib/theme';
 import { starsToScore } from '../../lib/ratings';
 import EmojiRatingInput from '../../components/EmojiRatingInput';
 import { showAppAlert } from '../../lib/appDialog';
+import { useLocale } from '../../lib/locale';
 
 type Restaurant = {
   RestaurantId: number;
@@ -160,7 +161,10 @@ const buildDropdownRows = (
   return rows;
 };
 
-const mapRestaurantsToCategories = (restaurants: Restaurant[]): RestaurantCategory[] => {
+const mapRestaurantsToCategories = (
+  restaurants: Restaurant[],
+  fallbackCategoryName: string
+): RestaurantCategory[] => {
   const categoryMap = new Map<string, RestaurantCategory>();
   const getBucket = (key: string, name: string) => {
     if (!categoryMap.has(key)) {
@@ -178,7 +182,7 @@ const mapRestaurantsToCategories = (restaurants: Restaurant[]): RestaurantCatego
     if (cuisine) {
       getBucket(`cuisine-${cuisine}`, cuisine).items.push(restaurant);
     } else {
-      getBucket('all-restaurants', 'מסעדות').items.push(restaurant);
+      getBucket('all-restaurants', fallbackCategoryName).items.push(restaurant);
     }
   });
 
@@ -224,6 +228,7 @@ const buildRestaurantRows = (
 
 export default function CameraDetailsScreen() {
   const router = useRouter();
+  const { isRTL, t } = useLocale();
   const params = useLocalSearchParams();
   const scrollRef = useRef<ScrollView | null>(null);
   const photoUri = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
@@ -362,7 +367,7 @@ export default function CameraDetailsScreen() {
           }))
         : [];
       setRestaurants(list);
-      const categories = mapRestaurantsToCategories(list);
+      const categories = mapRestaurantsToCategories(list, t('cameraRestaurantsGroup'));
       setRestaurantCategories(categories);
       setCollapsedRestaurantCategories(new Set(categories.map((cat) => cat.id)));
     } catch (err) {
@@ -416,10 +421,10 @@ export default function CameraDetailsScreen() {
         <View style={styles.headerRow}>
           <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
             <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
-            <Text style={styles.backText}>חזור</Text>
+            <Text style={styles.backText}>{t('cameraDetailsBack')}</Text>
           </Pressable>
           <View style={styles.headerTextWrap}>
-            <Text style={styles.headerTitle}>פרטי המנה</Text>
+            <Text style={styles.headerTitle}>{t('cameraDetailsTitle')}</Text>
           </View>
         </View>
         <View style={styles.photoRow}>
@@ -446,14 +451,14 @@ export default function CameraDetailsScreen() {
             <View style={styles.cameraOverlay}>
               <Ionicons name="camera" size={20} color="#ffffff" />
               <Text style={styles.cameraOverlayText}>
-                {photoUri ? 'צלם מחדש' : 'צלם מנה'}
+                {photoUri ? t('cameraRetake') : t('cameraTakeDishPhoto')}
               </Text>
             </View>
           </Pressable>
         </View>
         <TextInput
           style={styles.reviewInput}
-          placeholder="כתוב דעתך על המנה"
+          placeholder={t('cameraReviewPlaceholder')}
           placeholderTextColor={theme.colors.textMuted}
           multiline
           textAlign="right"
@@ -473,7 +478,7 @@ export default function CameraDetailsScreen() {
             disabled={loading || lockSelection}
           >
             <Text style={[styles.dropdownText, !selectedName && styles.dropdownPlaceholder]}>
-              {loading ? 'טוען מסעדות…' : selectedName ?? 'בחר מסעדה'}
+              {loading ? t('cameraLoadingRestaurants') : selectedName ?? t('searchChooseRestaurant')}
             </Text>
             {!lockSelection ? (
               <View style={styles.chevronCircle}>
@@ -491,14 +496,14 @@ export default function CameraDetailsScreen() {
                     <Ionicons name="search" size={16} color={theme.colors.textMuted} />
                     <TextInput
                   style={styles.searchInput}
-          placeholder="חיפוש מסעדה…"
+          placeholder={t('cameraSearchRestaurantPlaceholder')}
                   placeholderTextColor={theme.colors.textMuted}
                   value={search}
                   onChangeText={(text) => setSearch(text)}
                 />
               </View>
               {restaurants.length === 0 ? (
-                <Text style={styles.dropdownEmpty}>לא נמצאו מסעדות</Text>
+                <Text style={styles.dropdownEmpty}>{t('cameraNoRestaurantsFound')}</Text>
               ) : (
                 <ScrollView
                   nestedScrollEnabled
@@ -578,8 +583,8 @@ export default function CameraDetailsScreen() {
           >
             <Text style={[styles.dropdownText, !selectedDish && styles.dropdownPlaceholder]}>
               {!selectedRestaurantId
-                ? 'בחר מסעדה קודם'
-                : selectedDish?.name ?? 'הכנס שם או בחר מנה'}
+                ? t('cameraChooseRestaurantFirst')
+                : selectedDish?.name ?? t('searchDishPrompt')}
             </Text>
             {!lockSelection ? (
               <View style={styles.chevronCircle}>
@@ -598,7 +603,7 @@ export default function CameraDetailsScreen() {
                   style={styles.dropdownControlButton}
                   onPress={() => setCollapsedDishCategories(new Set())}
                 >
-                  <Text style={styles.dropdownControlText}>הרחב הכל</Text>
+                  <Text style={styles.dropdownControlText}>{t('searchExpandAll')}</Text>
                 </Pressable>
                 <Pressable
                   style={styles.dropdownControlButton}
@@ -606,14 +611,14 @@ export default function CameraDetailsScreen() {
                     setCollapsedDishCategories(new Set(dishCategories.map((cat) => cat.id)))
                   }
                 >
-                  <Text style={styles.dropdownControlText}>כווץ הכל</Text>
+                  <Text style={styles.dropdownControlText}>{t('searchCollapseAll')}</Text>
                 </Pressable>
               </View>
               <View style={styles.searchRow}>
                 <Ionicons name="search" size={16} color={theme.colors.textMuted} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="חיפוש מנה…"
+                  placeholder={t('searchDishPlaceholder')}
                   placeholderTextColor={theme.colors.textMuted}
                   value={dishSearch}
                   onChangeText={(text) => setDishSearch(text)}
@@ -622,10 +627,10 @@ export default function CameraDetailsScreen() {
               {menuLoading ? (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator size="small" color={theme.colors.text} />
-                  <Text style={styles.dropdownEmpty}>טוען מנות…</Text>
+                  <Text style={styles.dropdownEmpty}>{t('cameraLoadingDishes')}</Text>
                 </View>
               ) : dishCategories.length === 0 ? (
-                <Text style={styles.dropdownEmpty}>לא נמצאו מנות</Text>
+                <Text style={styles.dropdownEmpty}>{t('searchNoDishesFound')}</Text>
               ) : (
                 <ScrollView
                   nestedScrollEnabled
@@ -686,10 +691,10 @@ export default function CameraDetailsScreen() {
           )}
         </View>
 
-        <Text style={styles.ratingHeader}>דרג את המנה</Text>
+        <Text style={styles.ratingHeader}>{t('cameraRateDish')}</Text>
         <View style={styles.sliderRow}>
           <View style={styles.sliderLabelRow}>
-            <Text style={styles.sliderText}>טעים</Text>
+            <Text style={styles.sliderText}>{t('ratingTasty')}</Text>
           </View>
           <View style={styles.starInputWrap}>
             <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
@@ -697,7 +702,7 @@ export default function CameraDetailsScreen() {
         </View>
         <View style={styles.sliderRow}>
           <View style={styles.sliderLabelRow}>
-            <Text style={styles.sliderText}>משביע</Text>
+            <Text style={styles.sliderText}>{t('ratingSize')}</Text>
           </View>
           <View style={styles.starInputWrap}>
             <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
@@ -707,21 +712,22 @@ export default function CameraDetailsScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.saveButton,
+            !isRTL && styles.saveButtonLtr,
             pressed && !saving && photoUri && photoBase64 && styles.saveButtonPressed,
             (saving || !photoUri || !photoBase64) && styles.saveButtonDisabled,
           ]}
           onPress={async () => {
             if (saving) return;
             if (!photoUri) {
-              showAppAlert('חסרה תמונה', 'אנא צלם תמונה תחילה.');
+              showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
               return;
             }
             if (!selectedRestaurantId) {
-              showAppAlert('חסרה מסעדה', 'אנא בחר מסעדה.');
+              showAppAlert(t('cameraMissingRestaurantTitle'), t('cameraChooseRestaurant'));
               return;
             }
             if (!selectedDish?.id) {
-              showAppAlert('חסרה מנה', 'אנא בחר מנה.');
+              showAppAlert(t('cameraMissingDishTitle'), t('cameraChooseDish'));
               return;
             }
             try {
@@ -729,11 +735,11 @@ export default function CameraDetailsScreen() {
               const { data: sessionData } = await supabase.auth.getSession();
               const userId = sessionData.session?.user?.id;
               if (!userId) {
-                showAppAlert('לא מחובר', 'אנא התחבר שוב.');
+                showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
                 return;
               }
             if (!photoBase64) {
-                showAppAlert('חסרה תמונה', 'אנא צלם מחדש.');
+                showAppAlert(t('cameraMissingImageTitle'), t('cameraRetakePhotoPrompt'));
               return;
             }
               const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
@@ -772,7 +778,7 @@ export default function CameraDetailsScreen() {
               router.replace('/');
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
-              showAppAlert('שמירה נכשלה', message);
+              showAppAlert(t('cameraSaveFailed'), message);
             } finally {
               setSaving(false);
             }
@@ -781,7 +787,7 @@ export default function CameraDetailsScreen() {
           {saving ? (
             <ActivityIndicator color={theme.colors.accent} />
           ) : (
-            <Text style={styles.saveButtonText}>שמור</Text>
+            <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
           )}
         </Pressable>
         </Pressable>
@@ -1151,6 +1157,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     alignSelf: 'flex-start',
     marginBottom: 12,
+  },
+  saveButtonLtr: {
+    alignSelf: 'flex-end',
   },
   saveButtonPressed: {
     opacity: 0.85,

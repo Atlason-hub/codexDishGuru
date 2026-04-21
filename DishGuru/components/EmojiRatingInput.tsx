@@ -1,7 +1,8 @@
 import React from 'react';
-import { I18nManager, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { RATING_SVGS, getSelectedEmojiIndex } from '../lib/ratings';
+import { useLocale } from '../lib/locale';
 
 type EmojiRatingInputProps = {
   value: number;
@@ -16,7 +17,8 @@ export default function EmojiRatingInput({
   onChange,
   size = 24,
 }: EmojiRatingInputProps) {
-  const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
+  const { isRTL } = useLocale();
+  const indices = [4, 3, 2, 1, 0];
   const selectedIndex = getSelectedEmojiIndex(value);
 
   return (
@@ -24,10 +26,10 @@ export default function EmojiRatingInput({
       <View
         style={[
           styles.row,
-          I18nManager.isRTL && styles.rowRtl,
+          isRTL && styles.rowRtl,
           {
             height: size + 8,
-            justifyContent: 'flex-end',
+            justifyContent: isRTL ? 'flex-end' : 'flex-start',
           },
         ]}
       >

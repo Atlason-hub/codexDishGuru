@@ -6,12 +6,12 @@ import {
   AppDialogOptions,
   registerAppDialogPresenter,
 } from '../lib/appDialog';
+import { useLocale } from '../lib/locale';
 
 type ActiveDialog = AppDialogOptions & { visible: boolean };
 
-const DEFAULT_ACTIONS: AppDialogAction[] = [{ text: 'אישור', style: 'default' }];
-
 export default function AppDialogHost() {
+  const { isRTL, t } = useLocale();
   const [dialog, setDialog] = useState<ActiveDialog | null>(null);
 
   useEffect(() => {
@@ -21,7 +21,9 @@ export default function AppDialogHost() {
     return () => registerAppDialogPresenter(null);
   }, []);
 
-  const actions = dialog?.actions?.length ? dialog.actions : DEFAULT_ACTIONS;
+  const actions = dialog?.actions?.length
+    ? dialog.actions
+    : [{ text: t('commonConfirm'), style: 'default' as const }];
 
   const closeDialog = () => setDialog(null);
 
@@ -42,9 +44,39 @@ export default function AppDialogHost() {
       <View style={styles.backdrop}>
         <Pressable style={styles.overlay} onPress={closeDialog} />
         <View style={styles.card}>
-          <Text style={styles.title}>{dialog?.title ?? ''}</Text>
-          {dialog?.message ? <Text style={styles.message}>{dialog.message}</Text> : null}
-          <View style={styles.actionsRow}>
+          <Text
+            style={[
+              styles.title,
+              {
+                textAlign: isRTL ? 'right' : 'left',
+                writingDirection: isRTL ? 'rtl' : 'ltr',
+              },
+            ]}
+          >
+            {dialog?.title ?? ''}
+          </Text>
+          {dialog?.message ? (
+            <Text
+              style={[
+                styles.message,
+                {
+                  textAlign: isRTL ? 'right' : 'left',
+                  writingDirection: isRTL ? 'rtl' : 'ltr',
+                },
+              ]}
+            >
+              {dialog.message}
+            </Text>
+          ) : null}
+          <View
+            style={[
+              styles.actionsRow,
+              {
+                flexDirection: isRTL ? 'row-reverse' : 'row',
+                justifyContent: isRTL ? 'flex-start' : 'flex-end',
+              },
+            ]}
+          >
             {actions.map((action, index) => {
               const isPrimary = (action.style ?? 'default') === 'default';
               const isDestructive = action.style === 'destructive';
@@ -64,6 +96,7 @@ export default function AppDialogHost() {
                   <Text
                     style={[
                       styles.actionText,
+                      { writingDirection: isRTL ? 'rtl' : 'ltr' },
                       isPrimary && styles.primaryActionText,
                       isDestructive && styles.destructiveActionText,
                     ]}
@@ -112,8 +145,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 20,
     fontWeight: '700',
-    textAlign: 'right',
-    writingDirection: 'rtl',
     lineHeight: 28,
   },
   message: {
@@ -121,14 +152,10 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
     fontSize: 16,
     lineHeight: 28,
-    textAlign: 'right',
-    writingDirection: 'rtl',
   },
   actionsRow: {
     marginTop: 22,
-    flexDirection: 'row-reverse',
     gap: 10,
-    justifyContent: 'flex-start',
     flexWrap: 'wrap',
   },
   actionButton: {
@@ -158,7 +185,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
-    writingDirection: 'rtl',
   },
   primaryActionText: {
     color: theme.colors.white,

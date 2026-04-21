@@ -25,6 +25,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { fetchCompanyIdForUser, fetchFavoritesMap, fetchOrderVendorForUser, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
+import { useLocale } from '../lib/locale';
 
 type DishAssociation = {
   id: string;
@@ -43,6 +44,7 @@ type DishAssociation = {
 
 export default function DishScreen() {
   const router = useRouter();
+  const { isRTL, t } = useLocale();
   const params = useLocalSearchParams();
   const dishName = typeof params.dishName === 'string' ? params.dishName : '';
   const dishQuery = typeof params.dishQuery === 'string' ? params.dishQuery : '';
@@ -126,21 +128,21 @@ export default function DishScreen() {
 
   const deleteDishAssociation = useCallback(async (dish: DishAssociation) => {
     showAppDialog({
-      title: 'מחיקת מנה',
-      message: 'האם למחוק את המנה והביקורות שלה?',
+      title: t('dishDeleteTitle'),
+      message: t('dishDeleteMessage'),
       actions: [
-        { text: 'ביטול', style: 'cancel' },
+        { text: t('commonCancel'), style: 'cancel' },
         {
-          text: 'מחק',
+          text: t('commonDelete'),
           style: 'destructive',
           onPress: async () => {
             try {
               if (!currentUserId) {
-                showAppAlert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
+                showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
                 return;
               }
               if (dish.user_id !== currentUserId) {
-                showAppAlert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
+                showAppAlert(t('accountUnauthorized'), t('dishDeleteUnauthorized'));
                 return;
               }
               if (dish.image_path) {
@@ -162,13 +164,13 @@ export default function DishScreen() {
               });
               await loadDishAssociationsRef.current?.({ showLoading: false });
             } catch {
-              showAppAlert('שגיאה', 'מחיקה נכשלה.');
+              showAppAlert(t('accountDeleteFailed'), t('accountDeleteFailed'));
             }
           },
         },
       ],
     });
-  }, [currentUserId]);
+  }, [currentUserId, t]);
 
   const loadUserAvatars = async (items: DishAssociation[]) => {
     const ids = Array.from(
@@ -463,15 +465,17 @@ export default function DishScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
           style={styles.backButton}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         >
-          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
         </Pressable>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.headerTitle}>{dishQuery || dishName || 'מנה'}</Text>
+        <View style={[styles.headerTextWrap, !isRTL && styles.headerTextWrapLtr]}>
+          <Text style={[styles.headerTitle, !isRTL && styles.headerTitleLtr]}>
+            {dishQuery || dishName || 'מנה'}
+          </Text>
           {headerRestaurantTarget ? (
             <Pressable
               hitSlop={10}
@@ -481,33 +485,37 @@ export default function DishScreen() {
                 pressed && styles.headerSubtitlePressablePressed,
               ]}
             >
-              <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
+              <Text style={[styles.headerSubtitle, !isRTL && styles.headerSubtitleLtr]}>
+                {headerRestaurant ?? ''}
+              </Text>
             </Pressable>
           ) : (
-            <Text style={styles.headerSubtitle}>{headerRestaurant ?? ''}</Text>
+            <Text style={[styles.headerSubtitle, !isRTL && styles.headerSubtitleLtr]}>
+              {headerRestaurant ?? ''}
+            </Text>
           )}
         </View>
       </View>
       {avgScores ? (
-        <View style={styles.avgCard}>
-          <Text style={styles.avgHeader}>דירוג ממוצע</Text>
-          <View style={styles.ratingRow}>
-            <View style={styles.ratingItem}>
+        <View style={[styles.avgCard, !isRTL && styles.avgCardLtr]}>
+          <Text style={[styles.avgHeader, !isRTL && styles.avgHeaderLtr]}>{t('dishAverageScore')}</Text>
+          <View style={[styles.ratingRow, !isRTL && styles.ratingRowLtr]}>
+            <View style={[styles.ratingItem, !isRTL && styles.ratingItemLtr]}>
               <RatingValueRow
-                label="טעים"
+                label={t('ratingTasty')}
                 score={avgScores.tasty}
-                iconSize={30}
-                rowStyle={styles.ratingInlineRow}
-                labelStyle={styles.ratingLabelInline}
+                iconSize={isRTL ? 30 : 28}
+                rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
+                labelStyle={[styles.ratingLabelInline, !isRTL && styles.ratingLabelInlineLtr]}
               />
             </View>
-            <View style={styles.ratingItem}>
+            <View style={[styles.ratingItem, !isRTL && styles.ratingItemLtr]}>
               <RatingValueRow
-                label="משביע"
+                label={t('ratingSize')}
                 score={avgScores.filling}
-                iconSize={30}
-                rowStyle={styles.ratingInlineRow}
-                labelStyle={styles.ratingLabelInline}
+                iconSize={isRTL ? 30 : 28}
+                rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
+                labelStyle={[styles.ratingLabelInline, !isRTL && styles.ratingLabelInlineLtr]}
               />
             </View>
           </View>
@@ -523,7 +531,7 @@ export default function DishScreen() {
         </View>
       ) : null}
       {sortedAssociations.length > 0 ? (
-        <CrossfadeView>
+        <CrossfadeView style={styles.feedListWrap}>
           <FlatList
             data={sortedAssociations}
             keyExtractor={(item) => item.id}
@@ -593,6 +601,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 10,
   },
+  headerRowLtr: {
+    flexDirection: 'row-reverse',
+  },
   backButton: {
     height: 32,
     width: 32,
@@ -608,17 +619,28 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginRight: 8,
   },
+  headerTextWrapLtr: {
+    alignItems: 'flex-start',
+    marginRight: 0,
+    marginLeft: 8,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: theme.colors.text,
     textAlign: 'right',
   },
+  headerTitleLtr: {
+    textAlign: 'left',
+  },
   headerSubtitle: {
     marginTop: 2,
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
+  },
+  headerSubtitleLtr: {
+    textAlign: 'left',
   },
   headerSubtitlePressable: {
     marginTop: 2,
@@ -650,6 +672,12 @@ const styles = StyleSheet.create({
     width: '98%',
     marginRight: 6,
   },
+  avgCardLtr: {
+    alignItems: 'flex-start',
+    alignSelf: 'flex-start',
+    marginRight: 0,
+    marginLeft: 6,
+  },
   avgHeader: {
     fontSize: 12,
     color: theme.colors.textMuted,
@@ -657,9 +685,17 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     alignSelf: 'flex-end',
   },
+  avgHeaderLtr: {
+    textAlign: 'left',
+    alignSelf: 'flex-start',
+  },
   feedContent: {
+    flexGrow: 1,
     paddingBottom: 120,
     gap: 16,
+  },
+  feedListWrap: {
+    flex: 1,
   },
   ratingRow: {
     flexDirection: 'column',
@@ -670,9 +706,19 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginRight: 14,
   },
+  ratingRowLtr: {
+    alignItems: 'flex-start',
+    alignSelf: 'flex-start',
+    marginRight: 0,
+    marginLeft: 6,
+  },
   ratingItem: {
     alignSelf: 'flex-end',
     alignItems: 'flex-end',
+  },
+  ratingItemLtr: {
+    alignSelf: 'flex-start',
+    alignItems: 'flex-start',
   },
   ratingInlineRow: {
     flexDirection: 'row-reverse',
@@ -683,6 +729,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingRight: 20,
   },
+  ratingInlineRowLtr: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    justifyContent: 'flex-start',
+    paddingRight: 0,
+    paddingLeft: 8,
+  },
   ratingLabelInline: {
     fontSize: 12,
     color: theme.colors.textMuted,
@@ -692,6 +745,12 @@ const styles = StyleSheet.create({
     width: 52,
     lineHeight: 30,
     paddingRight: 8,
+  },
+  ratingLabelInlineLtr: {
+    textAlign: 'left',
+    alignSelf: 'flex-start',
+    paddingRight: 0,
+    paddingLeft: 4,
   },
   fullscreenOverlay: {
     flex: 1,

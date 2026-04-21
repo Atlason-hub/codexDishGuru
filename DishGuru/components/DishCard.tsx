@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import CachedLogo from './CachedLogo';
 import RatingValueRow from './RatingValueRow';
 import { theme } from '../lib/theme';
+import { useLocale } from '../lib/locale';
 
 const dishActionColor = '#C75D2C';
 
@@ -78,6 +79,7 @@ function DishCard({
   onDelete,
   onOrder,
 }: DishCardProps) {
+  const { isRTL, t } = useLocale();
   const [imageWidth, setImageWidth] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollRef = useRef<ScrollView | null>(null);
@@ -270,7 +272,13 @@ function DishCard({
             style={styles.imageGradientBottom}
             pointerEvents="none"
           />
-          <View style={styles.leftButtonStack} pointerEvents="box-none">
+          <View
+            style={[
+              styles.leftButtonStack,
+              isRTL ? styles.overlayActionStackRtl : styles.overlayActionStackLtr,
+            ]}
+            pointerEvents="box-none"
+          >
             <Animated.View style={[styles.cameraBadge, { transform: [{ scale: cameraScale }] }]}>
               <Pressable
                 style={styles.badgePressable}
@@ -354,10 +362,21 @@ function DishCard({
               </Animated.View>
             ) : null}
           </View>
-          <Text style={styles.imageDateText}>
+          <Text
+            style={[
+              styles.imageDateText,
+              isRTL ? styles.imageDateTextRtl : styles.imageDateTextLtr,
+            ]}
+          >
             {currentItem?.created_at ? new Date(currentItem.created_at).toLocaleDateString() : ''}
           </Text>
-          <Animated.View style={[styles.avatarBadge, { transform: [{ scale: avatarScale }] }]}>
+          <Animated.View
+            style={[
+              styles.avatarBadge,
+              isRTL ? styles.avatarBadgeRtl : styles.avatarBadgeLtr,
+              { transform: [{ scale: avatarScale }] },
+            ]}
+          >
             <Pressable
               style={styles.badgePressable}
               onLayout={(event) => {
@@ -379,9 +398,24 @@ function DishCard({
               )}
             </Pressable>
           </Animated.View>
-          <View style={styles.imageTextBlock}>
+          <View
+            style={[
+              styles.imageTextBlock,
+              isRTL ? styles.imageTextBlockRtl : styles.imageTextBlockLtr,
+            ]}
+          >
             <Pressable onPress={() => currentItem && onOpenDish?.(currentItem)}>
-              <Text style={styles.imageDishText} numberOfLines={2} ellipsizeMode="tail">
+              <Text
+                style={[
+                  styles.imageDishText,
+                  {
+                    textAlign: isRTL ? 'right' : 'left',
+                    writingDirection: isRTL ? 'rtl' : 'ltr',
+                  },
+                ]}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
                 {currentItem?.dish_name ?? 'מנה'}
               </Text>
             </Pressable>
@@ -395,7 +429,13 @@ function DishCard({
               ]}
             >
               <Text
-                style={styles.imageRestaurantText}
+                style={[
+                  styles.imageRestaurantText,
+                  {
+                    textAlign: isRTL ? 'right' : 'left',
+                    writingDirection: isRTL ? 'rtl' : 'ltr',
+                  },
+                ]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
@@ -447,13 +487,19 @@ function DishCard({
             },
           ]}
         >
-          <Text style={styles.reviewText}>{reviewValue}</Text>
+          <Text style={[styles.reviewText, !isRTL && styles.reviewTextLtr]}>{reviewValue}</Text>
         </Animated.View>
       ) : null}
-      <View style={[styles.ratingRow, Platform.OS === 'ios' && styles.ratingRowIos]}>
+      <View
+        style={[
+          styles.ratingRow,
+          Platform.OS === 'ios' && styles.ratingRowIos,
+          !isRTL && styles.ratingRowLtr,
+        ]}
+      >
         <Animated.View style={{ transform: [{ scale: orderScale }] }}>
           <Pressable
-            style={styles.orderButton}
+            style={[styles.orderButton, !isRTL && styles.orderButtonLtr]}
             onLayout={(event) => {
               const { x, y, width, height } = event.nativeEvent.layout;
               setButtonLayouts((prev) => ({ ...prev, order: { x, y, width, height } }));
@@ -479,12 +525,13 @@ function DishCard({
             }}
           >
             <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
-            <Text style={styles.orderButtonText}>הזמן</Text>
+            <Text style={styles.orderButtonText}>{t('orderAction')}</Text>
           </Pressable>
         </Animated.View>
         <Animated.View
           style={[
             styles.ratingGroup,
+            !isRTL && styles.ratingGroupLtr,
             {
               opacity: ratingAnim,
               transform: [
@@ -498,15 +545,16 @@ function DishCard({
             },
           ]}
         >
-          <View style={styles.ratingItem}>
+          <View style={[styles.ratingItem, !isRTL && styles.ratingItemLtr]}>
             <RatingValueRow
-              label="טעים"
+              label={t('ratingTasty')}
               score={currentItem?.tasty_score}
-              iconSize={30}
-              rowStyle={styles.ratingInlineRow}
-              labelStyle={styles.ratingLabelInline}
+              iconSize={isRTL ? 30 : 27}
+              rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
+              labelStyle={[styles.ratingLabelInline, !isRTL && styles.ratingLabelInlineLtr]}
               iconsWrapStyle={[
                 styles.ratingStarWrap,
+                !isRTL && styles.ratingStarWrapLtr,
                 {
                   opacity: ratingAnim,
                   transform: [
@@ -521,15 +569,16 @@ function DishCard({
               ]}
             />
           </View>
-          <View style={styles.ratingItem}>
+          <View style={[styles.ratingItem, !isRTL && styles.ratingItemLtr]}>
             <RatingValueRow
-              label="משביע"
+              label={t('ratingSize')}
               score={currentItem?.filling_score}
-              iconSize={30}
-              rowStyle={styles.ratingInlineRow}
-              labelStyle={styles.ratingLabelInline}
+              iconSize={isRTL ? 30 : 27}
+              rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
+              labelStyle={[styles.ratingLabelInline, !isRTL && styles.ratingLabelInlineLtr]}
               iconsWrapStyle={[
                 styles.ratingStarWrap,
+                !isRTL && styles.ratingStarWrapLtr,
                 {
                   opacity: ratingAnim,
                   transform: [
@@ -697,12 +746,17 @@ const styles = StyleSheet.create({
   leftButtonStack: {
     position: 'absolute',
     top: 54,
-    left: 12,
     width: 36,
     height: 220,
     justifyContent: 'flex-start',
     alignItems: 'center',
     zIndex: 6,
+  },
+  overlayActionStackRtl: {
+    left: 12,
+  },
+  overlayActionStackLtr: {
+    right: 12,
   },
   cameraBadge: {
     position: 'absolute',
@@ -768,7 +822,6 @@ const styles = StyleSheet.create({
   imageDateText: {
     position: 'absolute',
     top: 10,
-    left: 12,
     fontSize: 9,
     color: theme.colors.text,
     fontWeight: '700',
@@ -781,9 +834,14 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     zIndex: 4,
   },
+  imageDateTextRtl: {
+    left: 12,
+  },
+  imageDateTextLtr: {
+    right: 12,
+  },
   avatarBadge: {
     position: 'absolute',
-    right: 16,
     bottom: 8,
     width: 36,
     height: 36,
@@ -800,6 +858,12 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
+  },
+  avatarBadgeRtl: {
+    right: 16,
+  },
+  avatarBadgeLtr: {
+    left: 16,
   },
   avatarImage: {
     width: '100%',
@@ -824,26 +888,29 @@ const styles = StyleSheet.create({
   imageTextBlock: {
     position: 'absolute',
     top: 16,
-    right: 12,
     left: 12,
+    zIndex: 6,
+  },
+  imageTextBlockRtl: {
+    right: 12,
     alignItems: 'flex-end',
     paddingLeft: 84,
-    zIndex: 6,
+  },
+  imageTextBlockLtr: {
+    right: 12,
+    alignItems: 'flex-start',
+    paddingRight: 84,
   },
   imageDishText: {
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'right',
-    writingDirection: 'rtl',
     lineHeight: 26,
   },
   imageRestaurantText: {
     color: '#f7f0e8',
     fontSize: 12,
-    textAlign: 'right',
     marginTop: 2,
-    writingDirection: 'rtl',
   },
   restaurantLinkPressable: {
     paddingVertical: 2,
@@ -868,10 +935,18 @@ const styles = StyleSheet.create({
   ratingRowIos: {
     width: '100%',
   },
+  ratingRowLtr: {
+    flexDirection: 'row-reverse',
+  },
   ratingGroup: {
     flexDirection: 'column',
     alignItems: 'flex-end',
     gap: 6,
+  },
+  ratingGroupLtr: {
+    alignItems: 'flex-start',
+    paddingLeft: 0,
+    paddingRight: 10,
   },
   orderButton: {
     height: 38,
@@ -895,6 +970,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  orderButtonLtr: {
+    marginRight: 0,
+    marginLeft: 24,
+  },
   reviewCard: {
     marginTop: 10,
     marginHorizontal: 12,
@@ -914,11 +993,18 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlign: 'right',
   },
+  reviewTextLtr: {
+    textAlign: 'left',
+  },
   ratingItem: {
     flex: 0,
     alignItems: 'flex-end',
     marginRight: 0,
     alignSelf: 'flex-end',
+  },
+  ratingItemLtr: {
+    alignItems: 'flex-start',
+    alignSelf: 'flex-start',
   },
   ratingIcon: {
     marginBottom: 1,
@@ -926,6 +1012,11 @@ const styles = StyleSheet.create({
   ratingStarWrap: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
+  },
+  ratingStarWrapLtr: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 0,
   },
   ratingInlineRow: {
     flexDirection: 'row-reverse',
@@ -935,6 +1026,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingRight: 64,
   },
+  ratingInlineRowLtr: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    justifyContent: 'flex-start',
+    width: 136,
+    paddingRight: 0,
+    paddingLeft: 6,
+  },
   ratingLabelInline: {
     fontSize: 12,
     color: theme.colors.textMuted,
@@ -943,6 +1042,14 @@ const styles = StyleSheet.create({
     minWidth: 60,
     textAlign: 'right',
     lineHeight: 30,
+  },
+  ratingLabelInlineLtr: {
+    alignSelf: 'center',
+    paddingRight: 0,
+    paddingLeft: 0,
+    marginLeft: 6,
+    minWidth: 42,
+    textAlign: 'left',
   },
   carouselDots: {
     position: 'absolute',

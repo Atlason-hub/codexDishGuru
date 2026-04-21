@@ -4,6 +4,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocale } from '../lib/locale';
 
 type Size = { width: number; height: number };
 type Rect = { x: number; y: number; width: number; height: number };
@@ -12,6 +13,7 @@ const VIEWFINDER_RATIO = 4 / 3;
 
 export default function CameraScreen() {
   const router = useRouter();
+  const { t } = useLocale();
   const params = useLocalSearchParams();
   const restaurantId = typeof params.restaurantId === 'string' ? params.restaurantId : '';
   const restaurantName = typeof params.restaurantName === 'string' ? params.restaurantName : '';
@@ -164,9 +166,9 @@ export default function CameraScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.permissionText}>נדרש אישור מצלמה</Text>
+        <Text style={styles.permissionText}>{t('cameraPermissionRequired')}</Text>
         <Pressable style={styles.permissionButton} onPress={ensurePermission}>
-          <Text style={styles.permissionButtonText}>אפשר מצלמה</Text>
+          <Text style={styles.permissionButtonText}>{t('cameraEnablePermission')}</Text>
         </Pressable>
       </View>
     );
@@ -213,7 +215,7 @@ export default function CameraScreen() {
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         >
           <Ionicons name="close" size={20} color="#ffffff" />
-          <Text style={styles.topButtonText}>ביטול</Text>
+          <Text style={styles.topButtonText}>{t('cameraCancel')}</Text>
         </Pressable>
         <Pressable
           style={styles.topButton}
@@ -224,7 +226,7 @@ export default function CameraScreen() {
             size={20}
             color="#ffffff"
           />
-          <Text style={styles.topButtonText}>{flashEnabled ? 'פלאש פעיל' : 'פלאש כבוי'}</Text>
+          <Text style={styles.topButtonText}>{flashEnabled ? t('cameraFlashOn') : t('cameraFlashOff')}</Text>
         </Pressable>
       </View>
       <View style={styles.controls}>
@@ -239,7 +241,7 @@ export default function CameraScreen() {
       {isCapturing ? (
         <View style={styles.processingOverlay}>
           <ActivityIndicator size="large" color="#ffffff" />
-          <Text style={styles.processingText}>מעבד תמונה...</Text>
+          <Text style={styles.processingText}>{t('cameraProcessing')}</Text>
         </View>
       ) : null}
     </View>

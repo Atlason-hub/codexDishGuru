@@ -1,9 +1,11 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { theme } from '../../lib/theme';
+import { useLocale } from '../../lib/locale';
 
 export default function CameraResultScreen() {
   const router = useRouter();
+  const { t } = useLocale();
   const params = useLocalSearchParams();
   const rawValue = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
 
@@ -14,7 +16,7 @@ export default function CameraResultScreen() {
           {rawValue ? (
             <Image source={{ uri: rawValue }} style={styles.photo} />
           ) : (
-            <Text style={styles.placeholder}>אין תמונה עדיין</Text>
+            <Text style={styles.placeholder}>{t('cameraNoImageYet')}</Text>
           )}
         </View>
         <Pressable
@@ -26,7 +28,7 @@ export default function CameraResultScreen() {
             });
           }}
         >
-          <Text style={styles.saveText}>שמור</Text>
+          <Text style={styles.saveText}>{t('commonSave')}</Text>
         </Pressable>
       </View>
     </View>

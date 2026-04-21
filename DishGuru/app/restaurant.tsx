@@ -30,6 +30,7 @@ import {
   saveCachedRestaurantMenu,
 } from '../lib/appData';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLocale } from '../lib/locale';
 
 type DishAssociation = {
   id: string;
@@ -185,7 +186,8 @@ const buildRowsFromMenu = (
   categories: MenuCategory[],
   summaries: DishSummary[],
   collapsed: Set<string>,
-  searchQuery: string
+  searchQuery: string,
+  reviewedSectionTitle: string
 ): Row[] => {
   const rows: Row[] = [];
   const reviewedSectionKey = 'reviewed';
@@ -206,7 +208,7 @@ const buildRowsFromMenu = (
     .sort((left, right) => left.name.localeCompare(right.name, 'he'));
 
   if (reviewedDishes.length > 0) {
-    rows.push({ type: 'header', id: `header-${reviewedSectionKey}`, title: 'עם ביקורות' });
+    rows.push({ type: 'header', id: `header-${reviewedSectionKey}`, title: reviewedSectionTitle });
     if (!collapsed.has(reviewedSectionKey)) {
       reviewedDishes.forEach((dish) => {
         const reviewedKey = normalizeDishLookup(dish.name) ?? dish.key;
@@ -327,6 +329,7 @@ const summarizeMenuDishes = (categories: MenuCategory[], list: DishAssociation[]
 
 export default function RestaurantScreen() {
   const router = useRouter();
+  const { isRTL, t } = useLocale();
   const params = useLocalSearchParams();
   const restaurantId =
     typeof params.restaurantId === 'string' && params.restaurantId
@@ -458,8 +461,15 @@ export default function RestaurantScreen() {
   }, [refreshContent]);
 
   const rows = useMemo(
-    () => buildRowsFromMenu(menuCategories, summaries, collapsedCategories, dishSearch),
-    [menuCategories, summaries, collapsedCategories, dishSearch]
+    () =>
+      buildRowsFromMenu(
+        menuCategories,
+        summaries,
+        collapsedCategories,
+        dishSearch,
+        t('restaurantWithReviews')
+      ),
+    [menuCategories, summaries, collapsedCategories, dishSearch, t]
   );
 
   const animateSectionChange = useCallback(() => {
@@ -508,26 +518,32 @@ export default function RestaurantScreen() {
     setCollapsedCategories(new Set());
   }, [animateSectionChange]);
 
+  const allSectionsCollapsed =
+    menuCategories.length > 0 &&
+    collapsedCategories.size === menuCategories.length + (summaries.some((dish) => dish.hasUploads) ? 1 : 0);
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
           style={styles.backButton}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         >
-          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
         </Pressable>
-        <Text style={styles.headerTitle}>{restaurantName || 'מסעדה'}</Text>
+        <Text style={[styles.headerTitle, !isRTL && styles.headerTitleLtr]}>
+          {restaurantName || 'מסעדה'}
+        </Text>
       </View>
-      <View style={styles.searchBox}>
+      <View style={[styles.searchBox, !isRTL && styles.searchBoxLtr]}>
         <Ionicons name="search" size={16} color={theme.colors.accent} />
         <TextInput
           style={styles.searchInput}
-          placeholder="חיפוש מנות"
+          placeholder={t('homeSearchPlaceholder')}
           placeholderTextColor={theme.colors.textMuted}
           value={dishSearch}
           onChangeText={setDishSearch}
-          textAlign="right"
+          textAlign={isRTL ? 'right' : 'left'}
         />
         {dishSearch.trim().length > 0 ? (
           <Pressable style={styles.searchClear} onPress={() => setDishSearch('')} hitSlop={6}>
@@ -536,18 +552,38 @@ export default function RestaurantScreen() {
         ) : null}
       </View>
       {menuCategories.length > 0 ? (
-        <View style={styles.controlsRow}>
+        <View style={[styles.controlsRow, !isRTL && styles.controlsRowLtr]}>
           <Pressable
-            style={styles.controlButton}
+            style={[
+              styles.controlButton,
+              allSectionsCollapsed && styles.controlButtonActive,
+            ]}
             onPress={collapseAllSections}
           >
-            <Text style={styles.controlText}>כווץ הכל</Text>
+            <Text
+              style={[
+                styles.controlText,
+                allSectionsCollapsed && styles.controlTextActive,
+              ]}
+            >
+              {t('searchCollapseAll')}
+            </Text>
           </Pressable>
           <Pressable
-            style={styles.controlButton}
+            style={[
+              styles.controlButton,
+              !allSectionsCollapsed && styles.controlButtonActive,
+            ]}
             onPress={expandAllSections}
           >
-            <Text style={styles.controlText}>הרחב הכל</Text>
+            <Text
+              style={[
+                styles.controlText,
+                !allSectionsCollapsed && styles.controlTextActive,
+              ]}
+            >
+              {t('searchExpandAll')}
+            </Text>
           </Pressable>
         </View>
       ) : null}
@@ -562,7 +598,9 @@ export default function RestaurantScreen() {
         </View>
       ) : rows.length === 0 && hasLoaded ? (
         <View style={styles.results}>
-          <Text style={styles.placeholderText}>אין מנות להצגה</Text>
+          <Text style={[styles.placeholderText, !isRTL && styles.placeholderTextLtr]}>
+            אין מנות להצגה
+          </Text>
         </View>
       ) : (
         <CrossfadeView>
@@ -586,16 +624,18 @@ export default function RestaurantScreen() {
             renderItem={({ item, index }) =>
               item.type === 'header' ? (
                 <Pressable
-                  style={styles.sectionHeader}
+                  style={[styles.sectionHeader, !isRTL && styles.sectionHeaderLtr]}
                   onPress={() => toggleSection(item.id.replace('header-', ''))}
                 >
-                  <Text style={styles.sectionHeaderText}>{item.title}</Text>
+                  <Text style={[styles.sectionHeaderText, !isRTL && styles.sectionHeaderTextLtr]}>
+                    {item.title}
+                  </Text>
                   <SectionChevron collapsed={collapsedCategories.has(item.id.replace('header-', ''))} />
                 </Pressable>
               ) : (
                 <StaggeredEntrance index={index}>
                   <Pressable
-                    style={styles.dishCard}
+                    style={[styles.dishCard, !isRTL && styles.dishCardLtr]}
                     onPress={() => {
                       if (item.dish.hasUploads) {
                         router.push({
@@ -623,30 +663,44 @@ export default function RestaurantScreen() {
                       });
                     }}
                   >
-                    <View style={styles.dishInfo}>
-                      <Text style={styles.dishName}>{item.dish.name}</Text>
+                    <View style={[styles.dishInfo, !isRTL && styles.dishInfoLtr]}>
+                      <Text style={[styles.dishName, !isRTL && styles.dishNameLtr]}>{item.dish.name}</Text>
                       {!item.dish.hasUploads ? (
                         <View style={styles.statusBadge}>
-                          <Text style={styles.statusBadgeText}>אין עדיין ביקורות</Text>
+                          <Text style={[styles.statusBadgeText, !isRTL && styles.statusBadgeTextLtr]}>
+                            אין עדיין ביקורות
+                          </Text>
                         </View>
                       ) : null}
-                      <View style={styles.scoreRow}>
-                        <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
+                      <View style={[styles.scoreRow, !isRTL && styles.scoreRowLtr]}>
+                        <View
+                          style={[
+                            styles.scoreItem,
+                            !isRTL && styles.scoreItemLtr,
+                            !item.dish.hasUploads && styles.scoreItemMuted,
+                          ]}
+                        >
                           <RatingValueRow
-                            label="טעים"
+                            label={t('ratingTasty')}
                             score={item.dish.avgTasty}
-                            iconSize={24}
-                            rowStyle={styles.ratingInlineRow}
-                            labelStyle={styles.scoreLabel}
+                            iconSize={isRTL ? 24 : 22}
+                            rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
+                            labelStyle={[styles.scoreLabel, !isRTL && styles.scoreLabelLtr]}
                           />
                         </View>
-                        <View style={[styles.scoreItem, !item.dish.hasUploads && styles.scoreItemMuted]}>
+                        <View
+                          style={[
+                            styles.scoreItem,
+                            !isRTL && styles.scoreItemLtr,
+                            !item.dish.hasUploads && styles.scoreItemMuted,
+                          ]}
+                        >
                           <RatingValueRow
-                            label="משביע"
+                            label={t('ratingSize')}
                             score={item.dish.avgFilling}
-                            iconSize={24}
-                            rowStyle={styles.ratingInlineRow}
-                            labelStyle={styles.scoreLabel}
+                            iconSize={isRTL ? 24 : 22}
+                            rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
+                            labelStyle={[styles.scoreLabel, !isRTL && styles.scoreLabelLtr]}
                           />
                         </View>
                       </View>
@@ -661,7 +715,7 @@ export default function RestaurantScreen() {
                             size={20}
                             color={theme.colors.textMuted}
                           />
-                          <View style={styles.placeholderOverlay}>
+                          <View style={[styles.placeholderOverlay, !isRTL && styles.placeholderOverlayLtr]}>
                             <Ionicons name="camera" size={10} color="#ffffff" />
                             <Text style={styles.placeholderOverlayText}>צלם מנה</Text>
                           </View>
@@ -692,6 +746,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 10,
   },
+  headerRowLtr: {
+    flexDirection: 'row-reverse',
+  },
   backButton: {
     height: 32,
     width: 32,
@@ -710,6 +767,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  headerTitleLtr: {
+    textAlign: 'left',
+    marginRight: 0,
+    marginLeft: 8,
+  },
   searchBox: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -721,6 +783,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '82%',
     marginBottom: 14,
+  },
+  searchBoxLtr: {
+    flexDirection: 'row',
   },
   searchInput: {
     flex: 1,
@@ -744,6 +809,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
+  controlsRowLtr: {
+    flexDirection: 'row',
+  },
   controlButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -752,10 +820,17 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.cardAlt,
   },
+  controlButtonActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
   controlText: {
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.textMuted,
+  },
+  controlTextActive: {
+    color: theme.colors.accent,
   },
   listContent: {
     paddingBottom: 120,
@@ -768,11 +843,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  sectionHeaderLtr: {
+    flexDirection: 'row',
+  },
   sectionHeaderText: {
     fontSize: 12,
     fontWeight: '700',
     color: theme.colors.accent,
     textAlign: 'right',
+  },
+  sectionHeaderTextLtr: {
+    textAlign: 'left',
   },
   dishCard: {
     flexDirection: 'row-reverse',
@@ -784,9 +865,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: theme.colors.card,
   },
+  dishCardLtr: {
+    flexDirection: 'row',
+  },
   dishInfo: {
     flex: 1,
     alignItems: 'flex-end',
+  },
+  dishInfoLtr: {
+    alignItems: 'flex-start',
   },
   dishName: {
     fontSize: 16,
@@ -794,6 +881,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlign: 'right',
     marginBottom: 6,
+  },
+  dishNameLtr: {
+    textAlign: 'left',
   },
   statusBadge: {
     paddingVertical: 4,
@@ -810,6 +900,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     textAlign: 'right',
   },
+  statusBadgeTextLtr: {
+    textAlign: 'left',
+  },
   scoreRow: {
     flexDirection: 'column',
     gap: 8,
@@ -817,9 +910,20 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginRight: 22,
   },
+  scoreRowLtr: {
+    alignItems: 'flex-start',
+    alignSelf: 'flex-start',
+    marginRight: 0,
+    marginLeft: 8,
+    maxWidth: 156,
+  },
   scoreItem: {
     alignItems: 'flex-end',
     alignSelf: 'flex-end',
+  },
+  scoreItemLtr: {
+    alignItems: 'flex-start',
+    alignSelf: 'flex-start',
   },
   scoreItemMuted: {
     opacity: 0.55,
@@ -831,6 +935,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignSelf: 'flex-end',
   },
+  ratingInlineRowLtr: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignSelf: 'flex-start',
+    maxWidth: 156,
+  },
   scoreLabel: {
     fontSize: 11,
     color: theme.colors.textMuted,
@@ -839,6 +949,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     lineHeight: 24,
     paddingRight: 10,
+  },
+  scoreLabelLtr: {
+    textAlign: 'left',
+    paddingRight: 0,
+    paddingLeft: 6,
+    minWidth: 48,
   },
   imageWrap: {
     width: 110,
@@ -875,6 +991,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
+  placeholderOverlayLtr: {
+    flexDirection: 'row',
+  },
   placeholderOverlayText: {
     color: '#ffffff',
     fontSize: 9,
@@ -892,6 +1011,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 14,
     textAlign: 'right',
+  },
+  placeholderTextLtr: {
+    textAlign: 'left',
   },
   errorText: {
     color: theme.colors.danger,

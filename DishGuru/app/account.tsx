@@ -11,21 +11,7 @@ import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { theme } from '../lib/theme';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
-
-const getErrorMessage = (error: unknown) => {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object') {
-    const maybeMessage = (error as { message?: unknown }).message;
-    if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage;
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return 'אירעה שגיאה לא צפויה.';
-    }
-  }
-  if (typeof error === 'string' && error.trim()) return error;
-  return 'אירעה שגיאה לא צפויה.';
-};
+import { Locale, useLocale } from '../lib/locale';
 
 export default function AccountScreen() {
   const FRAME_SIZE = 180;
@@ -33,6 +19,7 @@ export default function AccountScreen() {
   const MAX_ZOOM = 5;
 
   const router = useRouter();
+  const { isRTL, locale, setLocale, t } = useLocale();
   const [email, setEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [tempAvatarUrl, setTempAvatarUrl] = useState<string | null>(null);
@@ -61,6 +48,21 @@ export default function AccountScreen() {
     x: Math.min(maxOffsetX, Math.max(-maxOffsetX, value.x)),
     y: Math.min(maxOffsetY, Math.max(-maxOffsetY, value.y)),
   });
+
+  const getErrorMessage = (error: unknown) => {
+    if (error instanceof Error) return error.message;
+    if (error && typeof error === 'object') {
+      const maybeMessage = (error as { message?: unknown }).message;
+      if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage;
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return t('commonUnexpectedError');
+      }
+    }
+    if (typeof error === 'string' && error.trim()) return error;
+    return t('commonUnexpectedError');
+  };
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => Boolean(tempAvatarUrl),
@@ -120,20 +122,50 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
           style={styles.backButton}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         >
-          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
         </Pressable>
-        <Text style={styles.title}>החשבון שלי</Text>
+        <Text style={[styles.title, !isRTL && styles.titleLtr]}>{t('accountTitle')}</Text>
       </View>
 
       <View style={styles.profileCard}>
-        <View style={styles.emailSection}>
-          <Text style={styles.emailLabel}>אימייל</Text>
+        <View style={[styles.emailSection, !isRTL && styles.emailSectionLtr]}>
+          <Text style={[styles.emailLabel, !isRTL && styles.emailLabelLtr]}>{t('accountEmailLabel')}</Text>
           <Text style={styles.emailValue}>{email ?? ''}</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.languageSection}>
+          <View style={[styles.languageOptions, !isRTL && styles.languageOptionsLtr]}>
+            {([
+              ['he', t('accountLanguageHebrew')],
+              ['en', t('accountLanguageEnglish')],
+            ] as const).map(([value, label]) => (
+              <Pressable
+                key={value}
+                style={[
+                  styles.languageChip,
+                  !isRTL && styles.languageChipLtr,
+                  locale === value && styles.languageChipActive,
+                ]}
+                onPress={() => setLocale(value as Locale)}
+              >
+                <Text
+                  style={[
+                    styles.languageChipText,
+                    locale === value && styles.languageChipTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         <View style={styles.divider} />
@@ -186,7 +218,7 @@ export default function AccountScreen() {
                 try {
                   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
                   if (!permission.granted) {
-                    showAppAlert('נדרש אישור', 'אנא אפשר גישה לגלריה.');
+                    showAppAlert(t('accountPermissionRequired'), t('accountAllowGallery'));
                     return;
                   }
                   const result = await ImagePicker.launchImageLibraryAsync({
@@ -205,7 +237,10 @@ export default function AccountScreen() {
                   const userId = data.session?.user?.id;
                   if (!userId) return;
                 } catch (error) {
-                  showAppAlert('העלאה נכשלה', error instanceof Error ? error.message : 'העלאה נכשלה');
+                  showAppAlert(
+                    t('accountUploadFailed'),
+                    error instanceof Error ? error.message : t('accountUploadFailed')
+                  );
                 } finally {
                   setSaving(false);
                 }
@@ -221,7 +256,7 @@ export default function AccountScreen() {
                 try {
                   const permission = await ImagePicker.requestCameraPermissionsAsync();
                   if (!permission.granted) {
-                    showAppAlert('נדרש אישור', 'אנא אפשר גישה למצלמה.');
+                    showAppAlert(t('accountPermissionRequired'), t('accountAllowCamera'));
                     return;
                   }
                   const result = await ImagePicker.launchCameraAsync({
@@ -241,7 +276,10 @@ export default function AccountScreen() {
                   const userId = data.session?.user?.id;
                   if (!userId) return;
                 } catch (error) {
-                  showAppAlert('צילום נכשל', error instanceof Error ? error.message : 'העלאה נכשלה');
+                  showAppAlert(
+                    t('accountCameraFailed'),
+                    error instanceof Error ? error.message : t('accountUploadFailed')
+                  );
                 } finally {
                   setSaving(false);
                 }
@@ -254,6 +292,7 @@ export default function AccountScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.saveButton,
+              !isRTL && styles.saveButtonLtr,
               pressed && !saving && pendingAsset && styles.saveButtonPressed,
               (!pendingAsset || saving) && styles.saveButtonDisabled,
             ]}
@@ -288,7 +327,7 @@ export default function AccountScreen() {
                   { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
                 );
                 if (!cropped.base64) {
-                  throw new Error('כשל בעיבוד התמונה');
+                  throw new Error(t('accountImageProcessingFailed'));
                 }
 
                 const filePath = `${userId}/${Date.now()}.jpg`;
@@ -327,13 +366,16 @@ export default function AccountScreen() {
                   router.replace('/');
                 }
               } catch (error) {
-                showAppAlert('שמירה נכשלה', error instanceof Error ? error.message : 'שמירה נכשלה');
+                showAppAlert(
+                  t('accountSaveFailed'),
+                  error instanceof Error ? error.message : t('accountSaveFailed')
+                );
               } finally {
                 setSaving(false);
               }
             }}
           >
-            <Text style={styles.saveButtonText}>שמור</Text>
+            <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
           </Pressable>
         </View>
       </View>
@@ -341,17 +383,18 @@ export default function AccountScreen() {
       <Pressable
         style={({ pressed }) => [
           styles.deleteAccountButton,
+          !isRTL && styles.deleteAccountButtonLtr,
           (pressed || deletingAccount) && styles.deleteAccountButtonPressed,
         ]}
         onPress={() => {
           if (saving || deletingAccount) return;
           showAppDialog({
-            title: 'מחיקת חשבון',
-            message: 'האם למחוק את החשבון וכל המנות שהעלית?',
+            title: t('accountDeleteTitle'),
+            message: t('accountDeleteMessage'),
             actions: [
-              { text: 'ביטול', style: 'cancel' },
+              { text: t('commonCancel'), style: 'cancel' },
               {
-                text: 'מחק חשבון',
+                text: t('accountDeleteAction'),
                 style: 'destructive',
                 onPress: async () => {
                   try {
@@ -359,7 +402,7 @@ export default function AccountScreen() {
                     const { data } = await supabase.auth.getSession();
                     const userId = data.session?.user?.id ?? null;
                     if (!userId) {
-                      showAppAlert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק את החשבון.');
+                      showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
                       return;
                     }
 
@@ -374,7 +417,7 @@ export default function AccountScreen() {
                     router.replace('/');
                   } catch (error) {
                     showAppAlert(
-                      'מחיקה נכשלה',
+                      t('accountDeleteFailed'),
                       getErrorMessage(error)
                     );
                   } finally {
@@ -386,7 +429,7 @@ export default function AccountScreen() {
           });
         }}
       >
-        <Text style={styles.deleteAccountButtonText}>מחק חשבון</Text>
+        <Text style={styles.deleteAccountButtonText}>{t('accountDeleteAction')}</Text>
       </Pressable>
     </View>
   );
@@ -408,6 +451,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  titleLtr: {
+    textAlign: 'left',
+    marginRight: 0,
+    marginLeft: 8,
+  },
   profileCard: {
     width: '100%',
     borderRadius: 22,
@@ -416,7 +464,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     paddingHorizontal: 8,
     paddingTop: 6,
-    paddingBottom: 18,
+    paddingBottom: 12,
   },
   emailSection: {
     width: '100%',
@@ -425,6 +473,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 6,
   },
+  emailSectionLtr: {
+    alignItems: 'flex-start',
+  },
   headerRow: {
     width: '100%',
     flexDirection: 'row',
@@ -432,6 +483,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     marginBottom: 10,
+  },
+  headerRowLtr: {
+    flexDirection: 'row-reverse',
   },
   backButton: {
     height: 32,
@@ -451,21 +505,67 @@ const styles = StyleSheet.create({
     writingDirection: 'ltr',
     lineHeight: 24,
   },
+  
   emailLabel: {
     fontSize: 14,
     color: theme.colors.textMuted,
     textAlign: 'right',
+  },
+  emailLabelLtr: {
+    textAlign: 'left',
+    alignSelf: 'flex-start',
   },
   divider: {
     width: '100%',
     height: 1,
     backgroundColor: theme.colors.border,
     marginTop: 4,
-    marginBottom: 24,
+    marginBottom: 18,
+  },
+  languageSection: {
+    width: '100%',
+    paddingHorizontal: 12,
+    gap: 8,
+    marginBottom: 14,
+  },
+  languageOptions: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+    justifyContent: 'flex-start',
+  },
+  languageOptionsLtr: {
+    flexDirection: 'row',
+  },
+  languageChip: {
+    minWidth: 86,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  languageChipLtr: {
+    minWidth: 78,
+  },
+  languageChipActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
+  languageChipText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+  },
+  languageChipTextActive: {
+    color: theme.colors.accent,
   },
   avatarSection: {
     alignItems: 'center',
     paddingHorizontal: 12,
+    paddingBottom: 2,
   },
   avatarCircle: {
     width: 188,
@@ -485,7 +585,7 @@ const styles = StyleSheet.create({
     height: 360,
   },
   zoomRow: {
-    marginTop: 16,
+    marginTop: 12,
     width: '88%',
     flexDirection: 'row',
     alignItems: 'center',
@@ -496,19 +596,24 @@ const styles = StyleSheet.create({
     height: 30,
   },
   actionsRow: {
-    marginTop: 30,
+    marginTop: 20,
     flexDirection: 'row',
     gap: 22,
   },
   saveButton: {
     alignSelf: 'flex-start',
-    marginTop: 22,
+    marginTop: 16,
     marginLeft: 12,
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: theme.colors.accent,
+  },
+  saveButtonLtr: {
+    alignSelf: 'flex-end',
+    marginLeft: 0,
+    marginRight: 12,
   },
   saveButtonPressed: {
     opacity: 0.85,
@@ -523,8 +628,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteAccountButton: {
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 4,
     alignSelf: 'center',
     paddingHorizontal: 18,
     paddingVertical: 8,
@@ -532,6 +637,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(199, 93, 44, 0.45)',
     backgroundColor: 'rgba(199, 93, 44, 0.04)',
+  },
+  deleteAccountButtonLtr: {
+    alignSelf: 'center',
   },
   deleteAccountButtonPressed: {
     opacity: 0.88,

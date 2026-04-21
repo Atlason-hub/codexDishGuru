@@ -13,12 +13,56 @@ import * as Font from 'expo-font';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { subscribeTheme } from '../lib/theme';
 import { clearInvalidStoredSession } from '../lib/supabase';
+import { LocaleProvider, useLocale } from '../lib/locale';
+
+function AppShell() {
+  const colorScheme = useColorScheme();
+  const { isRTL } = useLocale();
+  const primaryScreenAnimation = isRTL ? 'slide_from_left' : 'slide_from_right';
+
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack
+        screenOptions={{
+          header: () => <AppHeader />,
+          animationDuration: 95,
+          animation: Platform.OS === 'ios' ? 'simple_push' : primaryScreenAnimation,
+          fullScreenGestureEnabled: true,
+          animationMatchesGesture: true,
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen
+          name="restaurant"
+          options={{
+            animation: primaryScreenAnimation,
+          }}
+        />
+        <Stack.Screen
+          name="dish"
+          options={{
+            animation: primaryScreenAnimation,
+          }}
+        />
+        <Stack.Screen
+          name="edit-dish"
+          options={{
+            animation: primaryScreenAnimation,
+          }}
+        />
+        <Stack.Screen name="camera" options={{ headerShown: false }} />
+        <Stack.Screen name="camera/result" options={{ headerShown: false }} />
+        <Stack.Screen name="camera/details" options={{ headerShown: false }} />
+      </Stack>
+      <AppDialogHost />
+      <StatusBar style="auto" />
+    </ThemeProvider>
+  );
+}
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [, setThemeTick] = useState(0);
-  const primaryScreenAnimation = I18nManager.isRTL ? 'slide_from_left' : 'slide_from_right';
 
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
@@ -100,42 +144,9 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack
-          screenOptions={{
-            header: () => <AppHeader />,
-            animationDuration: 95,
-            animation: Platform.OS === 'ios' ? 'simple_push' : primaryScreenAnimation,
-            fullScreenGestureEnabled: true,
-            animationMatchesGesture: true,
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen
-            name="restaurant"
-            options={{
-              animation: primaryScreenAnimation,
-            }}
-          />
-          <Stack.Screen
-            name="dish"
-            options={{
-              animation: primaryScreenAnimation,
-            }}
-          />
-          <Stack.Screen
-            name="edit-dish"
-            options={{
-              animation: primaryScreenAnimation,
-            }}
-          />
-          <Stack.Screen name="camera" options={{ headerShown: false }} />
-          <Stack.Screen name="camera/result" options={{ headerShown: false }} />
-          <Stack.Screen name="camera/details" options={{ headerShown: false }} />
-        </Stack>
-        <AppDialogHost />
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <LocaleProvider>
+        <AppShell />
+      </LocaleProvider>
     </GestureHandlerRootView>
   );
 }

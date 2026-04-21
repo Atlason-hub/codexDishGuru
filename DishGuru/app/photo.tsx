@@ -14,6 +14,7 @@ import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import RatingValueRow from '../components/RatingValueRow';
+import { useLocale } from '../lib/locale';
 
 type DishPhoto = {
   id: string;
@@ -28,6 +29,7 @@ type DishPhoto = {
 
 export default function PhotoScreen() {
   const router = useRouter();
+  const { t } = useLocale();
   const params = useLocalSearchParams();
   const id = typeof params.id === 'string' ? params.id : '';
 
@@ -158,7 +160,7 @@ export default function PhotoScreen() {
               <View style={styles.ratingRow}>
                 <View style={styles.ratingItem}>
                   <RatingValueRow
-                    label="טעים"
+                    label={t('ratingTasty')}
                     score={avgScores.tasty}
                     iconSize={30}
                     rowStyle={styles.ratingInlineRow}
@@ -167,7 +169,7 @@ export default function PhotoScreen() {
                 </View>
                 <View style={styles.ratingItem}>
                   <RatingValueRow
-                    label="משביע"
+                    label={t('ratingSize')}
                     score={avgScores.filling}
                     iconSize={30}
                     rowStyle={styles.ratingInlineRow}

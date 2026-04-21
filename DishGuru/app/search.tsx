@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { fetchCompanyIdForUser, fetchVisibleDishes } from '../lib/appData';
+import { useLocale } from '../lib/locale';
 
 type DishAssociation = {
   id: string;
@@ -283,6 +284,7 @@ const buildMenuRows = (
 
 export default function SearchScreen() {
   const router = useRouter();
+  const { isRTL, t } = useLocale();
   const [restaurantDropdownOpen, setRestaurantDropdownOpen] = useState(false);
   const [dishDropdownOpen, setDishDropdownOpen] = useState(false);
   const [restaurantQuery, setRestaurantQuery] = useState('');
@@ -601,28 +603,35 @@ export default function SearchScreen() {
     const parts = [];
     if (trimmedRestaurant) parts.push(`מסעדות: "${trimmedRestaurant}"`);
     if (trimmedDish) parts.push(`מנות: "${trimmedDish}"`);
-    return `תוצאות עבור ${parts.join(' | ')}`;
-  }, [trimmedRestaurant, trimmedDish]);
+    return `${t('searchResultsForRestaurant')} ${parts.join(' | ')}`;
+  }, [t, trimmedRestaurant, trimmedDish]);
+
+  const allApiCategoriesCollapsed =
+    apiMenuCategories.length > 0 &&
+    collapsedApiMenuCategories.size === apiMenuCategories.length;
+  const allDishCategoriesCollapsed =
+    dishCategories.length > 0 &&
+    collapsedDishCategories.size === dishCategories.length;
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
           style={styles.backButton}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         >
-          <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
         </Pressable>
-        <Text style={styles.headerTitle}>חיפוש</Text>
+        <Text style={[styles.headerTitle, !isRTL && styles.headerTitleLtr]}>{t('searchTitle')}</Text>
       </View>
 
-      <View style={styles.modeRow}>
+      <View style={[styles.modeRow, !isRTL && styles.modeRowLtr]}>
         <Pressable
           style={[styles.modeButton, mode === 'api' && styles.modeButtonActive]}
           onPress={() => setMode('api')}
         >
           <Text style={[styles.modeText, mode === 'api' && styles.modeTextActive]}>
-            כלל המנות
+            {t('searchAllDishes')}
           </Text>
         </Pressable>
         <Pressable
@@ -630,14 +639,14 @@ export default function SearchScreen() {
           onPress={() => setMode('db')}
         >
           <Text style={[styles.modeText, mode === 'db' && styles.modeTextActive]}>
-            מנות שהועלו
+            {t('searchUploadedDishes')}
           </Text>
         </Pressable>
       </View>
 
       <View style={styles.dropdownContainer}>
         <Pressable
-          style={styles.dropdownHeader}
+          style={[styles.dropdownHeader, !isRTL && styles.dropdownHeaderLtr]}
           onPress={() => {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setRestaurantDropdownOpen((prev) => !prev);
@@ -646,12 +655,13 @@ export default function SearchScreen() {
           <Text
             style={[
               styles.dropdownText,
+              !isRTL && styles.dropdownTextLtr,
               !restaurantQuery.trim() && !selectedApiRestaurantName && styles.dropdownPlaceholder,
             ]}
           >
             {mode === 'api'
-              ? ((selectedApiRestaurantName ?? restaurantQuery.trim()) || 'בחר מסעדה')
-              : restaurantQuery.trim() || 'בחר מסעדה'}
+              ? ((selectedApiRestaurantName ?? restaurantQuery.trim()) || t('searchChooseRestaurant'))
+              : restaurantQuery.trim() || t('searchChooseRestaurant')}
           </Text>
           <View style={styles.chevronCircle}>
             <Ionicons
@@ -663,11 +673,11 @@ export default function SearchScreen() {
         </Pressable>
         {restaurantDropdownOpen ? (
           <View style={styles.dropdownList}>
-            <View style={styles.searchRow}>
+            <View style={[styles.searchRow, !isRTL && styles.searchRowLtr]}>
               <Ionicons name="search" size={16} color={theme.colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="חיפוש מסעדה…"
+                placeholder={t('searchRestaurantPlaceholder')}
                 placeholderTextColor={theme.colors.textMuted}
                 value={restaurantQuery}
                 onChangeText={(text) => {
@@ -678,7 +688,7 @@ export default function SearchScreen() {
                     setDishQuery('');
                   }
                 }}
-                textAlign="right"
+                textAlign={isRTL ? 'right' : 'left'}
               />
               {restaurantQuery.trim().length > 0 ? (
                 <Pressable
@@ -708,7 +718,7 @@ export default function SearchScreen() {
                 renderItem={({ item }) =>
                   item.type === 'header' ? (
                     <Pressable
-                      style={styles.categoryHeader}
+                      style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
                       onPress={() =>
                         setCollapsedRestaurantCategories((prev) => {
                           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -723,7 +733,9 @@ export default function SearchScreen() {
                         })
                       }
                     >
-                      <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                      <Text style={[styles.categoryHeaderText, !isRTL && styles.categoryHeaderTextLtr]}>
+                        {item.name}
+                      </Text>
                       <View style={styles.categoryChevronCircle}>
                         <Ionicons
                           name={
@@ -759,18 +771,24 @@ export default function SearchScreen() {
                         });
                       }}
                     >
-                      <Text style={styles.dropdownItemText}>{item.item.RestaurantName}</Text>
+                      <Text style={[styles.dropdownItemText, !isRTL && styles.dropdownItemTextLtr]}>
+                        {item.item.RestaurantName}
+                      </Text>
                     </Pressable>
                   )
                 }
               />
             ) : loading && trimmedRestaurant.length > 0 ? (
-              <View style={styles.dropdownLoadingRow}>
+              <View style={[styles.dropdownLoadingRow, !isRTL && styles.dropdownLoadingRowLtr]}>
                 <ActivityIndicator size="small" color={theme.colors.textMuted} />
-                <Text style={styles.dropdownLoadingText}>מחפש מסעדות…</Text>
+                <Text style={[styles.dropdownLoadingText, !isRTL && styles.dropdownLoadingTextLtr]}>
+                  מחפש מסעדות…
+                </Text>
               </View>
             ) : (
-              <Text style={styles.dropdownEmpty}>לא נמצאו מסעדות</Text>
+              <Text style={[styles.dropdownEmpty, !isRTL && styles.dropdownEmptyLtr]}>
+                {t('searchNoRestaurantsFound')}
+              </Text>
             )}
           </View>
         ) : null}
@@ -778,7 +796,7 @@ export default function SearchScreen() {
 
       <View style={styles.dropdownContainer}>
         <Pressable
-          style={styles.dropdownHeader}
+          style={[styles.dropdownHeader, !isRTL && styles.dropdownHeaderLtr]}
           onPress={() => {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setDishDropdownOpen((prev) => !prev);
@@ -788,15 +806,16 @@ export default function SearchScreen() {
           <Text
             style={[
               styles.dropdownText,
+              !isRTL && styles.dropdownTextLtr,
               !dishQuery.trim() && styles.dropdownPlaceholder,
             ]}
           >
             {dishQuery.trim() ||
               (mode === 'api'
                 ? !selectedApiRestaurantId
-                  ? 'בחר מסעדה קודם'
-                  : 'הכנס שם או בחר מנה'
-                : 'הכנס שם או בחר מנה')}
+                  ? t('searchChooseRestaurantFirst')
+                  : t('searchDishPrompt')
+                : t('searchDishPrompt'))}
           </Text>
           <View style={styles.chevronCircle}>
             <Ionicons
@@ -808,18 +827,16 @@ export default function SearchScreen() {
         </Pressable>
         {dishDropdownOpen ? (
           <View style={styles.dropdownList}>
-            <View style={styles.searchRow}>
+            <View style={[styles.searchRow, !isRTL && styles.searchRowLtr]}>
               <Ionicons name="search" size={16} color={theme.colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder={
-                  mode === 'api' ? 'חיפוש מנה…' : 'חיפוש מנה…'
-                }
+                placeholder={t('searchDishPlaceholder')}
                 placeholderTextColor={theme.colors.textMuted}
                 value={dishQuery}
                 onChangeText={setDishQuery}
                 editable={mode !== 'api' || Boolean(selectedApiRestaurantId)}
-                textAlign="right"
+                textAlign={isRTL ? 'right' : 'left'}
               />
               {dishQuery.trim().length > 0 ? (
                 <Pressable
@@ -835,26 +852,48 @@ export default function SearchScreen() {
               ) : null}
             </View>
             {mode === 'api' && apiMenuLoading ? (
-              <View style={styles.dropdownLoadingRow}>
+              <View style={[styles.dropdownLoadingRow, !isRTL && styles.dropdownLoadingRowLtr]}>
                 <ActivityIndicator size="small" color={theme.colors.textMuted} />
-                <Text style={styles.dropdownLoadingText}>טוען מנות…</Text>
+                <Text style={[styles.dropdownLoadingText, !isRTL && styles.dropdownLoadingTextLtr]}>
+                  טוען מנות…
+                </Text>
               </View>
             ) : mode === 'api' && apiMenuRows.length > 0 ? (
               <>
-                <View style={styles.dropdownControlsRow}>
+                <View style={[styles.dropdownControlsRow, !isRTL && styles.dropdownControlsRowLtr]}>
                   <Pressable
-                    style={styles.dropdownControlButton}
+                    style={[
+                      styles.dropdownControlButton,
+                      !allApiCategoriesCollapsed && styles.dropdownControlButtonActive,
+                    ]}
                     onPress={() => setCollapsedApiMenuCategories(new Set())}
                   >
-                    <Text style={styles.dropdownControlText}>הרחב הכל</Text>
+                    <Text
+                      style={[
+                        styles.dropdownControlText,
+                        !allApiCategoriesCollapsed && styles.dropdownControlTextActive,
+                      ]}
+                    >
+                      {t('searchExpandAll')}
+                    </Text>
                   </Pressable>
                   <Pressable
-                    style={styles.dropdownControlButton}
+                    style={[
+                      styles.dropdownControlButton,
+                      allApiCategoriesCollapsed && styles.dropdownControlButtonActive,
+                    ]}
                     onPress={() =>
                       setCollapsedApiMenuCategories(new Set(apiMenuCategories.map((cat) => cat.id)))
                     }
                   >
-                    <Text style={styles.dropdownControlText}>כווץ הכל</Text>
+                    <Text
+                      style={[
+                        styles.dropdownControlText,
+                        allApiCategoriesCollapsed && styles.dropdownControlTextActive,
+                      ]}
+                    >
+                      {t('searchCollapseAll')}
+                    </Text>
                   </Pressable>
                 </View>
                 <FlatList
@@ -868,7 +907,7 @@ export default function SearchScreen() {
                   renderItem={({ item }) =>
                     item.type === 'header' ? (
                       <Pressable
-                        style={styles.categoryHeader}
+                        style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
                         onPress={() =>
                           setCollapsedApiMenuCategories((prev) => {
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -883,7 +922,9 @@ export default function SearchScreen() {
                           })
                         }
                       >
-                        <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                        <Text style={[styles.categoryHeaderText, !isRTL && styles.categoryHeaderTextLtr]}>
+                          {item.name}
+                        </Text>
                         <View style={styles.categoryChevronCircle}>
                           <Ionicons
                             name={
@@ -910,7 +951,9 @@ export default function SearchScreen() {
                           });
                         }}
                       >
-                        <Text style={styles.dropdownItemText}>{item.item.name}</Text>
+                        <Text style={[styles.dropdownItemText, !isRTL && styles.dropdownItemTextLtr]}>
+                          {item.item.name}
+                        </Text>
                       </Pressable>
                     )
                   }
@@ -918,20 +961,40 @@ export default function SearchScreen() {
               </>
             ) : mode === 'db' && dishRows.length > 0 ? (
               <>
-                <View style={styles.dropdownControlsRow}>
+                <View style={[styles.dropdownControlsRow, !isRTL && styles.dropdownControlsRowLtr]}>
                   <Pressable
-                    style={styles.dropdownControlButton}
+                    style={[
+                      styles.dropdownControlButton,
+                      !allDishCategoriesCollapsed && styles.dropdownControlButtonActive,
+                    ]}
                     onPress={() => setCollapsedDishCategories(new Set())}
                   >
-                    <Text style={styles.dropdownControlText}>הרחב הכל</Text>
+                    <Text
+                      style={[
+                        styles.dropdownControlText,
+                        !allDishCategoriesCollapsed && styles.dropdownControlTextActive,
+                      ]}
+                    >
+                      {t('searchExpandAll')}
+                    </Text>
                   </Pressable>
                   <Pressable
-                    style={styles.dropdownControlButton}
+                    style={[
+                      styles.dropdownControlButton,
+                      allDishCategoriesCollapsed && styles.dropdownControlButtonActive,
+                    ]}
                     onPress={() =>
                       setCollapsedDishCategories(new Set(dishCategories.map((cat) => cat.id)))
                     }
                   >
-                    <Text style={styles.dropdownControlText}>כווץ הכל</Text>
+                    <Text
+                      style={[
+                        styles.dropdownControlText,
+                        allDishCategoriesCollapsed && styles.dropdownControlTextActive,
+                      ]}
+                    >
+                      {t('searchCollapseAll')}
+                    </Text>
                   </Pressable>
                 </View>
                 <FlatList
@@ -945,7 +1008,7 @@ export default function SearchScreen() {
                   renderItem={({ item }) =>
                     item.type === 'header' ? (
                       <Pressable
-                        style={styles.categoryHeader}
+                        style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
                         onPress={() =>
                           setCollapsedDishCategories((prev) => {
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -960,7 +1023,9 @@ export default function SearchScreen() {
                           })
                         }
                       >
-                        <Text style={styles.categoryHeaderText}>{item.name}</Text>
+                        <Text style={[styles.categoryHeaderText, !isRTL && styles.categoryHeaderTextLtr]}>
+                          {item.name}
+                        </Text>
                         <View style={styles.categoryChevronCircle}>
                           <Ionicons
                             name={
@@ -986,7 +1051,9 @@ export default function SearchScreen() {
                           });
                         }}
                       >
-                        <Text style={styles.dropdownItemText}>{item.item.name}</Text>
+                        <Text style={[styles.dropdownItemText, !isRTL && styles.dropdownItemTextLtr]}>
+                          {item.item.name}
+                        </Text>
                       </Pressable>
                     )
                   }
@@ -999,7 +1066,7 @@ export default function SearchScreen() {
               </View>
             ) : (
               <Text style={styles.dropdownEmpty}>
-                {mode === 'api' ? 'לא נמצאו מנות' : 'לא נמצאו מנות'}
+                {t('searchNoDishesFound')}
               </Text>
             )}
           </View>
@@ -1021,9 +1088,7 @@ export default function SearchScreen() {
         restaurantResults.length === 0 &&
         (trimmedRestaurant || trimmedDish) ? (
         <View style={styles.resultsBox}>
-          <Text style={styles.placeholderText}>
-            לא נמצאו תוצאות
-          </Text>
+          <Text style={styles.placeholderText}>{t('searchNoResultsFound')}</Text>
         </View>
       ) : mode === 'api' &&
         apiResults.length === 0 &&
@@ -1032,7 +1097,7 @@ export default function SearchScreen() {
         (trimmedRestaurant || trimmedDish) ? (
         <View style={styles.resultsBox}>
           <Text style={styles.placeholderText}>
-            לא נמצאו מסעדות
+            {t('searchNoRestaurantsFound')}
           </Text>
         </View>
       ) : null}
@@ -1054,6 +1119,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 10,
   },
+  headerRowLtr: {
+    flexDirection: 'row-reverse',
+  },
   backButton: {
     height: 32,
     width: 32,
@@ -1072,6 +1140,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  headerTitleLtr: {
+    textAlign: 'left',
+    marginRight: 0,
+    marginLeft: 8,
+  },
   dropdownContainer: {
     width: '100%',
     marginTop: 10,
@@ -1086,12 +1159,20 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.card,
   },
+  dropdownHeaderLtr: {
+    flexDirection: 'row-reverse',
+  },
   dropdownText: {
     fontSize: 18,
     color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
+  },
+  dropdownTextLtr: {
+    textAlign: 'left',
+    marginRight: 0,
+    marginLeft: 8,
   },
   dropdownPlaceholder: {
     color: theme.colors.textMuted,
@@ -1115,6 +1196,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  searchRowLtr: {
+    flexDirection: 'row-reverse',
+  },
   searchInput: {
     flex: 1,
     fontSize: 14,
@@ -1133,6 +1217,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 6,
     marginBottom: 16,
+  },
+  modeRowLtr: {
+    flexDirection: 'row',
   },
   modeButton: {
     paddingVertical: 6,
@@ -1176,6 +1263,9 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     backgroundColor: theme.colors.card,
   },
+  dropdownControlsRowLtr: {
+    flexDirection: 'row',
+  },
   dropdownControlButton: {
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -1184,10 +1274,17 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.cardAlt,
   },
+  dropdownControlButtonActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
   dropdownControlText: {
     fontSize: 11,
     fontWeight: '600',
     color: theme.colors.textMuted,
+  },
+  dropdownControlTextActive: {
+    color: theme.colors.accent,
   },
   dropdownItem: {
     paddingVertical: 10,
@@ -1200,6 +1297,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlign: 'right',
   },
+  dropdownItemTextLtr: {
+    textAlign: 'left',
+  },
   categoryHeader: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -1210,11 +1310,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  categoryHeaderLtr: {
+    flexDirection: 'row',
+  },
   categoryHeaderText: {
     fontSize: 12,
     fontWeight: '700',
     color: theme.colors.textMuted,
     textAlign: 'right',
+  },
+  categoryHeaderTextLtr: {
+    textAlign: 'left',
   },
   categoryChevronCircle: {
     height: 22,
@@ -1233,15 +1339,24 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
   },
+  dropdownLoadingRowLtr: {
+    flexDirection: 'row',
+  },
   dropdownLoadingText: {
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
   },
+  dropdownLoadingTextLtr: {
+    textAlign: 'left',
+  },
   dropdownEmpty: {
     padding: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
+  },
+  dropdownEmptyLtr: {
+    textAlign: 'left',
   },
   sectionHeader: {
     marginTop: 12,

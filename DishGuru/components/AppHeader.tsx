@@ -10,6 +10,7 @@ import CachedLogo from './CachedLogo';
 import LegalModal from './LegalModal';
 import { theme } from '../lib/theme';
 import { applyPaletteFromLogo } from '../lib/brandPalette';
+import { getLegalUrl, useLocale } from '../lib/locale';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 let lastKnownCompanyLogoUrl: string | null = null;
@@ -67,6 +68,7 @@ const fetchCompanyLogoForUser = async (userId: string, fallbackDomain?: string |
 export default function AppHeader() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isRTL, locale, t } = useLocale();
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(lastKnownCompanyLogoUrl);
   const [menuVisible, setMenuVisible] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -166,6 +168,25 @@ export default function AppHeader() {
     router.replace('/');
   };
 
+  const renderMenuItem = (label: string, icon: React.ReactNode, onPress: () => void) => (
+    <Pressable
+      style={[styles.menuOptionRow, !isRTL && styles.menuOptionRowLtr]}
+      onPress={onPress}
+    >
+      {isRTL ? (
+        <>
+          <Text style={[styles.menuOption, { textAlign: 'right' }]}>{label}</Text>
+          {icon}
+        </>
+      ) : (
+        <>
+          {icon}
+          <Text style={[styles.menuOption, { textAlign: 'left' }]}>{label}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+
   if (!isAuthenticated) {
     return null;
   }
@@ -173,9 +194,15 @@ export default function AppHeader() {
   return (
     <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
       <View style={styles.leftIcons}>
-        <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
-          <Ionicons name="search" size={24} color={theme.colors.ink} />
-        </Pressable>
+        {!isRTL ? (
+          <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
+            <Ionicons name="menu" size={28} color={theme.colors.ink} />
+          </Pressable>
+        ) : (
+          <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
+            <Ionicons name="search" size={24} color={theme.colors.ink} />
+          </Pressable>
+        )}
       </View>
       <Pressable style={styles.logoContainer} onPress={() => router.push('/')}>
         {companyLogoUrl ? (
@@ -192,9 +219,15 @@ export default function AppHeader() {
         )}
       </Pressable>
       <View style={styles.rightIcons}>
-        <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
-          <Ionicons name="menu" size={28} color={theme.colors.ink} />
-        </Pressable>
+        {isRTL ? (
+          <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
+            <Ionicons name="menu" size={28} color={theme.colors.ink} />
+          </Pressable>
+        ) : (
+          <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
+            <Ionicons name="search" size={24} color={theme.colors.ink} />
+          </Pressable>
+        )}
       </View>
       <Modal
         visible={menuVisible}
@@ -204,81 +237,80 @@ export default function AppHeader() {
       >
         <View style={styles.menuContainer}>
           <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)} />
-          <View style={styles.menuOverlay}>
-            <Pressable style={styles.menuClose} onPress={() => setMenuVisible(false)}>
+          <View
+            style={[
+              styles.menuOverlay,
+              isRTL ? styles.menuOverlayRtl : styles.menuOverlayLtr,
+            ]}
+          >
+            <Pressable
+              style={[styles.menuClose, isRTL ? styles.menuCloseRtl : styles.menuCloseLtr]}
+              onPress={() => setMenuVisible(false)}
+            >
               <Ionicons name="close" size={20} color={theme.colors.textMuted} />
             </Pressable>
-            <Pressable
-              style={styles.menuOptionRow}
-              onPress={() => {
-                setMenuVisible(false);
-                router.push('/account');
-              }}
-            >
-              <Text style={styles.menuOption}>החשבון שלי</Text>
-              {avatarUrl ? (
+            {renderMenuItem(
+              t('headerMenuAccount'),
+              avatarUrl ? (
                 <CachedLogo uri={avatarUrl} style={styles.menuAvatar} />
               ) : (
                 <Ionicons name="person-circle-outline" size={20} color={theme.colors.accent} />
-              )}
-            </Pressable>
-            <Pressable
-              style={styles.menuOptionRow}
-              onPress={() => {
+              ),
+              () => {
+                setMenuVisible(false);
+                router.push('/account');
+              }
+            )}
+            {renderMenuItem(
+              t('headerMenuMyDishes'),
+              <Ionicons name="restaurant-outline" size={20} color={theme.colors.accent} />,
+              () => {
                 setMenuVisible(false);
                 router.push('/my-dishes');
-              }}
-            >
-              <Text style={styles.menuOption}>המנות שלי</Text>
-              <Ionicons name="restaurant-outline" size={20} color={theme.colors.accent} />
-            </Pressable>
-            <Pressable
-              style={styles.menuOptionRow}
-              onPress={() => {
+              }
+            )}
+            {renderMenuItem(
+              t('headerMenuFavorites'),
+              <Ionicons name="heart-outline" size={20} color={theme.colors.accent} />,
+              () => {
                 setMenuVisible(false);
                 router.push('/?favorites=1');
-              }}
-            >
-              <Text style={styles.menuOption}>המועדפים שלי</Text>
-              <Ionicons name="heart-outline" size={20} color={theme.colors.accent} />
-            </Pressable>
-            <Pressable
-              style={styles.menuOptionRow}
-              onPress={() => {
+              }
+            )}
+            {renderMenuItem(
+              t('headerMenuPrivacy'),
+              <Ionicons name="megaphone-outline" size={20} color={theme.colors.accent} />,
+              () => {
                 setMenuVisible(false);
                 setLegalModal({
-                  title: 'מדיניות פרטיות',
-                  url: 'https://atlason-hub.github.io/codexDishGuru/#privacy',
+                  title: t('legalPrivacyTitle'),
+                  url: getLegalUrl(locale, 'privacy'),
                 });
-              }}
-            >
-              <Text style={styles.menuOption}>מדיניות פרטיות</Text>
-              <Ionicons name="megaphone-outline" size={20} color={theme.colors.accent} />
-            </Pressable>
-            <Pressable
-              style={styles.menuOptionRow}
-              onPress={() => {
+              }
+            )}
+            {renderMenuItem(
+              t('headerMenuTerms'),
+              <Ionicons name="document-text-outline" size={20} color={theme.colors.accent} />,
+              () => {
                 setMenuVisible(false);
                 setLegalModal({
-                  title: 'תנאים',
-                  url: 'https://atlason-hub.github.io/codexDishGuru/#terms',
+                  title: t('legalTermsTitle'),
+                  url: getLegalUrl(locale, 'terms'),
                 });
-              }}
-            >
-              <Text style={styles.menuOption}>תנאים</Text>
-              <Ionicons name="document-text-outline" size={20} color={theme.colors.accent} />
-            </Pressable>
-            <Pressable style={styles.menuOptionRow} onPress={signOut}>
-              <Text style={styles.menuOption}>התנתקות</Text>
-              <Ionicons name="log-out-outline" size={20} color={theme.colors.accent} />
-            </Pressable>
+              }
+            )}
+            {renderMenuItem(
+              t('headerMenuSignOut'),
+              <Ionicons name="log-out-outline" size={20} color={theme.colors.accent} />,
+              signOut
+            )}
           </View>
         </View>
       </Modal>
       <LegalModal
         visible={Boolean(legalModal)}
         title={legalModal?.title ?? ''}
-        url={legalModal?.url ?? 'https://atlason-hub.github.io/codexDishGuru/#terms'}
+        url={legalModal?.url ?? getLegalUrl(locale, 'terms')}
         onClose={() => setLegalModal(null)}
       />
     </View>
@@ -346,13 +378,12 @@ const styles = StyleSheet.create({
   menuOverlay: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 38 : 12,
-    right: 16,
     width: 220,
     zIndex: 20,
     backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 12,
-    paddingTop: 12,
+    paddingTop: 28,
     borderWidth: 1,
     borderColor: theme.colors.border,
     shadowColor: theme.colors.ink,
@@ -361,20 +392,30 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 4,
   },
+  menuOverlayRtl: {
+    right: 16,
+  },
+  menuOverlayLtr: {
+    left: 16,
+  },
   menuClose: {
     position: 'absolute',
     top: 8,
-    left: 8,
     height: 32,
     width: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  menuCloseRtl: {
+    left: 8,
+  },
+  menuCloseLtr: {
+    right: 8,
+  },
   menuOption: {
     fontSize: 14,
     color: theme.colors.textMuted,
     flex: 1,
-    textAlign: 'right',
   },
   menuOptionDanger: {
     color: theme.colors.danger,
@@ -399,6 +440,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 12,
+  },
+  menuOptionRowLtr: {
+    justifyContent: 'flex-start',
   },
   menuAvatar: {
     width: 24,

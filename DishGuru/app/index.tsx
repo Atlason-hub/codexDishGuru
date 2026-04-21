@@ -28,6 +28,7 @@ import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchCompanyIdForUser, fetchFavoritesMap, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
+import { getLegalUrl, Locale, useLocale } from '../lib/locale';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 const primaryActionColor = '#C75D2C';
@@ -49,6 +50,7 @@ type DishAssociation = {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { isRTL, locale, setLocale, t } = useLocale();
   const params = useLocalSearchParams();
   const refreshParam = typeof params.refresh === 'string' ? params.refresh : '';
   const scrollParam = typeof params.scrollY === 'string' ? params.scrollY : '';
@@ -118,18 +120,18 @@ export default function HomeScreen() {
     return domain.length > 0 ? domain : null;
   };
 
-  const toHebrewAuthError = (message: string) => {
+  const toLocalizedAuthError = (message: string) => {
     const lower = message.toLowerCase();
-    if (lower.includes('invalid login credentials')) return 'האימייל או הסיסמה שגויים.';
-    if (lower.includes('email not confirmed')) return 'יש לאשר את כתובת האימייל לפני ההתחברות.';
-    if (lower.includes('user already registered') || lower.includes('already registered')) return 'המשתמש כבר קיים במערכת.';
-    if (lower.includes('password should be at least')) return 'הסיסמה חייבת להכיל לפחות 6 תווים.';
-    if (lower.includes('signup is disabled')) return 'ההרשמה אינה זמינה כרגע.';
-    if (lower.includes('email rate limit exceeded')) return 'בוצעו יותר מדי ניסיונות. נסה שוב בעוד כמה דקות.';
-    if (lower.includes('database error saving new user')) return 'ההרשמה נכשלה. בדוק שכתובת האימייל שייכת לחברה קיימת.';
-    if (lower.includes('no company matches email domain')) return 'דומיין האימייל אינו משויך לחברה מוכרת.';
-    if (lower.includes('missing email domain')) return 'יש להזין כתובת אימייל מלאה של מקום העבודה.';
-    return 'אירעה שגיאה. נסה שוב.';
+    if (lower.includes('invalid login credentials')) return t('authInvalidCredentials');
+    if (lower.includes('email not confirmed')) return t('authEmailNotConfirmed');
+    if (lower.includes('user already registered') || lower.includes('already registered')) return t('authUserExists');
+    if (lower.includes('password should be at least')) return t('authPasswordTooShort');
+    if (lower.includes('signup is disabled')) return t('authSignupDisabled');
+    if (lower.includes('email rate limit exceeded')) return t('authRateLimit');
+    if (lower.includes('database error saving new user')) return t('authCompanyMatchError');
+    if (lower.includes('no company matches email domain')) return t('authEmailDomainUnknown');
+    if (lower.includes('missing email domain')) return t('authEmailDomainMissing');
+    return t('authGenericError');
   };
 
   const loadUserAvatars = async (items: DishAssociation[]) => {
@@ -312,21 +314,21 @@ export default function HomeScreen() {
 
   const deleteDishAssociation = useCallback(async (dish: DishAssociation) => {
     showAppDialog({
-      title: 'מחיקת מנה',
-      message: 'האם למחוק את המנה והביקורות שלה?',
+      title: t('dishDeleteTitle'),
+      message: t('dishDeleteMessage'),
       actions: [
-        { text: 'ביטול', style: 'cancel' },
+        { text: t('commonCancel'), style: 'cancel' },
         {
-          text: 'מחק',
+          text: t('commonDelete'),
           style: 'destructive',
           onPress: async () => {
             try {
               if (!currentUserId) {
-                showAppAlert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
+                showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
                 return;
               }
               if (dish.user_id !== currentUserId) {
-                showAppAlert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
+                showAppAlert(t('accountUnauthorized'), t('dishDeleteUnauthorized'));
                 return;
               }
               if (dish.image_path) {
@@ -348,13 +350,13 @@ export default function HomeScreen() {
               });
               await loadDishAssociationsRef.current?.({ showLoading: false });
             } catch {
-              showAppAlert('שגיאה', 'מחיקה נכשלה.');
+              showAppAlert(t('accountDeleteFailed'), t('accountDeleteFailed'));
             }
           },
         },
       ],
     });
-  }, [currentUserId]);
+  }, [currentUserId, t]);
 
   const fetchCompanyLogoForUser = useCallback(async (userId: string, fallbackDomain?: string | null) => {
     try {
@@ -561,7 +563,7 @@ export default function HomeScreen() {
 
   const signIn = async () => {
     if (!email.trim() || !pass.trim()) {
-      setAuthError('אנא הזן אימייל וסיסמה.');
+      setAuthError(t('authEnterEmailPassword'));
       return;
     }
     try {
@@ -575,8 +577,8 @@ export default function HomeScreen() {
         throw error;
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'התחברות נכשלה.';
-      setAuthError(toHebrewAuthError(message));
+      const message = err instanceof Error ? err.message : t('authLoginFailed');
+      setAuthError(toLocalizedAuthError(message));
     } finally {
       setAuthLoading(false);
     }
@@ -584,15 +586,15 @@ export default function HomeScreen() {
 
   const signUp = async () => {
     if (!email.trim() || !pass.trim() || !confirmPass.trim()) {
-      setAuthError('אנא הזן אימייל, סיסמה ואישור סיסמה.');
+      setAuthError(t('authEnterEmailPasswordConfirm'));
       return;
     }
     if (!acceptedTerms) {
-      setAuthError('יש לאשר את תנאי השימוש כדי ליצור חשבון.');
+      setAuthError(t('authMustAcceptTerms'));
       return;
     }
     if (pass !== confirmPass) {
-      setAuthError('הסיסמאות אינן תואמות.');
+      setAuthError(t('authPasswordsMismatch'));
       return;
     }
     try {
@@ -643,8 +645,8 @@ export default function HomeScreen() {
     } catch (err) {
       const authApiError =
         err && typeof err === 'object' && 'name' in err ? (err as { [k: string]: any }) : null;
-      const message = authApiError?.message ?? (err instanceof Error ? err.message : 'הרשמה נכשלה.');
-      setAuthError(toHebrewAuthError(message));
+      const message = authApiError?.message ?? (err instanceof Error ? err.message : t('authSignupFailed'));
+      setAuthError(toLocalizedAuthError(message));
     } finally {
       setAuthLoading(false);
     }
@@ -678,27 +680,29 @@ export default function HomeScreen() {
   const listHeader = (
     <View style={styles.listHeader}>
       {showRestaurantOnly && (
-        <View style={styles.favoritesHeader}>
+        <View style={[styles.favoritesHeader, !isRTL && styles.favoritesHeaderLtr]}>
           <Pressable
             style={styles.backButton}
             onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
           >
-            <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
           </Pressable>
-          <Text style={styles.favoritesHeaderText}>
+          <Text style={[styles.favoritesHeaderText, !isRTL && styles.favoritesHeaderTextLtr]}>
             {restaurantFilterName ?? 'מסעדה'}
           </Text>
         </View>
       )}
       {showFavoritesOnly && (
-        <View style={styles.favoritesHeader}>
+        <View style={[styles.favoritesHeader, !isRTL && styles.favoritesHeaderLtr]}>
           <Pressable
             style={styles.backButton}
             onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
           >
-            <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
           </Pressable>
-          <Text style={styles.favoritesHeaderText}>המועדפים שלי</Text>
+          <Text style={[styles.favoritesHeaderText, !isRTL && styles.favoritesHeaderTextLtr]}>
+            {t('favoritesTitle')}
+          </Text>
         </View>
       )}
       {loading && !isRefreshing ? (
@@ -711,15 +715,15 @@ export default function HomeScreen() {
         </View>
       ) : null}
       {!showFavoritesOnly ? (
-        <View style={styles.homeSearchBox}>
+        <View style={[styles.homeSearchBox, !isRTL && styles.homeSearchBoxLtr]}>
           <Ionicons name="search" size={16} color={theme.colors.accent} />
           <TextInput
             style={styles.homeSearchInput}
-            placeholder="חיפוש מנות או מסעדות"
+            placeholder={t('homeSearchPlaceholder')}
             placeholderTextColor={theme.colors.textMuted}
             value={homeSearch}
             onChangeText={setHomeSearch}
-            textAlign="right"
+            textAlign={isRTL ? 'right' : 'left'}
           />
           {homeSearch.trim().length > 0 ? (
             <Pressable
@@ -904,18 +908,44 @@ export default function HomeScreen() {
         <View style={styles.launchScreen}>
           <View style={styles.launchCard}>
             <Text style={styles.launchTitle}>DishGuru</Text>
-            <Text style={styles.launchSubtitle}>טוען את סביבת העבודה שלך</Text>
+            <Text style={styles.launchSubtitle}>{t('launchSubtitle')}</Text>
             <ActivityIndicator size="small" color={theme.colors.accent} style={styles.launchSpinner} />
           </View>
         </View>
       ) : !isAuthenticated ? (
         <View style={styles.authScreen}>
+          <View style={[styles.authLanguageRow, !isRTL && styles.authLanguageRowLtr]}>
+            {([
+              ['he', t('accountLanguageHebrew')],
+              ['en', t('accountLanguageEnglish')],
+            ] as const).map(([value, label]) => (
+              <Pressable
+                key={value}
+                style={[
+                  styles.authLanguageChip,
+                  locale === value && styles.authLanguageChipActive,
+                ]}
+                onPress={() => setLocale(value as 'he' | 'en')}
+              >
+                <Text
+                  style={[
+                    styles.authLanguageChipText,
+                    locale === value && styles.authLanguageChipTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <View style={styles.authHeaderWrap}>
             <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
           </View>
           <View style={styles.authCard}>
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>אימייל מקום העבודה</Text>
+              <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                {t('authWorkEmail')}
+              </Text>
               <View style={styles.inputRow}>
                 <TextInput
                   style={styles.inputField}
@@ -931,7 +961,9 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>סיסמה</Text>
+              <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                {t('authPassword')}
+              </Text>
               <View style={styles.inputRow}>
                 <TextInput
                   style={styles.inputFieldPassword}
@@ -954,7 +986,9 @@ export default function HomeScreen() {
             </View>
             {showSignup && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>אישור סיסמה</Text>
+                <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                  {t('authPasswordConfirm')}
+                </Text>
                 <View style={styles.inputRow}>
                   <TextInput
                     style={styles.inputFieldPassword}
@@ -983,6 +1017,7 @@ export default function HomeScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.termsRow,
+                  !isRTL && styles.termsRowLtr,
                   pressed && styles.termsRowPressed,
                 ]}
                 onPress={() => setAcceptedTerms((value) => !value)}
@@ -990,13 +1025,15 @@ export default function HomeScreen() {
                 <Pressable
                   onPress={() =>
                     setLegalModal({
-                      title: 'תנאים',
-                      url: 'https://atlason-hub.github.io/codexDishGuru/#terms',
+                      title: t('legalTermsTitle'),
+                      url: getLegalUrl(locale, 'terms'),
                     })
                   }
-                  style={styles.termsTextWrap}
+                  style={[styles.termsTextWrap, !isRTL && styles.termsTextWrapLtr]}
                 >
-                  <Text style={styles.termsText}>מאשר תנאי שימוש</Text>
+                  <Text style={[styles.termsText, !isRTL && styles.termsTextLtr]}>
+                    {t('authAcceptTerms')}
+                  </Text>
                 </Pressable>
                 <View style={[styles.termsCheckbox, acceptedTerms && styles.termsCheckboxChecked]}>
                   {acceptedTerms ? (
@@ -1006,9 +1043,15 @@ export default function HomeScreen() {
               </Pressable>
             ) : null}
             {!showSignup && (
-              <Text style={styles.forgotPasswordText}>שכחת סיסמה?</Text>
+              <Text style={[styles.forgotPasswordText, !isRTL && styles.forgotPasswordTextLtr]}>
+                {t('authForgotPassword')}
+              </Text>
             )}
-            {authError && <Text style={styles.authErrorText}>{authError}</Text>}
+            {authError && (
+              <Text style={[styles.authErrorText, !isRTL && styles.authErrorTextLtr]}>
+                {authError}
+              </Text>
+            )}
             {showSignup ? (
               <>
                 <Pressable
@@ -1022,7 +1065,7 @@ export default function HomeScreen() {
                   {authLoading ? (
                     <ActivityIndicator color={theme.colors.white} />
                   ) : (
-                    <Text style={styles.loginButtonText}>צור חשבון</Text>
+                    <Text style={styles.loginButtonText}>{t('authCreateAccount')}</Text>
                   )}
                 </Pressable>
                 <Pressable
@@ -1037,7 +1080,7 @@ export default function HomeScreen() {
                   }}
                   disabled={authLoading}
                 >
-                  <Text style={styles.signupButtonText}>חזרה להתחברות</Text>
+                  <Text style={styles.signupButtonText}>{t('authBackToSignIn')}</Text>
                 </Pressable>
               </>
             ) : (
@@ -1053,7 +1096,7 @@ export default function HomeScreen() {
                   {authLoading ? (
                     <ActivityIndicator color={theme.colors.white} />
                   ) : (
-                    <Text style={styles.loginButtonText}>התחבר</Text>
+                    <Text style={styles.loginButtonText}>{t('authSignIn')}</Text>
                   )}
                 </Pressable>
                 <Pressable
@@ -1067,7 +1110,7 @@ export default function HomeScreen() {
                   }}
                   disabled={authLoading}
                 >
-                  <Text style={styles.signupButtonText}>צור חשבון</Text>
+                  <Text style={styles.signupButtonText}>{t('authCreateAccount')}</Text>
                 </Pressable>
               </>
             )}
@@ -1105,8 +1148,8 @@ export default function HomeScreen() {
           ListEmptyComponent={
             !loading && !error && hasLoaded ? (
               <View style={styles.results}>
-                <Text style={styles.placeholderText}>
-                  {showFavoritesOnly ? 'אין מנות במועדפים' : 'אין מנות להצגה'}
+                <Text style={[styles.placeholderText, !isRTL && styles.placeholderTextLtr]}>
+                  {showFavoritesOnly ? t('favoritesEmpty') : t('commonNoDishesToShow')}
                 </Text>
               </View>
             ) : null
@@ -1141,7 +1184,7 @@ export default function HomeScreen() {
       <LegalModal
         visible={Boolean(legalModal)}
         title={legalModal?.title ?? ''}
-        url={legalModal?.url ?? 'https://atlason-hub.github.io/codexDishGuru/#terms'}
+        url={legalModal?.url ?? getLegalUrl(locale, 'terms')}
         onClose={() => setLegalModal(null)}
       />
     </SafeAreaView>
@@ -1286,6 +1329,41 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 72,
   },
+  authLanguageRow: {
+    width: '100%',
+    maxWidth: 580,
+    flexDirection: 'row-reverse',
+    justifyContent: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  authLanguageRowLtr: {
+    flexDirection: 'row',
+  },
+  authLanguageChip: {
+    minWidth: 86,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authLanguageChipActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
+  authLanguageChipText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+  },
+  authLanguageChipTextActive: {
+    color: theme.colors.accent,
+  },
   authHeaderWrap: {
     width: '100%',
     alignItems: 'center',
@@ -1328,6 +1406,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     alignSelf: 'flex-end',
     paddingRight: 4,
+  },
+  fieldLabelLtr: {
+    textAlign: 'left',
+    alignSelf: 'flex-start',
+    paddingRight: 0,
+    paddingLeft: 4,
   },
   inputRow: {
     position: 'relative',
@@ -1381,6 +1465,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: -2,
   },
+  forgotPasswordTextLtr: {
+    textAlign: 'left',
+    alignSelf: 'flex-start',
+  },
   termsRow: {
     minHeight: 48,
     borderWidth: 1,
@@ -1393,12 +1481,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  termsRowLtr: {
+    flexDirection: 'row',
+  },
   termsRowPressed: {
     opacity: 0.92,
   },
   termsTextWrap: {
     flex: 1,
     alignItems: 'flex-end',
+  },
+  termsTextWrapLtr: {
+    alignItems: 'flex-start',
   },
   termsCheckbox: {
     width: 24,
@@ -1419,12 +1513,19 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     fontSize: 14,
   },
+  termsTextLtr: {
+    textAlign: 'left',
+  },
   authErrorText: {
     color: theme.colors.danger,
     fontSize: 13,
     textAlign: 'right',
     writingDirection: 'rtl',
     lineHeight: 20,
+  },
+  authErrorTextLtr: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   loginButton: {
     height: 44,
@@ -1486,6 +1587,9 @@ const styles = StyleSheet.create({
     marginTop: 0,
     marginBottom: 0,
   },
+  homeSearchBoxLtr: {
+    flexDirection: 'row',
+  },
   homeSearchInput: {
     flex: 1,
     fontSize: 13,
@@ -1531,6 +1635,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 0,
   },
+  favoritesHeaderLtr: {
+    flexDirection: 'row-reverse',
+  },
   favoritesHeaderText: {
     fontSize: 18,
     fontWeight: '700',
@@ -1538,6 +1645,11 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flex: 1,
     marginRight: 8,
+  },
+  favoritesHeaderTextLtr: {
+    textAlign: 'left',
+    marginRight: 0,
+    marginLeft: 8,
   },
   backButton: {
     height: 32,
@@ -1559,6 +1671,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 14,
     textAlign: 'right',
+  },
+  placeholderTextLtr: {
+    textAlign: 'left',
   },
   errorText: {
     color: theme.colors.danger,

@@ -1,7 +1,6 @@
 import { ReactNode } from 'react';
 import {
   Animated,
-  I18nManager,
   StyleProp,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
+import { useLocale } from '../lib/locale';
 
 type Props = {
   label: string;
@@ -33,15 +33,16 @@ export default function RatingValueRow({
   iconStyle,
   iconsContainer,
 }: Props) {
+  const { isRTL } = useLocale();
   const selectedIndex = getSelectedEmojiIndex(scoreToStars(score));
-  const indices = I18nManager.isRTL ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
+  const indices = [4, 3, 2, 1, 0];
 
   return (
     <View style={rowStyle}>
       <Text style={labelStyle}>{label}</Text>
       {iconsContainer ?? (
         <Animated.View style={iconsWrapStyle}>
-          <View style={[styles.starRow, I18nManager.isRTL && styles.starRowRtl]}>
+          <View style={[styles.starRow, isRTL && styles.starRowRtl]}>
             {indices.map((idx) => (
               <View
                 key={`${label}-${idx}`}
@@ -53,6 +54,7 @@ export default function RatingValueRow({
                   height={iconSize}
                   style={[
                     styles.emojiIcon,
+                    isRTL ? styles.emojiIconRtl : styles.emojiIconLtr,
                     { opacity: selectedIndex === idx ? 1 : 0.6 },
                   ]}
                 />
@@ -75,7 +77,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
   },
   emojiIcon: {
+  },
+  emojiIconRtl: {
     marginLeft: 2,
     marginRight: -2,
+  },
+  emojiIconLtr: {
+    marginLeft: 0,
+    marginRight: 0,
   },
 });

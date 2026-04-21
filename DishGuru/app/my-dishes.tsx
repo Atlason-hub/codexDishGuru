@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
 import { fetchFavoritesMap, fetchOrderVendorForUser } from '../lib/appData';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
+import { useLocale } from '../lib/locale';
 
 type DishAssociation = {
   id: string;
@@ -32,6 +33,7 @@ type DishAssociation = {
 
 export default function MyDishesScreen() {
   const router = useRouter();
+  const { isRTL, t } = useLocale();
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,21 +108,21 @@ export default function MyDishesScreen() {
 
   const deleteDishAssociation = useCallback(async (dish: DishAssociation) => {
     showAppDialog({
-      title: 'מחיקת מנה',
-      message: 'האם למחוק את המנה והביקורות שלה?',
+      title: t('dishDeleteTitle'),
+      message: t('dishDeleteMessage'),
       actions: [
-        { text: 'ביטול', style: 'cancel' },
+        { text: t('commonCancel'), style: 'cancel' },
         {
-          text: 'מחק',
+          text: t('commonDelete'),
           style: 'destructive',
           onPress: async () => {
             try {
               if (!currentUserId) {
-                showAppAlert('אין הרשאה', 'יש להתחבר מחדש כדי למחוק.');
+                showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
                 return;
               }
               if (dish.user_id !== currentUserId) {
-                showAppAlert('אין הרשאה', 'אפשר למחוק רק מנות שהעלית.');
+                showAppAlert(t('accountUnauthorized'), t('dishDeleteUnauthorized'));
                 return;
               }
               if (dish.image_path) {
@@ -142,13 +144,13 @@ export default function MyDishesScreen() {
               });
               await loadMyDishesRef.current?.(currentUserId, { showLoading: false });
             } catch {
-              showAppAlert('שגיאה', 'מחיקה נכשלה.');
+              showAppAlert(t('accountDeleteFailed'), t('accountDeleteFailed'));
             }
           },
         },
       ],
     });
-  }, [currentUserId]);
+  }, [currentUserId, t]);
 
   const loadMyDishes = useCallback(async (userId: string, options?: { showLoading?: boolean }) => {
     try {
@@ -376,15 +378,17 @@ export default function MyDishesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <View style={styles.headerRow}>
+            <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
               <Pressable
                 style={styles.backButton}
                 onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
               >
-                <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
+                <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
               </Pressable>
-              <View style={styles.headerTextWrap}>
-                <Text style={styles.headerTitle}>המנות שלי</Text>
+              <View style={[styles.headerTextWrap, !isRTL && styles.headerTextWrapLtr]}>
+                <Text style={[styles.headerTitle, !isRTL && styles.headerTitleLtr]}>
+                  {t('headerMenuMyDishes')}
+                </Text>
               </View>
             </View>
           </View>
@@ -396,7 +400,9 @@ export default function MyDishesScreen() {
             </CrossfadeView>
           ) : !loading && !error && hasLoaded ? (
             <View style={styles.results}>
-              <Text style={styles.placeholderText}>אין מנות להצגה</Text>
+              <Text style={[styles.placeholderText, !isRTL && styles.placeholderTextLtr]}>
+                {t('commonNoDishesToShow')}
+              </Text>
             </View>
           ) : null
         }
@@ -433,6 +439,9 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 15,
   },
+  headerRowLtr: {
+    flexDirection: 'row-reverse',
+  },
   backButton: {
     height: 32,
     width: 32,
@@ -448,11 +457,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginRight: 8,
   },
+  headerTextWrapLtr: {
+    alignItems: 'flex-start',
+    marginRight: 0,
+    marginLeft: 8,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: theme.colors.text,
     textAlign: 'right',
+  },
+  headerTitleLtr: {
+    textAlign: 'left',
   },
   results: {
     alignSelf: 'stretch',
@@ -466,6 +483,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     color: theme.colors.textMuted,
     fontSize: 14,
+  },
+  placeholderTextLtr: {
+    textAlign: 'left',
   },
   feedContent: {
     paddingBottom: 120,
