@@ -32,6 +32,8 @@ function AppShell() {
         }}
       >
         <Stack.Screen name="index" />
+        <Stack.Screen name="auth-callback" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen
           name="restaurant"
           options={{

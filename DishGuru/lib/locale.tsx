@@ -81,6 +81,19 @@ const translations = {
     authPasswordConfirm: 'אישור סיסמה',
     authAcceptTerms: 'מאשר תנאי שימוש',
     authForgotPassword: 'שכחת סיסמה?',
+    authResetEmailMissing: 'יש להזין כתובת אימייל כדי לאפס סיסמה.',
+    authResetEmailSentTitle: 'נשלח מייל לאיפוס סיסמה',
+    authResetEmailSentMessage: 'שלחנו קישור לאיפוס הסיסמה לכתובת האימייל שהזנת.',
+    authVerifyEmailSentTitle: 'נשלח מייל לאימות',
+    authVerifyEmailSentMessage: 'שלחנו מייל לאימות החשבון. לחצו על הקישור במייל כדי להשלים את ההרשמה.',
+    authCallbackLoading: 'מאמתים את הקישור המאובטח...',
+    authLinkInvalid: 'הקישור אינו תקין או שפג תוקפו.',
+    authResetPasswordTitle: 'בחירת סיסמה חדשה',
+    authResetPasswordSubtitle: 'הזינו סיסמה חדשה כדי להשלים את האיפוס.',
+    authUpdatePassword: 'עדכן סיסמה',
+    authPasswordUpdatedTitle: 'הסיסמה עודכנה',
+    authPasswordUpdatedMessage: 'הסיסמה החדשה נשמרה בהצלחה.',
+    authResetPasswordFailed: 'עדכון הסיסמה נכשל.',
     authCreateAccount: 'צור חשבון',
     authBackToSignIn: 'חזרה להתחברות',
     authSignIn: 'התחבר',
@@ -198,6 +211,19 @@ const translations = {
     authPasswordConfirm: 'Confirm password',
     authAcceptTerms: 'I accept the terms of use',
     authForgotPassword: 'Forgot password?',
+    authResetEmailMissing: 'Please enter your email address to reset your password.',
+    authResetEmailSentTitle: 'Password reset email sent',
+    authResetEmailSentMessage: 'We sent a password reset link to the email address you entered.',
+    authVerifyEmailSentTitle: 'Verification email sent',
+    authVerifyEmailSentMessage: 'We sent a verification email. Tap the link in the email to finish creating your account.',
+    authCallbackLoading: 'Checking your secure link...',
+    authLinkInvalid: 'This link is invalid or has expired.',
+    authResetPasswordTitle: 'Choose a new password',
+    authResetPasswordSubtitle: 'Enter a new password to finish resetting your account.',
+    authUpdatePassword: 'Update password',
+    authPasswordUpdatedTitle: 'Password updated',
+    authPasswordUpdatedMessage: 'Your new password was saved successfully.',
+    authResetPasswordFailed: 'Password update failed.',
     authCreateAccount: 'Create account',
     authBackToSignIn: 'Back to sign in',
     authSignIn: 'Sign in',
@@ -245,10 +271,10 @@ const translations = {
 export type TranslationKey = keyof typeof translations.he;
 
 export const getLegalUrl = (locale: Locale, section: 'terms' | 'privacy') => {
-  const page = locale === 'en' ? 'index_en.html' : '';
-  const base = page
-    ? `https://atlason-hub.github.io/codexDishGuru/${page}`
-    : 'https://atlason-hub.github.io/codexDishGuru/';
+  const base =
+    locale === 'en'
+      ? 'https://termsen.dishguru.app/index_en.html'
+      : 'https://termsheb.dishguru.app';
   return `${base}#${section}`;
 };
 

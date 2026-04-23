@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { openVendorDish } from '../lib/orderVendor';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { buildAuthRedirectUrl } from '../lib/authRedirect';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import StaggeredEntrance from '../components/StaggeredEntrance';
@@ -619,9 +620,14 @@ export default function HomeScreen() {
       if (!companyMatch?.id) {
         throw new Error('לא נמצאה חברה לדומיין האימייל');
       }
+      const redirectTo = buildAuthRedirectUrl(locale);
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password: pass,
+        options: {
+          emailRedirectTo: redirectTo,
+          data: { preferred_locale: locale },
+        },
       });
       if (error) {
         throw error;
@@ -638,6 +644,12 @@ export default function HomeScreen() {
       }
       await fetchCompanyLogoForUser(supabaseUserId);
     }
+      if (!data.session && data.user) {
+        showAppDialog({
+          title: t('authVerifyEmailSentTitle'),
+          message: t('authVerifyEmailSentMessage'),
+        });
+      }
       setShowSignup(false);
       setPass('');
       setConfirmPass('');
@@ -646,6 +658,32 @@ export default function HomeScreen() {
       const authApiError =
         err && typeof err === 'object' && 'name' in err ? (err as { [k: string]: any }) : null;
       const message = authApiError?.message ?? (err instanceof Error ? err.message : t('authSignupFailed'));
+      setAuthError(toLocalizedAuthError(message));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const sendPasswordReset = async () => {
+    if (!email.trim()) {
+      setAuthError(t('authResetEmailMissing'));
+      return;
+    }
+    try {
+      setAuthLoading(true);
+      setAuthError(null);
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: buildAuthRedirectUrl(locale),
+      });
+      if (error) {
+        throw error;
+      }
+      showAppDialog({
+        title: t('authResetEmailSentTitle'),
+        message: t('authResetEmailSentMessage'),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('authGenericError');
       setAuthError(toLocalizedAuthError(message));
     } finally {
       setAuthLoading(false);
@@ -1043,9 +1081,11 @@ export default function HomeScreen() {
               </Pressable>
             ) : null}
             {!showSignup && (
-              <Text style={[styles.forgotPasswordText, !isRTL && styles.forgotPasswordTextLtr]}>
-                {t('authForgotPassword')}
-              </Text>
+              <Pressable onPress={() => void sendPasswordReset()} disabled={authLoading}>
+                <Text style={[styles.forgotPasswordText, !isRTL && styles.forgotPasswordTextLtr, authLoading && { opacity: 0.6 }]}>
+                  {t('authForgotPassword')}
+                </Text>
+              </Pressable>
             )}
             {authError && (
               <Text style={[styles.authErrorText, !isRTL && styles.authErrorTextLtr]}>
