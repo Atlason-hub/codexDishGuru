@@ -168,6 +168,10 @@
                 const session = data.session;
                 if (!session) {
                     successBox.style.display = 'block';
+                    if (type === 'email') {
+                        window.location.href = `${redirectTo}#type=${encodeURIComponent(type)}&confirmed=1`;
+                        return;
+                    }
                     window.location.href = redirectTo;
                     return;
                 }

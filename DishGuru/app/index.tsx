@@ -56,6 +56,7 @@ export default function HomeScreen() {
   const params = useLocalSearchParams();
   const refreshParam = typeof params.refresh === 'string' ? params.refresh : '';
   const scrollParam = typeof params.scrollY === 'string' ? params.scrollY : '';
+  const emailConfirmedParam = typeof params.emailConfirmed === 'string' ? params.emailConfirmed : '';
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -97,6 +98,7 @@ export default function HomeScreen() {
   >(null);
   const fabPulse = useRef(new Animated.Value(1)).current;
   const hasPulsedFabRef = useRef(false);
+  const handledEmailConfirmedRef = useRef(false);
 
   const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v2:${userId ?? 'guest'}`;
 
@@ -409,6 +411,18 @@ export default function HomeScreen() {
       setOrderVendor(null);
     }
   }, []);
+
+  useEffect(() => {
+    if (emailConfirmedParam !== '1' || handledEmailConfirmedRef.current) return;
+    handledEmailConfirmedRef.current = true;
+    setShowSignup(false);
+    setAuthError(null);
+    showAppDialog({
+      title: t('authEmailConfirmedTitle'),
+      message: t('authEmailConfirmedMessage'),
+    });
+    router.replace('/');
+  }, [emailConfirmedParam, router, t]);
 
   useEffect(() => {
     let mounted = true;

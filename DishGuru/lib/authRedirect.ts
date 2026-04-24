@@ -28,6 +28,7 @@ export type ParsedAuthRedirect = {
   type: string | null;
   accessToken: string | null;
   refreshToken: string | null;
+  confirmed: boolean;
   errorCode: string | null;
   errorDescription: string | null;
 };
@@ -41,6 +42,7 @@ export const parseAuthRedirectUrl = (url: string): ParsedAuthRedirect => {
     type: params.get('type'),
     accessToken: params.get('access_token'),
     refreshToken: params.get('refresh_token'),
+    confirmed: params.get('confirmed') === '1',
     errorCode: params.get('error_code'),
     errorDescription: params.get('error_description'),
   };

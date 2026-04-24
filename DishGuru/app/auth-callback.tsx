@@ -31,6 +31,10 @@ export default function AuthCallbackScreen() {
         setErrorMessage(parsed.errorDescription);
         return;
       }
+      if (parsed.confirmed && parsed.type === 'email') {
+        router.replace('/?emailConfirmed=1');
+        return;
+      }
       if (!parsed.accessToken || !parsed.refreshToken) {
         setErrorMessage(t('authLinkInvalid'));
         return;
