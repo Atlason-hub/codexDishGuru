@@ -7,6 +7,7 @@
     <title>Reset Your Password</title>
   </head>
   <body style="margin:0;background-color:#f6efe7;font-family:Arial,Helvetica,sans-serif;">
+    {{ $continueURL := printf "https://termsen.dishguru.app/auth-link-en.html#%s" .ConfirmationURL }}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6efe7;margin:0;padding:24px 0;">
       <tr>
         <td align="center">
@@ -26,12 +27,11 @@
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
                   <tr>
                     <td align="center" bgcolor="#c95f2c" style="border-radius:999px;">
-                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:16px 32px;color:#ffffff;text-decoration:none;font-size:18px;font-weight:700;">Reset password</a>
+                      <a href="{{ $continueURL }}" style="display:inline-block;padding:16px 32px;color:#ffffff;text-decoration:none;font-size:18px;font-weight:700;">Reset password</a>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:0 0 12px;font-size:16px;line-height:1.8;color:#7a5a4d;">If the button does not work, copy and paste the following link into your browser:</p>
-                <p style="margin:0 0 24px;font-size:15px;line-height:1.8;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#c95f2c;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+                <p style="margin:0 0 12px;font-size:16px;line-height:1.8;color:#7a5a4d;">If the button does not work, reopen this email and try the same button again from your phone.</p>
               </td>
             </tr>
             <tr>
@@ -54,6 +54,7 @@
     <title>איפוס סיסמה</title>
   </head>
   <body style="margin:0;background-color:#f6efe7;font-family:Arial,Helvetica,sans-serif;direction:rtl;">
+    {{ $continueURL := printf "https://termsheb.dishguru.app/auth-link.html#%s" .ConfirmationURL }}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6efe7;margin:0;padding:24px 0;">
       <tr>
         <td align="center">
@@ -73,12 +74,11 @@
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
                   <tr>
                     <td align="center" bgcolor="#c95f2c" style="border-radius:999px;">
-                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:16px 32px;color:#ffffff;text-decoration:none;font-size:18px;font-weight:700;">איפוס סיסמה</a>
+                      <a href="{{ $continueURL }}" style="display:inline-block;padding:16px 32px;color:#ffffff;text-decoration:none;font-size:18px;font-weight:700;">איפוס סיסמה</a>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:0 0 12px;font-size:16px;line-height:1.8;color:#7a5a4d;">אם הכפתור לא עובד, אפשר להעתיק ולהדביק את הקישור הבא בדפדפן:</p>
-                <p style="margin:0 0 24px;font-size:15px;line-height:1.8;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#c95f2c;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+                <p style="margin:0 0 12px;font-size:16px;line-height:1.8;color:#7a5a4d;">אם הכפתור לא עובד, פתחו מחדש את המייל ונסו שוב מאותו הטלפון שבו מותקנת DishGuru.</p>
               </td>
             </tr>
             <tr>
