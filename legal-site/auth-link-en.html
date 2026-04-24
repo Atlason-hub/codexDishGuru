@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DishGuru - Secure Continue</title>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: #fdfaf8;
+            color: #5A2A14;
+            font-family: 'Heebo', sans-serif;
+        }
+        .card {
+            width: 100%;
+            max-width: 560px;
+            background: #fff;
+            border: 1px solid #fbd0bd;
+            border-radius: 24px;
+            box-shadow: 0 8px 28px rgba(199, 93, 44, 0.12);
+            overflow: hidden;
+        }
+        .hero {
+            background: linear-gradient(135deg, #c95f2c 0%, #e98c4a 100%);
+            padding: 28px 24px;
+            text-align: center;
+        }
+        .hero img {
+            width: 84px;
+            height: 84px;
+            border-radius: 18px;
+            display: block;
+            margin: 0 auto 12px;
+        }
+        .hero-title {
+            color: #fff7f1;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .content {
+            padding: 32px 28px 30px;
+            text-align: left;
+        }
+        h1 {
+            margin: 0 0 14px;
+            color: #7f351a;
+            font-size: 34px;
+            line-height: 1.2;
+        }
+        p {
+            margin: 0 0 14px;
+            color: #6e351a;
+            font-size: 19px;
+            line-height: 1.8;
+        }
+        .button {
+            margin-top: 22px;
+            width: 100%;
+            border: 0;
+            border-radius: 999px;
+            background: #c95f2c;
+            color: #fff;
+            font-size: 20px;
+            font-weight: 700;
+            padding: 16px 22px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .button[disabled] {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+        .hint {
+            margin-top: 18px;
+            font-size: 15px;
+            color: #8b6b5c;
+        }
+        .error {
+            display: none;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: #fff5f0;
+            border: 1px solid #f0c4af;
+            color: #8d391a;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+        .success {
+            display: none;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: #f3fbf4;
+            border: 1px solid #c6e4cb;
+            color: #2f6c37;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="hero">
+            <img src="https://atlason-hub.github.io/codexDishGuru/DishGuru/assets/images/dishguru-email-icon.png" alt="DishGuru">
+            <div class="hero-title">DishGuru</div>
+        </div>
+        <div class="content">
+            <h1>Secure continue</h1>
+            <p>To continue with account verification or password reset, tap the button below.</p>
+            <p>This extra step helps prevent automatic email scanners from using your one-time link before you do.</p>
+            <button id="continueButton" class="button" disabled>Continue to DishGuru</button>
+            <div id="errorBox" class="error">
+                We could not find a valid link here. Please reopen the original email and tap the button there again.
+            </div>
+            <div id="successBox" class="success">
+                Verification is complete. If the app does not open right away, return to DishGuru and try again.
+            </div>
+            <div class="hint">If the app does not open, try again on the same device where DishGuru is installed.</div>
+        </div>
+    </div>
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+        const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_MhAe1ld13gUdTherOMkjKQ_ySHA_TtZ';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const params = new URLSearchParams(window.location.search);
+        const tokenHash = params.get('token_hash');
+        const redirectTo = params.get('redirect_to');
+        const type = params.get('type');
+        const button = document.getElementById('continueButton');
+        const errorBox = document.getElementById('errorBox');
+        const successBox = document.getElementById('successBox');
+
+        const showError = (message) => {
+            errorBox.textContent = message;
+            errorBox.style.display = 'block';
+        };
+
+        if (tokenHash && redirectTo && type) {
+            button.disabled = false;
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                button.textContent = 'Continuing...';
+                errorBox.style.display = 'none';
+                successBox.style.display = 'none';
+
+                const { data, error } = await supabase.auth.verifyOtp({
+                    token_hash: tokenHash,
+                    type,
+                });
+
+                if (error) {
+                    showError(error.message || 'This link is invalid or has expired.');
+                    button.disabled = false;
+                    button.textContent = 'Continue to DishGuru';
+                    return;
+                }
+
+                const session = data.session;
+                if (!session) {
+                    successBox.style.display = 'block';
+                    window.location.href = redirectTo;
+                    return;
+                }
+
+                const deepLink = `${redirectTo}#access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}&type=${encodeURIComponent(type)}`;
+                successBox.style.display = 'block';
+                window.location.href = deepLink;
+            });
+        } else {
+            showError('We could not find a valid link here. Please reopen the original email and tap the button there again.');
+        }
+    </script>
+</body>
+</html>
