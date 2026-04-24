@@ -92,6 +92,17 @@
             font-size: 16px;
             line-height: 1.7;
         }
+        .success {
+            display: none;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: #f3fbf4;
+            border: 1px solid #c6e4cb;
+            color: #2f6c37;
+            font-size: 16px;
+            line-height: 1.7;
+        }
     </style>
 </head>
 <body>
@@ -108,21 +119,65 @@
             <div id="errorBox" class="error">
                 We could not find a valid link here. Please reopen the original email and tap the button there again.
             </div>
+            <div id="successBox" class="success">
+                Verification is complete. If the app does not open right away, return to DishGuru and try again.
+            </div>
             <div class="hint">If the app does not open, try again on the same device where DishGuru is installed.</div>
         </div>
     </div>
-    <script>
-        const rawTarget = window.location.hash ? window.location.hash.slice(1) : '';
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+        const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_MhAe1ld13gUdTherOMkjKQ_ySHA_TtZ';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const params = new URLSearchParams(window.location.search);
+        const tokenHash = params.get('token_hash');
+        const redirectTo = params.get('redirect_to');
+        const type = params.get('type');
         const button = document.getElementById('continueButton');
         const errorBox = document.getElementById('errorBox');
+        const successBox = document.getElementById('successBox');
 
-        if (rawTarget) {
+        const showError = (message) => {
+            errorBox.textContent = message;
+            errorBox.style.display = 'block';
+        };
+
+        if (tokenHash && redirectTo && type) {
             button.disabled = false;
-            button.addEventListener('click', () => {
-                window.location.href = rawTarget;
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                button.textContent = 'Continuing...';
+                errorBox.style.display = 'none';
+                successBox.style.display = 'none';
+
+                const { data, error } = await supabase.auth.verifyOtp({
+                    token_hash: tokenHash,
+                    type,
+                });
+
+                if (error) {
+                    showError(error.message || 'This link is invalid or has expired.');
+                    button.disabled = false;
+                    button.textContent = 'Continue to DishGuru';
+                    return;
+                }
+
+                const session = data.session;
+                if (!session) {
+                    successBox.style.display = 'block';
+                    window.location.href = redirectTo;
+                    return;
+                }
+
+                const deepLink = `${redirectTo}#access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}&type=${encodeURIComponent(type)}`;
+                successBox.style.display = 'block';
+                window.location.href = deepLink;
             });
         } else {
-            errorBox.style.display = 'block';
+            showError('We could not find a valid link here. Please reopen the original email and tap the button there again.');
         }
     </script>
 </body>

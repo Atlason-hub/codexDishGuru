@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -121,326 +121,341 @@ export default function AccountScreen() {
   }, []);
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-        >
-          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
-        </Pressable>
-        <Text style={[styles.title, !isRTL && styles.titleLtr]}>{t('accountTitle')}</Text>
-      </View>
-
-      <View style={styles.profileCard}>
-        <View style={[styles.emailSection, !isRTL && styles.emailSectionLtr]}>
-          <Text style={[styles.emailLabel, !isRTL && styles.emailLabelLtr]}>{t('accountEmailLabel')}</Text>
-          <Text style={styles.emailValue}>{email ?? ''}</Text>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.languageSection}>
-          <View style={[styles.languageOptions, !isRTL && styles.languageOptionsLtr]}>
-            {([
-              ['he', t('accountLanguageHebrew')],
-              ['en', t('accountLanguageEnglish')],
-            ] as const).map(([value, label]) => (
-              <Pressable
-                key={value}
-                style={[
-                  styles.languageChip,
-                  !isRTL && styles.languageChipLtr,
-                  locale === value && styles.languageChipActive,
-                ]}
-                onPress={() => setLocale(value as Locale)}
-              >
-                <Text
-                  style={[
-                    styles.languageChipText,
-                    locale === value && styles.languageChipTextActive,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarCircle} {...panResponder.panHandlers}>
-            {tempAvatarUrl ? (
-              <Image
-                source={{ uri: tempAvatarUrl }}
-                style={[
-                  styles.tempAvatarImage,
-                  { width: displayWidth, height: displayHeight },
-                  { transform: [{ translateX: avatarOffset.x }, { translateY: avatarOffset.y }] },
-                ]}
-                contentFit="cover"
-                pointerEvents="none"
-              />
-            ) : avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Ionicons name="person" size={44} color="#ffffff" />
-            )}
-          </View>
-
-          {tempAvatarUrl ? (
-            <View style={styles.zoomRow}>
-              <Ionicons name="remove" size={16} color={theme.colors.textMuted} />
-              <Slider
-                style={styles.zoomSlider}
-                minimumValue={MIN_ZOOM}
-                maximumValue={MAX_ZOOM}
-                step={0.01}
-                value={zoom}
-                onValueChange={(value) => {
-                  setZoom(value);
-                  setAvatarOffset((prev) => clampOffset(prev));
-                }}
-                minimumTrackTintColor={theme.colors.accent}
-                maximumTrackTintColor={theme.colors.border}
-              />
-              <Ionicons name="add" size={16} color={theme.colors.textMuted} />
-            </View>
-          ) : null}
-
-          <View style={styles.actionsRow}>
-            <Pressable
-              style={styles.actionButton}
-              onPress={async () => {
-                if (saving) return;
-                try {
-                  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                  if (!permission.granted) {
-                    showAppAlert(t('accountPermissionRequired'), t('accountAllowGallery'));
-                    return;
-                  }
-                  const result = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    quality: 0.7,
-                  });
-                  if (result.canceled || !result.assets) return;
-                  const asset = result.assets[0];
-                  if (!asset?.uri || !asset?.width || !asset?.height) return;
-                  setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
-                  setTempAvatarUrl(asset.uri);
-                  setAvatarOffset({ x: 0, y: 0 });
-                  setZoom(MIN_ZOOM);
-                  setSaving(true);
-                  const { data } = await supabase.auth.getSession();
-                  const userId = data.session?.user?.id;
-                  if (!userId) return;
-                } catch (error) {
-                  showAppAlert(
-                    t('accountUploadFailed'),
-                    error instanceof Error ? error.message : t('accountUploadFailed')
-                  );
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              <Ionicons name="image-outline" size={22} color={theme.colors.textMuted} />
-            </Pressable>
-
-            <Pressable
-              style={styles.actionButton}
-              onPress={async () => {
-                if (saving) return;
-                try {
-                  const permission = await ImagePicker.requestCameraPermissionsAsync();
-                  if (!permission.granted) {
-                    showAppAlert(t('accountPermissionRequired'), t('accountAllowCamera'));
-                    return;
-                  }
-                  const result = await ImagePicker.launchCameraAsync({
-                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    quality: 0.7,
-                    cameraType: ImagePicker.CameraType.front,
-                  });
-                  if (result.canceled || !result.assets) return;
-                  const asset = result.assets[0];
-                  if (!asset?.uri || !asset?.width || !asset?.height) return;
-                  setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
-                  setTempAvatarUrl(asset.uri);
-                  setAvatarOffset({ x: 0, y: 0 });
-                  setZoom(MIN_ZOOM);
-                  setSaving(true);
-                  const { data } = await supabase.auth.getSession();
-                  const userId = data.session?.user?.id;
-                  if (!userId) return;
-                } catch (error) {
-                  showAppAlert(
-                    t('accountCameraFailed'),
-                    error instanceof Error ? error.message : t('accountUploadFailed')
-                  );
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              <Ionicons name="camera-outline" size={22} color={theme.colors.textMuted} />
-            </Pressable>
-          </View>
-
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      <View style={styles.container}>
+        <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
           <Pressable
-            style={({ pressed }) => [
-              styles.saveButton,
-              !isRTL && styles.saveButtonLtr,
-              pressed && !saving && pendingAsset && styles.saveButtonPressed,
-              (!pendingAsset || saving) && styles.saveButtonDisabled,
-            ]}
-            onPress={async () => {
-              if (!pendingAsset || saving) return;
-              try {
-                setSaving(true);
-                const { data } = await supabase.auth.getSession();
-                const userId = data.session?.user?.id;
-                if (!userId) return;
-                const imageLeft = FRAME_SIZE / 2 - displayWidth / 2 + avatarOffset.x;
-                const imageTop = FRAME_SIZE / 2 - displayHeight / 2 + avatarOffset.y;
-                const cropX = Math.max(0, (0 - imageLeft) / scaleFactor);
-                const cropY = Math.max(0, (0 - imageTop) / scaleFactor);
-                const cropSize = FRAME_SIZE / scaleFactor;
-                const cropWidth = Math.min(pendingAsset.width - cropX, cropSize);
-                const cropHeight = Math.min(pendingAsset.height - cropY, cropSize);
-
-                const cropped = await ImageManipulator.manipulateAsync(
-                  pendingAsset.uri,
-                  [
-                    {
-                      crop: {
-                        originX: cropX,
-                        originY: cropY,
-                        width: cropWidth,
-                        height: cropHeight,
-                      },
-                    },
-                    { resize: { width: 512, height: 512 } },
-                  ],
-                  { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                );
-                if (!cropped.base64) {
-                  throw new Error(t('accountImageProcessingFailed'));
-                }
-
-                const filePath = `${userId}/${Date.now()}.jpg`;
-                const binary = globalThis.atob
-                  ? globalThis.atob(cropped.base64)
-                  : Buffer.from(cropped.base64, 'base64').toString('binary');
-                const len = binary.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
-                const upload = await supabase.storage.from('avatars').upload(filePath, bytes, {
-                  contentType: 'image/jpeg',
-                  upsert: true,
-                });
-                if (upload.error) throw upload.error;
-                const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-                const url = publicData?.publicUrl ?? null;
-                if (url) {
-                  await supabase.auth.updateUser({ data: { avatar_url: url } });
-                  const { data: sessionData } = await supabase.auth.getSession();
-                  const currentUserId = sessionData.session?.user?.id ?? null;
-                  if (currentUserId) {
-                    const { error: profileError } = await supabase
-                      .from('AppUsers')
-                      .update({ avatar_url: url })
-                      .eq('user_id', currentUserId);
-                    if (profileError) {
-                      throw profileError;
-                    }
-                  }
-                  setAvatarUrl(url);
-                  await cacheAvatar(userId, url);
-                  setPendingAsset(null);
-                  setTempAvatarUrl(null);
-                  setAvatarOffset({ x: 0, y: 0 });
-                  setZoom(MIN_ZOOM);
-                  router.replace('/');
-                }
-              } catch (error) {
-                showAppAlert(
-                  t('accountSaveFailed'),
-                  error instanceof Error ? error.message : t('accountSaveFailed')
-                );
-              } finally {
-                setSaving(false);
-              }
-            }}
+            style={styles.backButton}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
           >
-            <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
+            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
           </Pressable>
+          <Text style={[styles.title, !isRTL && styles.titleLtr]}>{t('accountTitle')}</Text>
         </View>
-      </View>
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.deleteAccountButton,
-          !isRTL && styles.deleteAccountButtonLtr,
-          (pressed || deletingAccount) && styles.deleteAccountButtonPressed,
-        ]}
-        onPress={() => {
-          if (saving || deletingAccount) return;
-          showAppDialog({
-            title: t('accountDeleteTitle'),
-            message: t('accountDeleteMessage'),
-            actions: [
-              { text: t('commonCancel'), style: 'cancel' },
-              {
-                text: t('accountDeleteAction'),
-                style: 'destructive',
-                onPress: async () => {
+        <View style={styles.profileCard}>
+          <View style={[styles.emailSection, !isRTL && styles.emailSectionLtr]}>
+            <Text style={[styles.emailLabel, !isRTL && styles.emailLabelLtr]}>{t('accountEmailLabel')}</Text>
+            <Text style={styles.emailValue}>{email ?? ''}</Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.languageSection}>
+            <View style={[styles.languageOptions, !isRTL && styles.languageOptionsLtr]}>
+              {([
+                ['he', t('accountLanguageHebrew')],
+                ['en', t('accountLanguageEnglish')],
+              ] as const).map(([value, label]) => (
+                <Pressable
+                  key={value}
+                  style={[
+                    styles.languageChip,
+                    !isRTL && styles.languageChipLtr,
+                    locale === value && styles.languageChipActive,
+                  ]}
+                  onPress={() => setLocale(value as Locale)}
+                >
+                  <Text
+                    style={[
+                      styles.languageChipText,
+                      locale === value && styles.languageChipTextActive,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.avatarSection}>
+            <View style={styles.avatarCircle} {...panResponder.panHandlers}>
+              {tempAvatarUrl ? (
+                <Image
+                  source={{ uri: tempAvatarUrl }}
+                  style={[
+                    styles.tempAvatarImage,
+                    { width: displayWidth, height: displayHeight },
+                    { transform: [{ translateX: avatarOffset.x }, { translateY: avatarOffset.y }] },
+                  ]}
+                  contentFit="cover"
+                  pointerEvents="none"
+                />
+              ) : avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={44} color="#ffffff" />
+              )}
+            </View>
+
+            {tempAvatarUrl ? (
+              <View style={styles.zoomRow}>
+                <Ionicons name="remove" size={16} color={theme.colors.textMuted} />
+                <Slider
+                  style={styles.zoomSlider}
+                  minimumValue={MIN_ZOOM}
+                  maximumValue={MAX_ZOOM}
+                  step={0.01}
+                  value={zoom}
+                  onValueChange={(value) => {
+                    setZoom(value);
+                    setAvatarOffset((prev) => clampOffset(prev));
+                  }}
+                  minimumTrackTintColor={theme.colors.accent}
+                  maximumTrackTintColor={theme.colors.border}
+                />
+                <Ionicons name="add" size={16} color={theme.colors.textMuted} />
+              </View>
+            ) : null}
+
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={styles.actionButton}
+                onPress={async () => {
+                  if (saving) return;
                   try {
-                    setDeletingAccount(true);
-                    const { data } = await supabase.auth.getSession();
-                    const userId = data.session?.user?.id ?? null;
-                    if (!userId) {
-                      showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
+                    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (!permission.granted) {
+                      showAppAlert(t('accountPermissionRequired'), t('accountAllowGallery'));
                       return;
                     }
-
-                    const { error } = await supabase.rpc('delete_my_account');
-                    if (error) throw error;
-
-                    await cacheAvatar(userId, null);
-                    setAvatarUrl(null);
-                    setTempAvatarUrl(null);
-                    setPendingAsset(null);
-                    await supabase.auth.signOut({ scope: 'local' });
-                    router.replace('/');
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                      quality: 0.7,
+                    });
+                    if (result.canceled || !result.assets) return;
+                    const asset = result.assets[0];
+                    if (!asset?.uri || !asset?.width || !asset?.height) return;
+                    setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
+                    setTempAvatarUrl(asset.uri);
+                    setAvatarOffset({ x: 0, y: 0 });
+                    setZoom(MIN_ZOOM);
+                    setSaving(true);
+                    const { data } = await supabase.auth.getSession();
+                    const userId = data.session?.user?.id;
+                    if (!userId) return;
                   } catch (error) {
                     showAppAlert(
-                      t('accountDeleteFailed'),
-                      getErrorMessage(error)
+                      t('accountUploadFailed'),
+                      error instanceof Error ? error.message : t('accountUploadFailed')
                     );
                   } finally {
-                    setDeletingAccount(false);
+                    setSaving(false);
                   }
+                }}
+              >
+                <Ionicons name="image-outline" size={22} color={theme.colors.textMuted} />
+              </Pressable>
+
+              <Pressable
+                style={styles.actionButton}
+                onPress={async () => {
+                  if (saving) return;
+                  try {
+                    const permission = await ImagePicker.requestCameraPermissionsAsync();
+                    if (!permission.granted) {
+                      showAppAlert(t('accountPermissionRequired'), t('accountAllowCamera'));
+                      return;
+                    }
+                    const result = await ImagePicker.launchCameraAsync({
+                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                      quality: 0.7,
+                      cameraType: ImagePicker.CameraType.front,
+                    });
+                    if (result.canceled || !result.assets) return;
+                    const asset = result.assets[0];
+                    if (!asset?.uri || !asset?.width || !asset?.height) return;
+                    setPendingAsset({ uri: asset.uri, width: asset.width, height: asset.height });
+                    setTempAvatarUrl(asset.uri);
+                    setAvatarOffset({ x: 0, y: 0 });
+                    setZoom(MIN_ZOOM);
+                    setSaving(true);
+                    const { data } = await supabase.auth.getSession();
+                    const userId = data.session?.user?.id;
+                    if (!userId) return;
+                  } catch (error) {
+                    showAppAlert(
+                      t('accountCameraFailed'),
+                      error instanceof Error ? error.message : t('accountUploadFailed')
+                    );
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                <Ionicons name="camera-outline" size={22} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.saveButton,
+                !isRTL && styles.saveButtonLtr,
+                pressed && !saving && pendingAsset && styles.saveButtonPressed,
+                (!pendingAsset || saving) && styles.saveButtonDisabled,
+              ]}
+              onPress={async () => {
+                if (!pendingAsset || saving) return;
+                try {
+                  setSaving(true);
+                  const { data } = await supabase.auth.getSession();
+                  const userId = data.session?.user?.id;
+                  if (!userId) return;
+                  const imageLeft = FRAME_SIZE / 2 - displayWidth / 2 + avatarOffset.x;
+                  const imageTop = FRAME_SIZE / 2 - displayHeight / 2 + avatarOffset.y;
+                  const cropX = Math.max(0, (0 - imageLeft) / scaleFactor);
+                  const cropY = Math.max(0, (0 - imageTop) / scaleFactor);
+                  const cropSize = FRAME_SIZE / scaleFactor;
+                  const cropWidth = Math.min(pendingAsset.width - cropX, cropSize);
+                  const cropHeight = Math.min(pendingAsset.height - cropY, cropSize);
+
+                  const cropped = await ImageManipulator.manipulateAsync(
+                    pendingAsset.uri,
+                    [
+                      {
+                        crop: {
+                          originX: cropX,
+                          originY: cropY,
+                          width: cropWidth,
+                          height: cropHeight,
+                        },
+                      },
+                      { resize: { width: 512, height: 512 } },
+                    ],
+                    { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+                  );
+                  if (!cropped.base64) {
+                    throw new Error(t('accountImageProcessingFailed'));
+                  }
+
+                  const filePath = `${userId}/${Date.now()}.jpg`;
+                  const binary = globalThis.atob
+                    ? globalThis.atob(cropped.base64)
+                    : Buffer.from(cropped.base64, 'base64').toString('binary');
+                  const len = binary.length;
+                  const bytes = new Uint8Array(len);
+                  for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+                  const upload = await supabase.storage.from('avatars').upload(filePath, bytes, {
+                    contentType: 'image/jpeg',
+                    upsert: true,
+                  });
+                  if (upload.error) throw upload.error;
+                  const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+                  const url = publicData?.publicUrl ?? null;
+                  if (url) {
+                    await supabase.auth.updateUser({ data: { avatar_url: url } });
+                    const { data: sessionData } = await supabase.auth.getSession();
+                    const currentUserId = sessionData.session?.user?.id ?? null;
+                    if (currentUserId) {
+                      const { error: profileError } = await supabase
+                        .from('AppUsers')
+                        .update({ avatar_url: url })
+                        .eq('user_id', currentUserId);
+                      if (profileError) {
+                        throw profileError;
+                      }
+                    }
+                    setAvatarUrl(url);
+                    await cacheAvatar(userId, url);
+                    setPendingAsset(null);
+                    setTempAvatarUrl(null);
+                    setAvatarOffset({ x: 0, y: 0 });
+                    setZoom(MIN_ZOOM);
+                    router.replace('/');
+                  }
+                } catch (error) {
+                  showAppAlert(
+                    t('accountSaveFailed'),
+                    error instanceof Error ? error.message : t('accountSaveFailed')
+                  );
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.deleteAccountButton,
+            !isRTL && styles.deleteAccountButtonLtr,
+            (pressed || deletingAccount) && styles.deleteAccountButtonPressed,
+          ]}
+          onPress={() => {
+            if (saving || deletingAccount) return;
+            showAppDialog({
+              title: t('accountDeleteTitle'),
+              message: t('accountDeleteMessage'),
+              actions: [
+                { text: t('commonCancel'), style: 'cancel' },
+                {
+                  text: t('accountDeleteAction'),
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setDeletingAccount(true);
+                      const { data } = await supabase.auth.getSession();
+                      const userId = data.session?.user?.id ?? null;
+                      if (!userId) {
+                        showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
+                        return;
+                      }
+
+                      const { error } = await supabase.rpc('delete_my_account');
+                      if (error) throw error;
+
+                      await cacheAvatar(userId, null);
+                      setAvatarUrl(null);
+                      setTempAvatarUrl(null);
+                      setPendingAsset(null);
+                      await supabase.auth.signOut({ scope: 'local' });
+                      router.replace('/');
+                    } catch (error) {
+                      showAppAlert(
+                        t('accountDeleteFailed'),
+                        getErrorMessage(error)
+                      );
+                    } finally {
+                      setDeletingAccount(false);
+                    }
+                  },
                 },
-              },
-            ],
-          });
-        }}
-      >
-        <Text style={styles.deleteAccountButtonText}>{t('accountDeleteAction')}</Text>
-      </Pressable>
-    </View>
+              ],
+            });
+          }}
+        >
+          <Text style={styles.deleteAccountButtonText}>{t('accountDeleteAction')}</Text>
+        </Pressable>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  container: {
     backgroundColor: theme.colors.background,
     paddingHorizontal: 20,
     paddingTop: 16,
+    paddingBottom: 20,
     alignItems: 'center',
   },
   title: {

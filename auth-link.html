@@ -92,6 +92,17 @@
             font-size: 16px;
             line-height: 1.7;
         }
+        .success {
+            display: none;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: #f3fbf4;
+            border: 1px solid #c6e4cb;
+            color: #2f6c37;
+            font-size: 16px;
+            line-height: 1.7;
+        }
     </style>
 </head>
 <body>
@@ -108,21 +119,65 @@
             <div id="errorBox" class="error">
                 לא הצלחנו למצוא קישור תקף. נסו לפתוח שוב את המייל המקורי וללחוץ על הכפתור שבו.
             </div>
+            <div id="successBox" class="success">
+                האימות הושלם. אם האפליקציה לא נפתחת מיד, חזרו ל-DishGuru ונסו שוב.
+            </div>
             <div class="hint">אם הכפתור לא נפתח בתוך האפליקציה, אפשר לנסות שוב מאותו המכשיר שבו מותקנת DishGuru.</div>
         </div>
     </div>
-    <script>
-        const rawTarget = window.location.hash ? window.location.hash.slice(1) : '';
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+        const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_MhAe1ld13gUdTherOMkjKQ_ySHA_TtZ';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const params = new URLSearchParams(window.location.search);
+        const tokenHash = params.get('token_hash');
+        const redirectTo = params.get('redirect_to');
+        const type = params.get('type');
         const button = document.getElementById('continueButton');
         const errorBox = document.getElementById('errorBox');
+        const successBox = document.getElementById('successBox');
 
-        if (rawTarget) {
+        const showError = (message) => {
+            errorBox.textContent = message;
+            errorBox.style.display = 'block';
+        };
+
+        if (tokenHash && redirectTo && type) {
             button.disabled = false;
-            button.addEventListener('click', () => {
-                window.location.href = rawTarget;
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                button.textContent = 'ממשיכים...';
+                errorBox.style.display = 'none';
+                successBox.style.display = 'none';
+
+                const { data, error } = await supabase.auth.verifyOtp({
+                    token_hash: tokenHash,
+                    type,
+                });
+
+                if (error) {
+                    showError(error.message || 'הקישור אינו תקין או שפג תוקפו.');
+                    button.disabled = false;
+                    button.textContent = 'המשך ל-DishGuru';
+                    return;
+                }
+
+                const session = data.session;
+                if (!session) {
+                    successBox.style.display = 'block';
+                    window.location.href = redirectTo;
+                    return;
+                }
+
+                const deepLink = `${redirectTo}#access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}&type=${encodeURIComponent(type)}`;
+                successBox.style.display = 'block';
+                window.location.href = deepLink;
             });
         } else {
-            errorBox.style.display = 'block';
+            showError('לא הצלחנו למצוא קישור תקף. נסו לפתוח שוב את המייל המקורי וללחוץ על הכפתור שבו.');
         }
     </script>
 </body>
