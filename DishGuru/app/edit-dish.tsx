@@ -1,13 +1,17 @@
 import {
   ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
@@ -35,6 +39,7 @@ type DishAssociation = {
 export default function EditDishScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
+  const scrollRef = useRef<ScrollView | null>(null);
   const params = useLocalSearchParams();
   const associationId = typeof params.id === 'string' ? params.id : '';
   const photoUriParam = typeof params.photoUri === 'string' ? params.photoUri : '';
@@ -65,6 +70,13 @@ export default function EditDishScreen() {
     if (decodedPhotoUri) setPhotoUri(decodedPhotoUri);
     if (photoBase64Param) setPhotoBase64(photoBase64Param);
   }, [decodedPhotoUri, photoBase64Param]);
+
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollTo({ y: 220, animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -267,70 +279,91 @@ export default function EditDishScreen() {
         </View>
       </View>
 
-      <View style={styles.body} pointerEvents="box-none">
-        <View style={styles.photoPressable}>
-          {photoUri ? (
-            <CachedLogo uri={photoUri} style={styles.photo} />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="camera" size={24} color={theme.colors.accent} />
-              <Text style={styles.photoPlaceholderText}>{t('cameraRetake')}</Text>
-            </View>
-          )}
-          <Pressable
-            style={styles.photoOverlay}
-            onPress={() =>
-              router.push({
-                pathname: '/camera',
-                params: { editId: associationId, returnTo, scrollY: returnScroll },
-              })
-            }
-          >
-            <Ionicons name="camera" size={18} color={theme.colors.white} />
-            <Text style={styles.photoOverlayText}>{t('cameraRetake')}</Text>
-          </Pressable>
-        </View>
-
-        <TextInput
-          style={styles.input}
-          placeholder={t('cameraReviewPlaceholder')}
-          placeholderTextColor="#9CA3AF"
-          value={reviewText}
-          onChangeText={setReviewText}
-          multiline
-          textAlign={isRTL ? 'right' : 'left'}
-        />
-
-        <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
-          <View style={styles.sliderLabelRow}>
-            <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
-          </View>
-          <View style={styles.starInputWrap}>
-            <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
-          </View>
-        </View>
-        <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
-          <View style={styles.sliderLabelRow}>
-            <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingSize')}</Text>
-          </View>
-          <View style={styles.starInputWrap}>
-            <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
-          </View>
-        </View>
-
-        <Pressable
-          style={[styles.saveButton, !isRTL && styles.saveButtonLtr]}
-          onPress={handleSave}
-          hitSlop={8}
-          disabled={saving}
+      <KeyboardAvoidingView
+        style={styles.bodyKeyboardAvoiding}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 72 : 20}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.bodyScroll}
+          contentContainerStyle={styles.bodyScrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
         >
-          {saving ? (
-            <ActivityIndicator color={theme.colors.accent} />
-          ) : (
-            <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
-          )}
-        </Pressable>
-      </View>
+          <View style={styles.body} pointerEvents="box-none">
+            <View style={styles.photoPressable}>
+              {photoUri ? (
+                <CachedLogo uri={photoUri} style={styles.photo} />
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Ionicons name="camera" size={24} color={theme.colors.accent} />
+                  <Text style={styles.photoPlaceholderText}>{t('cameraRetake')}</Text>
+                </View>
+              )}
+              <Pressable
+                style={styles.photoOverlay}
+                onPress={() =>
+                  router.push({
+                    pathname: '/camera',
+                    params: { editId: associationId, returnTo, scrollY: returnScroll },
+                  })
+                }
+              >
+                <Ionicons name="camera" size={18} color={theme.colors.white} />
+                <Text style={styles.photoOverlayText}>{t('cameraRetake')}</Text>
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder={t('cameraReviewPlaceholder')}
+              placeholderTextColor="#9CA3AF"
+              value={reviewText}
+              onChangeText={setReviewText}
+              multiline
+              textAlign={isRTL ? 'right' : 'left'}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollRef.current?.scrollTo({ y: 220, animated: true });
+                }, 120);
+              }}
+            />
+
+            <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
+              <View style={styles.sliderLabelRow}>
+                <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
+              </View>
+              <View style={styles.starInputWrap}>
+                <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
+              </View>
+            </View>
+            <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
+              <View style={styles.sliderLabelRow}>
+                <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingSize')}</Text>
+              </View>
+              <View style={styles.starInputWrap}>
+                <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
+              </View>
+            </View>
+
+            <Pressable
+              style={[styles.saveButton, !isRTL && styles.saveButtonLtr]}
+              onPress={handleSave}
+              hitSlop={8}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color={theme.colors.accent} />
+              ) : (
+                <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -424,10 +457,19 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   body: {
-    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 72,
     gap: 12,
+  },
+  bodyKeyboardAvoiding: {
+    flex: 1,
+  },
+  bodyScroll: {
+    flex: 1,
+  },
+  bodyScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 28,
   },
   photoPressable: {
     width: 260,

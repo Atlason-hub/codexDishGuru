@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -966,219 +968,227 @@ export default function HomeScreen() {
           </View>
         </View>
       ) : !isAuthenticated ? (
-        <ScrollView
-          style={styles.authScroll}
-          contentContainerStyle={styles.authScrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
+        <KeyboardAvoidingView
+          style={styles.authKeyboardAvoiding}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
         >
-          <View style={styles.authScreen}>
-            <View style={[styles.authLanguageRow, !isRTL && styles.authLanguageRowLtr]}>
-              {([
-                ['he', t('accountLanguageHebrew')],
-                ['en', t('accountLanguageEnglish')],
-              ] as const).map(([value, label]) => (
-                <Pressable
-                  key={value}
-                  style={[
-                    styles.authLanguageChip,
-                    locale === value && styles.authLanguageChipActive,
-                  ]}
-                  onPress={() => setLocale(value as 'he' | 'en')}
-                >
-                  <Text
+          <ScrollView
+            style={styles.authScroll}
+            contentContainerStyle={styles.authScrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            automaticallyAdjustKeyboardInsets
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={styles.authScreen}>
+              <View style={[styles.authLanguageRow, !isRTL && styles.authLanguageRowLtr]}>
+                {([
+                  ['he', t('accountLanguageHebrew')],
+                  ['en', t('accountLanguageEnglish')],
+                ] as const).map(([value, label]) => (
+                  <Pressable
+                    key={value}
                     style={[
-                      styles.authLanguageChipText,
-                      locale === value && styles.authLanguageChipTextActive,
+                      styles.authLanguageChip,
+                      locale === value && styles.authLanguageChipActive,
                     ]}
+                    onPress={() => setLocale(value as 'he' | 'en')}
                   >
-                    {label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <View style={styles.authHeaderWrap}>
-              <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
-            </View>
-            <View style={styles.authCard}>
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                  {t('authWorkEmail')}
-                </Text>
-                <View style={styles.inputRow}>
-                  <TextInput
-                    style={styles.inputField}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder=""
-                    textAlign="left"
-                    selectionColor={theme.colors.accent}
-                    cursorColor={theme.colors.accent}
-                  />
-                </View>
-              </View>
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                  {t('authPassword')}
-                </Text>
-                <View style={styles.inputRow}>
-                  <TextInput
-                    style={styles.inputFieldPassword}
-                    placeholder=""
-                    secureTextEntry={!showPass}
-                    value={pass}
-                    onChangeText={setPass}
-                    textAlign="left"
-                    selectionColor={theme.colors.accent}
-                    cursorColor={theme.colors.accent}
-                  />
-                  <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
-                    <Ionicons
-                      name={showPass ? 'eye-off' : 'eye'}
-                      size={18}
-                      color={theme.colors.textMuted}
-                    />
+                    <Text
+                      style={[
+                        styles.authLanguageChipText,
+                        locale === value && styles.authLanguageChipTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
                   </Pressable>
-                </View>
+                ))}
               </View>
-              {showSignup && (
+              <View style={styles.authHeaderWrap}>
+                <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
+              </View>
+              <View style={styles.authCard}>
                 <View style={styles.fieldGroup}>
                   <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                    {t('authPasswordConfirm')}
+                    {t('authWorkEmail')}
+                  </Text>
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      style={styles.inputField}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholder=""
+                      textAlign="left"
+                      selectionColor={theme.colors.accent}
+                      cursorColor={theme.colors.accent}
+                    />
+                  </View>
+                </View>
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                    {t('authPassword')}
                   </Text>
                   <View style={styles.inputRow}>
                     <TextInput
                       style={styles.inputFieldPassword}
                       placeholder=""
-                      secureTextEntry={!showConfirmPass}
-                      value={confirmPass}
-                      onChangeText={setConfirmPass}
+                      secureTextEntry={!showPass}
+                      value={pass}
+                      onChangeText={setPass}
                       textAlign="left"
                       selectionColor={theme.colors.accent}
                       cursorColor={theme.colors.accent}
                     />
-                    <Pressable
-                      style={styles.eyeButton}
-                      onPress={() => setShowConfirmPass((v) => !v)}
-                    >
+                    <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
                       <Ionicons
-                        name={showConfirmPass ? 'eye-off' : 'eye'}
+                        name={showPass ? 'eye-off' : 'eye'}
                         size={18}
                         color={theme.colors.textMuted}
                       />
                     </Pressable>
                   </View>
                 </View>
-              )}
-              {showSignup ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.termsRow,
-                    !isRTL && styles.termsRowLtr,
-                    pressed && styles.termsRowPressed,
-                  ]}
-                  onPress={() => setAcceptedTerms((value) => !value)}
-                >
+                {showSignup && (
+                  <View style={styles.fieldGroup}>
+                    <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                      {t('authPasswordConfirm')}
+                    </Text>
+                    <View style={styles.inputRow}>
+                      <TextInput
+                        style={styles.inputFieldPassword}
+                        placeholder=""
+                        secureTextEntry={!showConfirmPass}
+                        value={confirmPass}
+                        onChangeText={setConfirmPass}
+                        textAlign="left"
+                        selectionColor={theme.colors.accent}
+                        cursorColor={theme.colors.accent}
+                      />
+                      <Pressable
+                        style={styles.eyeButton}
+                        onPress={() => setShowConfirmPass((v) => !v)}
+                      >
+                        <Ionicons
+                          name={showConfirmPass ? 'eye-off' : 'eye'}
+                          size={18}
+                          color={theme.colors.textMuted}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+                {showSignup ? (
                   <Pressable
-                    onPress={() =>
-                      setLegalModal({
-                        title: t('legalTermsTitle'),
-                        url: getLegalUrl(locale, 'terms'),
-                      })
-                    }
-                    style={[styles.termsTextWrap, !isRTL && styles.termsTextWrapLtr]}
+                    style={({ pressed }) => [
+                      styles.termsRow,
+                      !isRTL && styles.termsRowLtr,
+                      pressed && styles.termsRowPressed,
+                    ]}
+                    onPress={() => setAcceptedTerms((value) => !value)}
                   >
-                    <Text style={[styles.termsText, !isRTL && styles.termsTextLtr]}>
-                      {t('authAcceptTerms')}
+                    <Pressable
+                      onPress={() =>
+                        setLegalModal({
+                          title: t('legalTermsTitle'),
+                          url: getLegalUrl(locale, 'terms'),
+                        })
+                      }
+                      style={[styles.termsTextWrap, !isRTL && styles.termsTextWrapLtr]}
+                    >
+                      <Text style={[styles.termsText, !isRTL && styles.termsTextLtr]}>
+                        {t('authAcceptTerms')}
+                      </Text>
+                    </Pressable>
+                    <View style={[styles.termsCheckbox, acceptedTerms && styles.termsCheckboxChecked]}>
+                      {acceptedTerms ? (
+                        <Ionicons name="checkmark" size={16} color={theme.colors.white} />
+                      ) : null}
+                    </View>
+                  </Pressable>
+                ) : null}
+                {!showSignup && (
+                  <Pressable onPress={() => void sendPasswordReset()} disabled={authLoading}>
+                    <Text style={[styles.forgotPasswordText, !isRTL && styles.forgotPasswordTextLtr, authLoading && { opacity: 0.6 }]}>
+                      {t('authForgotPassword')}
                     </Text>
                   </Pressable>
-                  <View style={[styles.termsCheckbox, acceptedTerms && styles.termsCheckboxChecked]}>
-                    {acceptedTerms ? (
-                      <Ionicons name="checkmark" size={16} color={theme.colors.white} />
-                    ) : null}
-                  </View>
-                </Pressable>
-              ) : null}
-              {!showSignup && (
-                <Pressable onPress={() => void sendPasswordReset()} disabled={authLoading}>
-                  <Text style={[styles.forgotPasswordText, !isRTL && styles.forgotPasswordTextLtr, authLoading && { opacity: 0.6 }]}>
-                    {t('authForgotPassword')}
+                )}
+                {authError && (
+                  <Text style={[styles.authErrorText, !isRTL && styles.authErrorTextLtr]}>
+                    {authError}
                   </Text>
-                </Pressable>
-              )}
-              {authError && (
-                <Text style={[styles.authErrorText, !isRTL && styles.authErrorTextLtr]}>
-                  {authError}
-                </Text>
-              )}
-              {showSignup ? (
-                <>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.loginButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={signUp}
-                    disabled={authLoading}
-                  >
-                    {authLoading ? (
-                      <ActivityIndicator color={theme.colors.white} />
-                    ) : (
-                      <Text style={styles.loginButtonText}>{t('authCreateAccount')}</Text>
-                    )}
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.signupButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() => {
-                      setShowSignup(false);
-                      setAcceptedTerms(false);
-                      setAuthError(null);
-                    }}
-                    disabled={authLoading}
-                  >
-                    <Text style={styles.signupButtonText}>{t('authBackToSignIn')}</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.loginButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={signIn}
-                    disabled={authLoading}
-                  >
-                    {authLoading ? (
-                      <ActivityIndicator color={theme.colors.white} />
-                    ) : (
-                      <Text style={styles.loginButtonText}>{t('authSignIn')}</Text>
-                    )}
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.signupButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() => {
-                      setShowSignup(true);
-                      setAuthError(null);
-                    }}
-                    disabled={authLoading}
-                  >
-                    <Text style={styles.signupButtonText}>{t('authCreateAccount')}</Text>
-                  </Pressable>
-                </>
-              )}
+                )}
+                {showSignup ? (
+                  <>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.loginButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={signUp}
+                      disabled={authLoading}
+                    >
+                      {authLoading ? (
+                        <ActivityIndicator color={theme.colors.white} />
+                      ) : (
+                        <Text style={styles.loginButtonText}>{t('authCreateAccount')}</Text>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.signupButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={() => {
+                        setShowSignup(false);
+                        setAcceptedTerms(false);
+                        setAuthError(null);
+                      }}
+                      disabled={authLoading}
+                    >
+                      <Text style={styles.signupButtonText}>{t('authBackToSignIn')}</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.loginButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={signIn}
+                      disabled={authLoading}
+                    >
+                      {authLoading ? (
+                        <ActivityIndicator color={theme.colors.white} />
+                      ) : (
+                        <Text style={styles.loginButtonText}>{t('authSignIn')}</Text>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.signupButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={() => {
+                        setShowSignup(true);
+                        setAuthError(null);
+                      }}
+                      disabled={authLoading}
+                    >
+                      <Text style={styles.signupButtonText}>{t('authCreateAccount')}</Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       ) : (
         <FlatList
           ref={listRef}
@@ -1392,11 +1402,15 @@ const styles = StyleSheet.create({
     paddingTop: 72,
     paddingBottom: 28,
   },
+  authKeyboardAvoiding: {
+    flex: 1,
+  },
   authScroll: {
     flex: 1,
   },
   authScrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
   },
   authLanguageRow: {
     width: '100%',

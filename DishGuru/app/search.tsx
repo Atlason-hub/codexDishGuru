@@ -1,9 +1,11 @@
 import {
   ActivityIndicator,
-  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
   LayoutAnimation,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
@@ -285,6 +287,7 @@ const buildMenuRows = (
 export default function SearchScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
+  const scrollRef = useRef<ScrollView | null>(null);
   const [restaurantDropdownOpen, setRestaurantDropdownOpen] = useState(false);
   const [dishDropdownOpen, setDishDropdownOpen] = useState(false);
   const [restaurantQuery, setRestaurantQuery] = useState('');
@@ -313,6 +316,7 @@ export default function SearchScreen() {
     () => new Set()
   );
   const [apiMenuLoading, setApiMenuLoading] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   const trimmedRestaurant = debouncedRestaurant.trim();
   const trimmedDish = debouncedDish.trim();
@@ -321,6 +325,19 @@ export default function SearchScreen() {
     if (Platform.OS === 'android') {
       UIManager.setLayoutAnimationEnabledExperimental?.(true);
     }
+  }, []);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardInset(Platform.OS === 'android' ? 320 : 24);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardInset(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -615,6 +632,20 @@ export default function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoiding}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          keyboardInset > 0 ? { paddingBottom: 24 + keyboardInset } : null,
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
           style={styles.backButton}
@@ -689,6 +720,11 @@ export default function SearchScreen() {
                   }
                 }}
                 textAlign={isRTL ? 'right' : 'left'}
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({ y: 120, animated: true });
+                  }, 120);
+                }}
               />
               {restaurantQuery.trim().length > 0 ? (
                 <Pressable
@@ -707,17 +743,11 @@ export default function SearchScreen() {
               ) : null}
             </View>
             {restaurantRows.length > 0 ? (
-              <FlatList
-                data={restaurantRows}
-                keyExtractor={(item) => item.id}
-                initialNumToRender={16}
-                maxToRenderPerBatch={16}
-                updateCellsBatchingPeriod={50}
-                windowSize={6}
-                removeClippedSubviews
-                renderItem={({ item }) =>
+              <View>
+                {restaurantRows.map((item) =>
                   item.type === 'header' ? (
                     <Pressable
+                      key={item.id}
                       style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
                       onPress={() =>
                         setCollapsedRestaurantCategories((prev) => {
@@ -750,6 +780,7 @@ export default function SearchScreen() {
                     </Pressable>
                   ) : (
                     <Pressable
+                      key={item.id}
                       style={styles.dropdownItem}
                       onPress={() => {
                         if (mode === 'api') {
@@ -776,8 +807,8 @@ export default function SearchScreen() {
                       </Text>
                     </Pressable>
                   )
-                }
-              />
+                )}
+              </View>
             ) : loading && trimmedRestaurant.length > 0 ? (
               <View style={[styles.dropdownLoadingRow, !isRTL && styles.dropdownLoadingRowLtr]}>
                 <ActivityIndicator size="small" color={theme.colors.textMuted} />
@@ -837,6 +868,11 @@ export default function SearchScreen() {
                 onChangeText={setDishQuery}
                 editable={mode !== 'api' || Boolean(selectedApiRestaurantId)}
                 textAlign={isRTL ? 'right' : 'left'}
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({ y: 260, animated: true });
+                  }, 120);
+                }}
               />
               {dishQuery.trim().length > 0 ? (
                 <Pressable
@@ -896,17 +932,11 @@ export default function SearchScreen() {
                     </Text>
                   </Pressable>
                 </View>
-                <FlatList
-                  data={apiMenuRows}
-                  keyExtractor={(item) => item.id}
-                  initialNumToRender={16}
-                  maxToRenderPerBatch={16}
-                  updateCellsBatchingPeriod={50}
-                  windowSize={6}
-                  removeClippedSubviews
-                  renderItem={({ item }) =>
+                <View>
+                  {apiMenuRows.map((item) =>
                     item.type === 'header' ? (
                       <Pressable
+                        key={item.id}
                         style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
                         onPress={() =>
                           setCollapsedApiMenuCategories((prev) => {
@@ -939,6 +969,7 @@ export default function SearchScreen() {
                       </Pressable>
                     ) : (
                       <Pressable
+                        key={item.id}
                         style={styles.dropdownItem}
                         onPress={() => {
                           router.push({
@@ -956,8 +987,8 @@ export default function SearchScreen() {
                         </Text>
                       </Pressable>
                     )
-                  }
-                />
+                  )}
+                </View>
               </>
             ) : mode === 'db' && dishRows.length > 0 ? (
               <>
@@ -997,17 +1028,11 @@ export default function SearchScreen() {
                     </Text>
                   </Pressable>
                 </View>
-                <FlatList
-                  data={dishRows}
-                  keyExtractor={(item) => item.id}
-                  initialNumToRender={16}
-                  maxToRenderPerBatch={16}
-                  updateCellsBatchingPeriod={50}
-                  windowSize={6}
-                  removeClippedSubviews
-                  renderItem={({ item }) =>
+                <View>
+                  {dishRows.map((item) =>
                     item.type === 'header' ? (
                       <Pressable
+                        key={item.id}
                         style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
                         onPress={() =>
                           setCollapsedDishCategories((prev) => {
@@ -1040,6 +1065,7 @@ export default function SearchScreen() {
                       </Pressable>
                     ) : (
                       <Pressable
+                        key={item.id}
                         style={styles.dropdownItem}
                         onPress={() => {
                           router.push({
@@ -1056,8 +1082,8 @@ export default function SearchScreen() {
                         </Text>
                       </Pressable>
                     )
-                  }
-                />
+                  )}
+                </View>
               </>
             ) : mode === 'db' && loading && trimmedDish.length > 0 ? (
               <View style={styles.dropdownLoadingRow}>
@@ -1102,6 +1128,8 @@ export default function SearchScreen() {
         </View>
       ) : null}
 
+      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -1110,7 +1138,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  keyboardAvoiding: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   headerRow: {
     flexDirection: 'row',

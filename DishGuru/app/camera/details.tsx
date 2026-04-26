@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -231,6 +230,12 @@ export default function CameraDetailsScreen() {
   const { isRTL, t } = useLocale();
   const params = useLocalSearchParams();
   const scrollRef = useRef<ScrollView | null>(null);
+  const hasNudgedRestaurantSearchRef = useRef(false);
+  const hasNudgedDishSearchRef = useRef(false);
+  const restaurantSearchFocusedRef = useRef(false);
+  const dishSearchFocusedRef = useRef(false);
+  const keyboardVisibleRef = useRef(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const photoUri = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
   const photoBase64 = typeof params.photoBase64 === 'string' ? params.photoBase64 : '';
   const presetRestaurantId =
@@ -274,16 +279,46 @@ export default function CameraDetailsScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    });
-    return () => sub.remove();
-  }, []);
-
-  useEffect(() => {
     if (Platform.OS === 'android') {
       UIManager.setLayoutAnimationEnabledExperimental?.(true);
     }
+  }, []);
+
+  useEffect(() => {
+    const scrollActiveSearchIntoView = () => {
+      if (restaurantSearchFocusedRef.current) {
+        scrollRef.current?.scrollTo({
+          y: Platform.OS === 'android' ? 760 : 260,
+          animated: true,
+        });
+        return;
+      }
+      if (dishSearchFocusedRef.current) {
+        scrollRef.current?.scrollTo({
+          y: Platform.OS === 'android' ? 760 : 260,
+          animated: true,
+        });
+      }
+    };
+
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      keyboardVisibleRef.current = true;
+      setKeyboardInset(Platform.OS === 'android' ? 320 : 24);
+      setTimeout(scrollActiveSearchIntoView, 80);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardVisibleRef.current = false;
+      setKeyboardInset(0);
+      restaurantSearchFocusedRef.current = false;
+      dishSearchFocusedRef.current = false;
+      hasNudgedRestaurantSearchRef.current = false;
+      hasNudgedDishSearchRef.current = false;
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -406,15 +441,13 @@ export default function CameraDetailsScreen() {
   }, [fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
-    >
       <ScrollView
         ref={scrollRef}
         style={styles.body}
-        contentContainerStyle={styles.bodyContent}
+        contentContainerStyle={[
+          styles.bodyContent,
+          keyboardInset > 0 ? { paddingBottom: 24 + keyboardInset } : null,
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <Pressable onPress={Keyboard.dismiss}>
@@ -500,6 +533,22 @@ export default function CameraDetailsScreen() {
                   placeholderTextColor={theme.colors.textMuted}
                   value={search}
                   onChangeText={(text) => setSearch(text)}
+                  onFocus={() => {
+                    restaurantSearchFocusedRef.current = true;
+                    dishSearchFocusedRef.current = false;
+                    if (hasNudgedRestaurantSearchRef.current) return;
+                    hasNudgedRestaurantSearchRef.current = true;
+                    if (keyboardVisibleRef.current) {
+                      scrollRef.current?.scrollTo({
+                        y: Platform.OS === 'android' ? 760 : 260,
+                        animated: true,
+                      });
+                    }
+                  }}
+                  onBlur={() => {
+                    hasNudgedRestaurantSearchRef.current = false;
+                    restaurantSearchFocusedRef.current = false;
+                  }}
                 />
               </View>
               {restaurants.length === 0 ? (
@@ -622,6 +671,22 @@ export default function CameraDetailsScreen() {
                   placeholderTextColor={theme.colors.textMuted}
                   value={dishSearch}
                   onChangeText={(text) => setDishSearch(text)}
+                  onFocus={() => {
+                    dishSearchFocusedRef.current = true;
+                    restaurantSearchFocusedRef.current = false;
+                    if (hasNudgedDishSearchRef.current) return;
+                    hasNudgedDishSearchRef.current = true;
+                    if (keyboardVisibleRef.current) {
+                      scrollRef.current?.scrollTo({
+                        y: Platform.OS === 'android' ? 760 : 260,
+                        animated: true,
+                      });
+                    }
+                  }}
+                  onBlur={() => {
+                    hasNudgedDishSearchRef.current = false;
+                    dishSearchFocusedRef.current = false;
+                  }}
                 />
               </View>
               {menuLoading ? (
@@ -792,7 +857,6 @@ export default function CameraDetailsScreen() {
         </Pressable>
         </Pressable>
       </ScrollView>
-    </KeyboardAvoidingView>
   );
 }
 
@@ -808,7 +872,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bodyContent: {
-    paddingBottom: Platform.OS === 'android' ? 48 : 24,
+    paddingBottom: 24,
   },
   scrollHint: {
     alignSelf: 'flex-start',
