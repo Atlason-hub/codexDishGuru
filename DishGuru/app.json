@@ -25,7 +25,7 @@
       "package": "com.atlas.dishguru",
       "adaptiveIcon": {
         "backgroundColor": "#F9EDE4",
-        "foregroundImage": "./assets/images/play-store-icon.png"
+        "foregroundImage": "./assets/images/android-adaptive-foreground.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
