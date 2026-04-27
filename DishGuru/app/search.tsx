@@ -645,6 +645,8 @@ export default function SearchScreen() {
           keyboardInset > 0 ? { paddingBottom: 24 + keyboardInset } : null,
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        showsVerticalScrollIndicator={false}
       >
       <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
@@ -1099,7 +1101,11 @@ export default function SearchScreen() {
         ) : null}
       </View>
 
-      {headerText ? <Text style={styles.resultsHeader}>{headerText}</Text> : null}
+      {headerText ? (
+        <View style={styles.resultsHeaderWrap}>
+          <Text style={[styles.resultsHeader, !isRTL && styles.resultsHeaderLtr]}>{headerText}</Text>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.resultsBox}>
@@ -1148,6 +1154,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 24,
+    flexGrow: 1,
   },
   headerRow: {
     flexDirection: 'row',
@@ -1278,11 +1285,19 @@ const styles = StyleSheet.create({
   modeTextActive: {
     color: theme.colors.accent,
   },
+  resultsHeaderWrap: {
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   resultsHeader: {
-    marginTop: 10,
-    fontSize: 12,
+    fontSize: 14,
     color: theme.colors.textMuted,
     textAlign: 'right',
+    lineHeight: 22,
+  },
+  resultsHeaderLtr: {
+    textAlign: 'left',
   },
   dropdownList: {
     borderWidth: 1,

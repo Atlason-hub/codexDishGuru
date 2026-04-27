@@ -1,7 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { SvgXml } from 'react-native-svg';
-import { RATING_SVGS, getSelectedEmojiIndex } from '../lib/ratings';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { RATING_IMAGES, getSelectedEmojiIndex } from '../lib/ratings';
 import { useLocale } from '../lib/locale';
 
 type EmojiRatingInputProps = {
@@ -34,18 +33,16 @@ export default function EmojiRatingInput({
         ]}
       >
       {indices.map((idx) => {
-        const xml = RATING_SVGS[idx];
-        const opacity = selectedIndex === idx ? 1 : 0.6;
+        const opacity = selectedIndex === idx ? 1 : 0.38;
         return (
           <View
             key={`face-${idx}`}
             style={[styles.item, { width: size + 2, height: size + 2 }]}
           >
-            <SvgXml
-              xml={xml}
-              width={size}
-              height={size}
-              style={{ opacity }}
+            <Image
+              source={RATING_IMAGES[idx]}
+              style={{ width: size, height: size, opacity }}
+              resizeMode="contain"
             />
             <Pressable
               style={[styles.half, styles.halfLeft]}

@@ -23,7 +23,7 @@ export const getStarStates = (stars: number) => {
   return list;
 };
 
-export { RATING_SVGS } from './ratingIcons';
+export { RATING_IMAGES } from './ratingIcons';
 
 export const getSelectedEmojiIndex = (stars: number) => {
   if (!Number.isFinite(stars) || stars <= 0) return null;

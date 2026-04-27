@@ -64,6 +64,7 @@ function AppShell() {
 
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [, setThemeTick] = useState(0);
 
   useEffect(() => {
@@ -78,7 +79,20 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    clearInvalidStoredSession();
+    let isMounted = true;
+    const prepareAuth = async () => {
+      try {
+        await clearInvalidStoredSession();
+      } finally {
+        if (isMounted) {
+          setAuthReady(true);
+        }
+      }
+    };
+    prepareAuth();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -140,7 +154,7 @@ export default function RootLayout() {
     return unsubscribe;
   }, []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !authReady) {
     return null;
   }
 

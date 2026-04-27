@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import {
   Animated,
+  Image,
   StyleProp,
   StyleSheet,
   Text,
@@ -8,8 +9,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { SvgXml } from 'react-native-svg';
-import { RATING_SVGS, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
+import { RATING_IMAGES, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
 import { useLocale } from '../lib/locale';
 
 type Props = {
@@ -48,14 +48,13 @@ export default function RatingValueRow({
                 key={`${label}-${idx}`}
                 style={iconStyle}
               >
-                <SvgXml
-                  xml={RATING_SVGS[idx]}
-                  width={iconSize}
-                  height={iconSize}
+                <Image
+                  source={RATING_IMAGES[idx]}
                   style={[
                     styles.emojiIcon,
                     isRTL ? styles.emojiIconRtl : styles.emojiIconLtr,
-                    { opacity: selectedIndex === idx ? 1 : 0.6 },
+                    { width: iconSize, height: iconSize },
+                    { opacity: selectedIndex === idx ? 1 : 0.38 },
                   ]}
                 />
               </View>
@@ -77,6 +76,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
   },
   emojiIcon: {
+    resizeMode: 'contain',
   },
   emojiIconRtl: {
     marginLeft: 2,

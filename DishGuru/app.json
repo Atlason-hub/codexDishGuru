@@ -4,23 +4,28 @@
     "slug": "hello-world-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-store-icon.png",
     "scheme": "dishguru",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "bundleIdentifier": "com.dishguru.app",
+      "buildNumber": "1",
+      "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow DishGuru to access your camera to take dish photos."
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Allow DishGuru to access your camera to take dish photos.",
+        "LSApplicationQueriesSchemes": [
+          "wolt",
+          "tenbis"
+        ]
       }
     },
     "android": {
       "package": "com.atlas.dishguru",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#F9EDE4",
+        "foregroundImage": "./assets/images/play-store-icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
