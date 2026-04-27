@@ -90,7 +90,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    setUser(null);
+    setRole(null);
+
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      throw new Error(error.message);
+    }
   };
 
   const confirmPassword = async (password: string) => {
