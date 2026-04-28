@@ -22,7 +22,7 @@
       }
     },
     "android": {
-      "package": "com.atlas.dishguru",
+      "package": "com.dishguru.app",
       "adaptiveIcon": {
         "backgroundColor": "#F9EDE4",
         "foregroundImage": "./assets/images/android-adaptive-foreground.png"
