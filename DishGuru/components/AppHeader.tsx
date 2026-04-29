@@ -291,10 +291,11 @@ export default function AppHeader() {
     </Pressable>
   );
 
-  const shouldShowHeader =
-    isAuthenticated || isGuestMode || guestModeParam === '1';
-  const isGuestHeader = isGuestMode || guestModeParam === '1';
-  const shouldShowAuthenticatedMenu = !isGuestHeader;
+  const hasSignedInSession = isAuthenticated || Boolean(currentUserId);
+  const isGuestHeader =
+    !hasSignedInSession && (isGuestMode || guestModeParam === '1');
+  const shouldShowHeader = hasSignedInSession || isGuestHeader;
+  const shouldShowAuthenticatedMenu = hasSignedInSession;
 
   if (!shouldShowHeader) {
     return null;
