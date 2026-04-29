@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -121,14 +130,20 @@ export default function AccountScreen() {
   }, []);
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      bounces={false}
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoiding}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
     >
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.container}>
         <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
           <Pressable
             style={styles.backButton}
@@ -225,7 +240,6 @@ export default function AccountScreen() {
                   try {
                     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
                     if (!permission.granted) {
-                      showAppAlert(t('accountPermissionRequired'), t('accountAllowGallery'));
                       return;
                     }
                     const result = await ImagePicker.launchImageLibraryAsync({
@@ -263,7 +277,6 @@ export default function AccountScreen() {
                   try {
                     const permission = await ImagePicker.requestCameraPermissionsAsync();
                     if (!permission.granted) {
-                      showAppAlert(t('accountPermissionRequired'), t('accountAllowCamera'));
                       return;
                     }
                     const result = await ImagePicker.launchCameraAsync({
@@ -438,24 +451,29 @@ export default function AccountScreen() {
         >
           <Text style={styles.deleteAccountButtonText}>{t('accountDeleteAction')}</Text>
         </Pressable>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoiding: {
+    flex: 1,
+  },
   scroll: {
     flex: 1,
     backgroundColor: theme.colors.background,
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 48,
   },
   container: {
     backgroundColor: theme.colors.background,
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 32,
     alignItems: 'center',
   },
   title: {

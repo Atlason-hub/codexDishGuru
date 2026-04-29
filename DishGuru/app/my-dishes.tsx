@@ -15,6 +15,7 @@ import { openVendorDish } from '../lib/orderVendor';
 import { fetchFavoritesMap, fetchOrderVendorForUser } from '../lib/appData';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { useLocale } from '../lib/locale';
+import { loadGuestMode } from '../lib/guestMode';
 
 type DishAssociation = {
   id: string;
@@ -192,14 +193,17 @@ export default function MyDishesScreen() {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
       const userId = data.session?.user?.id ?? null;
+      const guestModeEnabled = !userId ? await loadGuestMode() : false;
       setCurrentUserId(userId);
+      if (!userId || guestModeEnabled) {
+        router.replace('/');
+        return;
+      }
       const cachedAvatar = await loadCachedAvatar(userId);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
-      if (userId) {
-        await loadFavorites(userId);
-        await loadOrderVendor(userId);
-        await loadMyDishes(userId, { showLoading: dishAssociations.length === 0 });
-      }
+      await loadFavorites(userId);
+      await loadOrderVendor(userId);
+      await loadMyDishes(userId, { showLoading: dishAssociations.length === 0 });
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       const userId = session?.user?.id ?? null;
@@ -212,6 +216,7 @@ export default function MyDishesScreen() {
         setFavorites({});
         setDishAssociations([]);
         setOrderVendor(null);
+        router.replace('/');
       }
     });
     return () => {
@@ -232,8 +237,22 @@ export default function MyDishesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshContent();
-    }, [refreshContent])
+      let active = true;
+      (async () => {
+        const { data } = await supabase.auth.getSession();
+        const userId = data.session?.user?.id ?? null;
+        const guestModeEnabled = !userId ? await loadGuestMode() : false;
+        if (active && (!userId || guestModeEnabled)) {
+          router.replace({ pathname: '/', params: { refresh: String(Date.now()) } });
+          return;
+        }
+        refreshContent();
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [refreshContent, router])
   );
 
   useEffect(() => {

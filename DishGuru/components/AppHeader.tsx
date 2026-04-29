@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
@@ -11,6 +11,8 @@ import LegalModal from './LegalModal';
 import { theme } from '../lib/theme';
 import { applyPaletteFromLogo } from '../lib/brandPalette';
 import { getLegalUrl, useLocale } from '../lib/locale';
+import { fetchGlobalCompanyContext } from '../lib/appData';
+import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 let lastKnownCompanyLogoUrl: string | null = null;
@@ -62,11 +64,25 @@ const fetchCompanyLogoForUser = async (userId: string, fallbackDomain?: string |
     .select('logo_url')
     .eq('id', companyIdValue)
     .maybeSingle();
-  return resolveLogoUrl(company?.logo_url ?? null);
+  return resolveLogoUrl((company as any)?.logo_url ?? null);
 };
 
 export default function AppHeader() {
   const router = useRouter();
+  const pathname = usePathname();
+  const globalParams = useGlobalSearchParams();
+  const refreshParam =
+    typeof globalParams.refresh === 'string' ? globalParams.refresh : '';
+  const headerSyncParam =
+    typeof globalParams.headerSync === 'string' ? globalParams.headerSync : '';
+  const guestModeParam =
+    typeof globalParams.guestMode === 'string' ? globalParams.guestMode : '';
+  const favoritesParam =
+    typeof globalParams.favorites === 'string' ? globalParams.favorites : '';
+  const restaurantIdParam =
+    typeof globalParams.restaurantId === 'string' ? globalParams.restaurantId : '';
+  const restaurantNameParam =
+    typeof globalParams.restaurantName === 'string' ? globalParams.restaurantName : '';
   const insets = useSafeAreaInsets();
   const { isRTL, locale, t } = useLocale();
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(lastKnownCompanyLogoUrl);
@@ -75,12 +91,36 @@ export default function AppHeader() {
   const [legalModal, setLegalModal] = useState<{ title: string; url: string } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const lastPaletteLogoRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!menuVisible) {
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      const guestModeEnabled = !data.session?.user?.id ? await loadGuestMode() : false;
+      setIsAuthenticated(Boolean(data.session?.user?.id));
+      setCurrentUserId(data.session?.user?.id ?? null);
+      setIsGuestMode(guestModeEnabled);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [menuVisible]);
+
+  useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => {
+    const syncHeaderState = async () => {
+      const { data } = await supabase.auth.getSession();
       if (!mounted) return;
+      const guestModeEnabled = !data.session?.user?.id ? await loadGuestMode() : false;
+      setIsGuestMode(guestModeEnabled);
       const sessionEmail = data.session?.user?.email ?? null;
       setIsAuthenticated(Boolean(data.session?.user?.id));
       setCurrentUserId(data.session?.user?.id ?? null);
@@ -115,10 +155,28 @@ export default function AppHeader() {
             applyPaletteFromLogo(url);
           }
         }
+      } else if (guestModeEnabled) {
+        const globalContext = await fetchGlobalCompanyContext();
+        const resolved = resolveLogoUrl(globalContext?.logoUrl ?? null);
+        console.info('[guest-mode] header resolved guest logo', {
+          hasContext: Boolean(globalContext),
+          hasLogo: Boolean(resolved),
+        });
+        setCompanyLogoUrl(resolved);
+        lastKnownCompanyLogoUrl = resolved;
+        if (resolved && lastPaletteLogoRef.current !== resolved) {
+          lastPaletteLogoRef.current = resolved;
+          applyPaletteFromLogo(resolved);
+        }
+      } else {
+        setCompanyLogoUrl(null);
+        lastKnownCompanyLogoUrl = null;
       }
-    });
+    };
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    syncHeaderState();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const sessionEmail = session?.user?.email ?? null;
       setIsAuthenticated(Boolean(session?.user?.id));
       setCurrentUserId(session?.user?.id ?? null);
@@ -131,6 +189,7 @@ export default function AppHeader() {
         cacheAvatar(session?.user?.id ?? null, null);
       }
       if (session?.user?.id) {
+        setIsGuestMode(false);
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail)).then((url) => {
           if (url) {
             setCompanyLogoUrl(url);
@@ -143,11 +202,28 @@ export default function AppHeader() {
           }
         });
       } else {
-        setCompanyLogoUrl(null);
-        lastKnownCompanyLogoUrl = null;
-        clearCachedLogo();
-        lastPaletteLogoRef.current = null;
-        applyPaletteFromLogo(null);
+        const guestModeEnabled = await loadGuestMode();
+        setIsGuestMode(guestModeEnabled);
+        if (guestModeEnabled) {
+          const globalContext = await fetchGlobalCompanyContext();
+          const resolved = resolveLogoUrl(globalContext?.logoUrl ?? null);
+          console.info('[guest-mode] header auth-change guest logo', {
+            hasContext: Boolean(globalContext),
+            hasLogo: Boolean(resolved),
+          });
+          setCompanyLogoUrl(resolved);
+          lastKnownCompanyLogoUrl = resolved;
+          if (resolved && lastPaletteLogoRef.current !== resolved) {
+            lastPaletteLogoRef.current = resolved;
+            applyPaletteFromLogo(resolved);
+          }
+        } else {
+          setCompanyLogoUrl(null);
+          lastKnownCompanyLogoUrl = null;
+          clearCachedLogo();
+          lastPaletteLogoRef.current = null;
+          applyPaletteFromLogo(null);
+        }
       }
     });
 
@@ -155,7 +231,7 @@ export default function AppHeader() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, []);
+  }, [pathname, refreshParam, headerSyncParam]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -166,6 +242,34 @@ export default function AppHeader() {
     await cacheAvatar(currentUserId, null);
     await clearCachedLogo();
     router.replace('/');
+  };
+
+  const goToLogin = async () => {
+    await setGuestModeEnabled(false);
+    setIsGuestMode(false);
+    setMenuVisible(false);
+    router.replace('/');
+  };
+
+  const goHome = () => {
+    setMenuVisible(false);
+    const isPlainHome =
+      pathname === '/' &&
+      guestModeParam !== '1' &&
+      favoritesParam !== '1' &&
+      restaurantIdParam.length === 0 &&
+      restaurantNameParam.length === 0;
+    if (isPlainHome) {
+      return;
+    }
+    router.replace({
+      pathname: '/',
+      params: {
+        refresh: String(Date.now()),
+        headerSync: String(Date.now()),
+        guestMode: isGuestMode ? '1' : '0',
+      },
+    });
   };
 
   const renderMenuItem = (label: string, icon: React.ReactNode, onPress: () => void) => (
@@ -187,7 +291,12 @@ export default function AppHeader() {
     </Pressable>
   );
 
-  if (!isAuthenticated) {
+  const shouldShowHeader =
+    isAuthenticated || isGuestMode || guestModeParam === '1';
+  const isGuestHeader = isGuestMode || guestModeParam === '1';
+  const shouldShowAuthenticatedMenu = !isGuestHeader;
+
+  if (!shouldShowHeader) {
     return null;
   }
 
@@ -204,7 +313,7 @@ export default function AppHeader() {
           </Pressable>
         )}
       </View>
-      <Pressable style={styles.logoContainer} onPress={() => router.push('/')}>
+      <Pressable style={styles.logoContainer} onPress={goHome}>
         {companyLogoUrl ? (
           <CachedLogo
             uri={companyLogoUrl}
@@ -249,26 +358,30 @@ export default function AppHeader() {
             >
               <Ionicons name="close" size={20} color={theme.colors.textMuted} />
             </Pressable>
-            {renderMenuItem(
-              t('headerMenuAccount'),
-              avatarUrl ? (
-                <CachedLogo uri={avatarUrl} style={styles.menuAvatar} />
-              ) : (
-                <Ionicons name="person-circle-outline" size={20} color={theme.colors.accent} />
-              ),
-              () => {
-                setMenuVisible(false);
-                router.push('/account');
-              }
-            )}
-            {renderMenuItem(
-              t('headerMenuMyDishes'),
-              <Ionicons name="restaurant-outline" size={20} color={theme.colors.accent} />,
-              () => {
-                setMenuVisible(false);
-                router.push('/my-dishes');
-              }
-            )}
+            {shouldShowAuthenticatedMenu
+              ? renderMenuItem(
+                  t('headerMenuAccount'),
+                  avatarUrl ? (
+                    <CachedLogo uri={avatarUrl} style={styles.menuAvatar} />
+                  ) : (
+                    <Ionicons name="person-circle-outline" size={20} color={theme.colors.accent} />
+                  ),
+                  () => {
+                    setMenuVisible(false);
+                    router.push('/account');
+                  }
+                )
+              : null}
+            {shouldShowAuthenticatedMenu
+              ? renderMenuItem(
+                  t('headerMenuMyDishes'),
+                  <Ionicons name="restaurant-outline" size={20} color={theme.colors.accent} />,
+                  () => {
+                    setMenuVisible(false);
+                    router.push('/my-dishes');
+                  }
+                )
+              : null}
             {renderMenuItem(
               t('headerMenuFavorites'),
               <Ionicons name="heart-outline" size={20} color={theme.colors.accent} />,
@@ -300,9 +413,9 @@ export default function AppHeader() {
               }
             )}
             {renderMenuItem(
-              t('headerMenuSignOut'),
+              shouldShowAuthenticatedMenu ? t('headerMenuSignOut') : t('headerMenuSignIn'),
               <Ionicons name="log-out-outline" size={20} color={theme.colors.accent} />,
-              signOut
+              shouldShowAuthenticatedMenu ? signOut : goToLogin
             )}
           </View>
         </View>

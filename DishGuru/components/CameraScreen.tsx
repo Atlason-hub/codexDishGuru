@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import React, { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useLocale } from '../lib/locale';
@@ -50,6 +50,15 @@ export default function CameraScreen() {
     if (permission?.granted) return true;
     const response = await requestPermission();
     return response.granted;
+  };
+
+  const handlePermissionAction = async () => {
+    if (permission?.granted) return;
+    if (permission?.canAskAgain) {
+      await ensurePermission();
+      return;
+    }
+    await Linking.openSettings();
   };
 
   const cropToViewfinder = async (photo: { uri: string; width: number; height: number }) => {
@@ -167,8 +176,10 @@ export default function CameraScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.permissionText}>{t('cameraPermissionRequired')}</Text>
-        <Pressable style={styles.permissionButton} onPress={ensurePermission}>
-          <Text style={styles.permissionButtonText}>{t('cameraEnablePermission')}</Text>
+        <Pressable style={styles.permissionButton} onPress={() => void handlePermissionAction()}>
+          <Text style={styles.permissionButtonText}>
+            {permission.canAskAgain ? t('cameraEnablePermission') : t('commonOpenSettings')}
+          </Text>
         </Pressable>
       </View>
     );

@@ -18,7 +18,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
-import { fetchCompanyIdForUser, fetchVisibleDishes } from '../lib/appData';
+import { fetchCompanyIdForUser, fetchGlobalCompanyContext, fetchVisibleDishes } from '../lib/appData';
+import { showAppDialog } from '../lib/appDialog';
 import { useLocale } from '../lib/locale';
 
 type DishAssociation = {
@@ -288,6 +289,7 @@ export default function SearchScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
   const scrollRef = useRef<ScrollView | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [restaurantDropdownOpen, setRestaurantDropdownOpen] = useState(false);
   const [dishDropdownOpen, setDishDropdownOpen] = useState(false);
   const [restaurantQuery, setRestaurantQuery] = useState('');
@@ -320,6 +322,26 @@ export default function SearchScreen() {
 
   const trimmedRestaurant = debouncedRestaurant.trim();
   const trimmedDish = debouncedDish.trim();
+
+  useEffect(() => {
+    let mounted = true;
+    const syncAuthState = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setIsAuthenticated(Boolean(data.session?.user));
+    };
+    syncAuthState();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setIsAuthenticated(Boolean(session?.user));
+    });
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -407,11 +429,23 @@ export default function SearchScreen() {
   }, [apiMenuCategories]);
 
   useEffect(() => {
+    if (!isAuthenticated && mode === 'db') {
+      setMode('api');
+    }
+  }, [isAuthenticated, mode]);
+
+  useEffect(() => {
     let mounted = true;
     const loadCompanyAddress = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
-      if (!userId) return;
+      if (!userId) {
+        const globalContext = await fetchGlobalCompanyContext();
+        if (!mounted) return;
+        setCompanyCityId(globalContext?.cityId ?? null);
+        setCompanyStreetId(globalContext?.streetId ?? null);
+        return;
+      }
       const { data: profile } = await supabase
         .from('AppUsers')
         .select('company_id')
@@ -667,14 +701,16 @@ export default function SearchScreen() {
             {t('searchAllDishes')}
           </Text>
         </Pressable>
-        <Pressable
-          style={[styles.modeButton, mode === 'db' && styles.modeButtonActive]}
-          onPress={() => setMode('db')}
-        >
-          <Text style={[styles.modeText, mode === 'db' && styles.modeTextActive]}>
-            {t('searchUploadedDishes')}
-          </Text>
-        </Pressable>
+        {isAuthenticated ? (
+          <Pressable
+            style={[styles.modeButton, mode === 'db' && styles.modeButtonActive]}
+            onPress={() => setMode('db')}
+          >
+            <Text style={[styles.modeText, mode === 'db' && styles.modeTextActive]}>
+              {t('searchUploadedDishes')}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.dropdownContainer}>
@@ -974,6 +1010,13 @@ export default function SearchScreen() {
                         key={item.id}
                         style={styles.dropdownItem}
                         onPress={() => {
+                          if (!isAuthenticated) {
+                            showAppDialog({
+                              title: t('authGuestActionTitle'),
+                              message: t('authGuestActionMessage'),
+                            });
+                            return;
+                          }
                           router.push({
                             pathname: '/camera/details',
                             params: {
@@ -1101,7 +1144,7 @@ export default function SearchScreen() {
         ) : null}
       </View>
 
-      {headerText ? (
+      {headerText && !restaurantDropdownOpen && !dishDropdownOpen ? (
         <View style={styles.resultsHeaderWrap}>
           <Text style={[styles.resultsHeader, !isRTL && styles.resultsHeaderLtr]}>{headerText}</Text>
         </View>
@@ -1303,9 +1346,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 12,
-    maxHeight: 240,
     backgroundColor: theme.colors.card,
     marginTop: 10,
+    overflow: 'hidden',
   },
   dropdownControlsRow: {
     flexDirection: 'row-reverse',

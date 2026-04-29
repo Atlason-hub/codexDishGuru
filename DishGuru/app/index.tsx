@@ -30,9 +30,17 @@ import LegalModal from '../components/LegalModal';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
-import { fetchCompanyIdForUser, fetchFavoritesMap, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
+import {
+  fetchCompanyIdForUser,
+  fetchFavoritesMap,
+  fetchGlobalCompanyContext,
+  fetchGlobalDishes,
+  fetchUserAvatarMaps,
+  fetchVisibleDishes,
+} from '../lib/appData';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { getLegalUrl, Locale, useLocale } from '../lib/locale';
+import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 const primaryActionColor = '#C75D2C';
@@ -72,6 +80,7 @@ export default function HomeScreen() {
   const [homeSearch, setHomeSearch] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -95,6 +104,7 @@ export default function HomeScreen() {
   const appStateRef = useRef(AppState.currentState);
   const cacheHydratedRef = useRef(false);
   const lastRefreshRef = useRef(0);
+  const guestActivationInFlightRef = useRef(false);
   const loadDishAssociationsRef = useRef<
     ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
   >(null);
@@ -160,7 +170,11 @@ export default function HomeScreen() {
   };
 
 
-  const loadDishAssociations = useCallback(async (options?: { useCache?: boolean; showLoading?: boolean }) => {
+  const loadDishAssociations = useCallback(async (options?: {
+    useCache?: boolean;
+    showLoading?: boolean;
+    guestModeOverride?: boolean;
+  }) => {
     try {
       const shouldShowLoading = options?.showLoading ?? true;
       if (shouldShowLoading) {
@@ -171,6 +185,33 @@ export default function HomeScreen() {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       const userEmail = sessionData.session?.user?.email ?? null;
+      const guestModeEnabled =
+        options?.guestModeOverride ?? (!userId ? await loadGuestMode() : false);
+      if (!userId && guestModeEnabled) {
+        console.info('[guest-mode] loading home feed for guest');
+        const [globalRows, globalContext] = await Promise.all([
+          fetchGlobalDishes(),
+          fetchGlobalCompanyContext(),
+        ]);
+        const resolvedGlobalLogoUrl = resolveLogoUrl(globalContext?.logoUrl ?? null);
+        console.info('[guest-mode] guest home feed resolved', {
+          dishes: globalRows.length,
+          hasContext: Boolean(globalContext),
+          hasLogo: Boolean(resolvedGlobalLogoUrl),
+          orderVendor: globalContext?.orderVendor ?? null,
+        });
+        setDishAssociations(globalRows as DishAssociation[]);
+        await loadUserAvatars(globalRows as DishAssociation[]);
+        setFavorites({});
+        setCompanyLogoPath(globalContext?.logoUrl ?? null);
+        setCompanyLogoUrl(resolvedGlobalLogoUrl);
+        setOrderVendor(globalContext?.orderVendor ?? null);
+        await cacheLogo({
+          logoUrl: resolvedGlobalLogoUrl,
+          logoPath: globalContext?.logoUrl ?? null,
+        });
+        return;
+      }
       if (options?.useCache && userId && !cacheHydratedRef.current) {
         const cachedRaw = await AsyncStorage.getItem(getHomeCacheKey(userId));
         if (cachedRaw) {
@@ -258,6 +299,7 @@ export default function HomeScreen() {
       }
       if (!allowedUserIds || allowedUserIds.length === 0) {
         setDishAssociations([]);
+        setFavorites({});
         return;
       }
       const { data, error: fetchError } = await supabase
@@ -404,9 +446,10 @@ export default function HomeScreen() {
         setOrderVendor(null);
         return;
       }
-      const rawLogo = company.logo_url ?? null;
+      const rawLogo = company.logo_url ?? company.logo ?? null;
       const absoluteLogo = resolveLogoUrl(rawLogo);
       setCompanyLogoUrl(absoluteLogo);
+      setCompanyLogoPath(rawLogo);
       setOrderVendor(company.order_vendor ?? null);
     } catch {
       setCompanyLogoUrl(null);
@@ -429,33 +472,50 @@ export default function HomeScreen() {
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return;
-      setIsAuthenticated(Boolean(data.session));
-      setSessionChecked(true);
-      setCurrentUserId(data.session?.user?.id ?? null);
-      const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
-      if (cachedAvatar) setAvatarUrl(cachedAvatar);
-      const metaAvatar = await fetchAvatarFromAuth();
-      if (metaAvatar) {
-        setAvatarUrl(metaAvatar);
-        await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
-      }
-      const cached = await loadCachedLogo();
-      if (cached.logoUrl || cached.logoPath) {
-        const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
-        setCompanyLogoUrl(resolved);
-        setCompanyLogoPath(cached.logoPath);
-      }
-      if (data.session?.user?.id) {
-        const domain = getEmailDomain(data.session.user.email ?? null);
-        await Promise.all([
-          fetchCompanyLogoForUser(data.session.user.id, domain),
-          loadDishAssociations(),
-          loadFavorites(data.session.user.id),
-        ]);
-      }
+      try {
+        if (!mounted) return;
+        const guestModeEnabled = !data.session ? await loadGuestMode() : false;
+        setIsGuestMode(guestModeEnabled);
+        setIsAuthenticated(Boolean(data.session));
+        setCurrentUserId(data.session?.user?.id ?? null);
+        setSessionChecked(true);
+        void (async () => {
+          const [cachedAvatar, cached] = await Promise.all([
+            loadCachedAvatar(data.session?.user?.id ?? null),
+            loadCachedLogo(),
+          ]);
+          if (!mounted) return;
+          if (cachedAvatar) setAvatarUrl(cachedAvatar);
+          if (cached.logoUrl || cached.logoPath) {
+            const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
+            setCompanyLogoUrl(resolved);
+            setCompanyLogoPath(cached.logoPath);
+          }
+          const metaAvatar = await fetchAvatarFromAuth();
+          if (!mounted || !metaAvatar) return;
+          setAvatarUrl(metaAvatar);
+          await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
+        })();
+        if (data.session?.user?.id) {
+          const domain = getEmailDomain(data.session.user.email ?? null);
+          void fetchCompanyLogoForUser(data.session.user.id, domain);
+          void loadFavorites(data.session.user.id);
+          await loadDishAssociations({ useCache: true, showLoading: false });
+          void setGuestModeEnabled(false);
+        } else if (guestModeEnabled) {
+          await loadDishAssociations({ showLoading: false, guestModeOverride: true });
+        } else {
+          setDishAssociations([]);
+          setFavorites({});
+        }
+      } catch (error) {
+        console.warn('[guest-mode] initial session bootstrap failed', error);
+        setDishAssociations([]);
+        setFavorites({});
+        setError(error instanceof Error ? error.message : 'Unknown error');
+      } finally {}
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setIsAuthenticated(Boolean(session));
       setCurrentUserId(session?.user?.id ?? null);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
@@ -467,14 +527,28 @@ export default function HomeScreen() {
         cacheAvatar(session?.user?.id ?? null, null);
       }
       if (session?.user?.id) {
+        setIsGuestMode(false);
+        await setGuestModeEnabled(false);
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(session?.user?.email ?? null));
         loadDishAssociations();
         loadFavorites(session.user.id);
       } else {
-        setCompanyLogoUrl(null);
-        setOrderVendor(null);
-        clearCachedLogo();
+        const guestModeEnabled = await loadGuestMode();
+        setIsGuestMode(guestModeEnabled);
+        if (guestModeEnabled) {
+          if (!guestActivationInFlightRef.current) {
+            loadDishAssociations({ showLoading: false, guestModeOverride: true });
+          }
+          setFavorites({});
+        } else {
+          setDishAssociations([]);
+          setCompanyLogoUrl(null);
+          setOrderVendor(null);
+          setFavorites({});
+          clearCachedLogo();
+        }
       }
+      setSessionChecked(true);
     });
     return () => {
       mounted = false;
@@ -495,8 +569,10 @@ export default function HomeScreen() {
   useEffect(() => {
     if (currentUserId) {
       loadDishAssociations({ useCache: true, showLoading: false });
+    } else if (isGuestMode) {
+      loadDishAssociations({ showLoading: false });
     }
-  }, [currentUserId, loadDishAssociations, refreshParam]);
+  }, [currentUserId, isGuestMode, loadDishAssociations, refreshParam]);
 
   useEffect(() => {
     cacheHydratedRef.current = false;
@@ -510,7 +586,7 @@ export default function HomeScreen() {
   }, [homeSearch]);
 
   useEffect(() => {
-    if (!isAuthenticated || hasPulsedFabRef.current) return;
+    if ((!isAuthenticated && !isGuestMode) || hasPulsedFabRef.current) return;
     hasPulsedFabRef.current = true;
     Animated.sequence([
       Animated.delay(450),
@@ -527,27 +603,33 @@ export default function HomeScreen() {
         bounciness: 8,
       }),
     ]).start();
-  }, [fabPulse, isAuthenticated]);
+  }, [fabPulse, isAuthenticated, isGuestMode]);
 
   const refreshContent = useCallback(
     async (force = false) => {
-      if (!currentUserId) return;
+      if (!currentUserId && !isGuestMode) return;
       const now = Date.now();
       if (!force && now - lastRefreshRef.current < 60000) {
         return;
       }
       lastRefreshRef.current = now;
-      setIsRefreshing(true);
       try {
-        await Promise.all([
-          loadDishAssociations({ showLoading: false }),
-          loadFavorites(currentUserId),
-        ]);
+        if (currentUserId) {
+          setIsRefreshing(true);
+          await Promise.all([
+            loadDishAssociations({ showLoading: false }),
+            loadFavorites(currentUserId),
+          ]);
+        } else {
+          await loadDishAssociations({ showLoading: false });
+        }
       } finally {
-        setIsRefreshing(false);
+        if (currentUserId) {
+          setIsRefreshing(false);
+        }
       }
     },
-    [currentUserId, loadDishAssociations, loadFavorites]
+    [currentUserId, isGuestMode, loadDishAssociations, loadFavorites]
   );
 
   useFocusEffect(
@@ -569,6 +651,12 @@ export default function HomeScreen() {
   }, [currentUserId, refreshContent]);
 
   useEffect(() => {
+    if (!isGuestMode) {
+      setIsRefreshing(false);
+    }
+  }, [isGuestMode]);
+
+  useEffect(() => {
     if (!scrollParam) return;
     const offset = Number(scrollParam);
     if (!Number.isFinite(offset)) return;
@@ -577,6 +665,90 @@ export default function HomeScreen() {
     }, 50);
     return () => clearTimeout(id);
   }, [scrollParam]);
+
+  const openLoginFromGuest = useCallback(async () => {
+    await setGuestModeEnabled(false);
+    setIsGuestMode(false);
+    setAuthError(null);
+    setIsRefreshing(false);
+    setLoading(false);
+    setHasLoaded(false);
+    setDishAssociations([]);
+    setFavorites({});
+    router.replace({
+      pathname: '/',
+      params: {
+        headerSync: String(Date.now()),
+        guestMode: '0',
+      },
+    });
+  }, [router]);
+
+  const activateGuestMode = useCallback(async () => {
+    try {
+      guestActivationInFlightRef.current = true;
+      setAuthLoading(true);
+      setAuthError(null);
+      setIsRefreshing(false);
+      setLoading(false);
+      setHasLoaded(false);
+      setError(null);
+      await setGuestModeEnabled(true);
+      setIsGuestMode(true);
+      setIsAuthenticated(false);
+      setCurrentUserId(null);
+      setFavorites({});
+      setDishAssociations([]);
+      router.replace({
+        pathname: '/',
+        params: {
+          refresh: String(Date.now()),
+          headerSync: String(Date.now()),
+          guestMode: '1',
+        },
+      });
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.user?.id) {
+        await supabase.auth.signOut({ scope: 'local' });
+      }
+      console.info('[guest-mode] activating guest mode');
+      setShowSignup(false);
+      setAcceptedTerms(false);
+      setSessionChecked(true);
+      await loadDishAssociations({ showLoading: false, guestModeOverride: true });
+    } catch (error) {
+      console.warn('[guest-mode] activation failed', error);
+      await setGuestModeEnabled(false);
+      setIsGuestMode(false);
+      setIsAuthenticated(false);
+      setCurrentUserId(null);
+      setDishAssociations([]);
+      setFavorites({});
+      setHasLoaded(true);
+      setAuthError(t('authGenericError'));
+      setSessionChecked(true);
+      setLoading(false);
+    } finally {
+      guestActivationInFlightRef.current = false;
+      setAuthLoading(false);
+    }
+  }, [t, loadDishAssociations]);
+
+  const showGuestLoginDialog = useCallback(() => {
+    showAppDialog({
+      title: t('authGuestActionTitle'),
+      message: t('authGuestUploadMessage'),
+      actions: [
+        { text: t('commonCancel'), style: 'cancel' },
+        {
+          text: t('headerMenuSignIn'),
+          onPress: () => {
+            void openLoginFromGuest();
+          },
+        },
+      ],
+    });
+  }, [openLoginFromGuest, t]);
 
 
   const signIn = async () => {
@@ -594,6 +766,8 @@ export default function HomeScreen() {
       if (error) {
         throw error;
       }
+      await setGuestModeEnabled(false);
+      setIsGuestMode(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : t('authLoginFailed');
       setAuthError(toLocalizedAuthError(message));
@@ -667,6 +841,8 @@ export default function HomeScreen() {
           message: t('authVerifyEmailSentMessage'),
         });
       }
+      await setGuestModeEnabled(false);
+      setIsGuestMode(false);
       setShowSignup(false);
       setPass('');
       setConfirmPass('');
@@ -884,6 +1060,10 @@ export default function HomeScreen() {
 
   const handleOpenCamera = useCallback(
     (dish: DishAssociation) => {
+      if (!isAuthenticated && isGuestMode) {
+        showGuestLoginDialog();
+        return;
+      }
       router.push({
         pathname: '/camera',
         params: {
@@ -895,7 +1075,7 @@ export default function HomeScreen() {
         },
       });
     },
-    [router]
+    [isAuthenticated, isGuestMode, router, showGuestLoginDialog]
   );
 
   const handleEdit = useCallback(
@@ -910,9 +1090,13 @@ export default function HomeScreen() {
 
   const handleOrder = useCallback(
     (dish: DishAssociation) => {
+      if (!isAuthenticated && isGuestMode) {
+        showGuestLoginDialog();
+        return;
+      }
       openVendorDish(orderVendor, dish.restaurant_id, dish.dish_id);
     },
-    [orderVendor]
+    [isAuthenticated, isGuestMode, orderVendor, showGuestLoginDialog]
   );
 
   const renderDishGroup = useCallback(
@@ -956,7 +1140,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView
-      style={[styles.container, !isAuthenticated && styles.containerAuth]}
+      style={[styles.container, !isAuthenticated && !isGuestMode && styles.containerAuth]}
       edges={['left', 'right', 'bottom']}
     >
       {!sessionChecked ? (
@@ -967,7 +1151,7 @@ export default function HomeScreen() {
             <ActivityIndicator size="small" color={theme.colors.accent} style={styles.launchSpinner} />
           </View>
         </View>
-      ) : !isAuthenticated ? (
+      ) : !isAuthenticated && !isGuestMode ? (
         <KeyboardAvoidingView
           style={styles.authKeyboardAvoiding}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1183,6 +1367,21 @@ export default function HomeScreen() {
                     >
                       <Text style={styles.signupButtonText}>{t('authCreateAccount')}</Text>
                     </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.guestButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={() => {
+                        void activateGuestMode();
+                      }}
+                      disabled={authLoading}
+                    >
+                      <Text style={styles.guestButtonText}>{t('authBrowseAsGuest')}</Text>
+                    </Pressable>
+                    <Text style={[styles.guestHintText, !isRTL && styles.guestHintTextLtr]}>
+                      {t('authBrowseAsGuestHint')}
+                    </Text>
                   </>
                 )}
               </View>
@@ -1230,13 +1429,19 @@ export default function HomeScreen() {
           renderItem={renderDishGroup}
         />
       )}
-      {isAuthenticated && (
+      {(isAuthenticated || isGuestMode) && (
         <>
           <Animated.View style={styles.fabWrapAnimated}>
             <Animated.View style={{ transform: [{ scale: fabPulse }] }}>
               <Pressable
                 style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
-                onPress={() => router.push('/camera')}
+                onPress={() => {
+                  if (!isAuthenticated && isGuestMode) {
+                    showGuestLoginDialog();
+                    return;
+                  }
+                  router.push('/camera');
+                }}
               >
                 <Ionicons name="camera" size={38} color={theme.colors.white} />
               </Pressable>
@@ -1425,9 +1630,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   authLanguageChip: {
-    minWidth: 86,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    minWidth: 72,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1634,6 +1839,33 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
     fontSize: 14,
     fontWeight: '600',
+  },
+  guestButton: {
+    marginTop: 10,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.white,
+  },
+  guestButtonText: {
+    color: theme.colors.accent,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  guestHintText: {
+    marginTop: 10,
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  guestHintTextLtr: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   buttonPressed: {
     transform: [{ scale: 0.98 }],

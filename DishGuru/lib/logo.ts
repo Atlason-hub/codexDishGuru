@@ -104,10 +104,10 @@ export const fetchCompanyLogoForCurrentUser = async (): Promise<CompanyLogo> => 
   }
   const { data: company } = await supabase
     .from('companies')
-    .select('logo_url, logo, domain')
+    .select('logo_url, domain')
     .eq('id', companyId)
     .maybeSingle();
-  const rawLogo = company?.logo_url ?? company?.logo ?? null;
+  const rawLogo = company?.logo_url ?? null;
   const result = transformLogoUrl200(rawLogo);
   await cacheLogo(result);
   return {
@@ -123,11 +123,11 @@ const fetchLogoByDomain = async (email: string | null, fallbackEmail: string | n
   const domain = fallbackEmail.split('@')[1].toLowerCase();
   const { data: company } = await supabase
     .from('companies')
-    .select('logo_url, logo, domain')
+    .select('logo_url, domain')
     .ilike('domain', domain)
     .limit(1)
     .maybeSingle();
-  const rawLogo = company?.logo_url ?? company?.logo ?? null;
+  const rawLogo = company?.logo_url ?? null;
   const result = transformLogoUrl200(rawLogo);
   await cacheLogo(result);
   return { logoUrl: result.logoUrl, logoPath: result.logoPath, domain: company?.domain ?? null, email };
