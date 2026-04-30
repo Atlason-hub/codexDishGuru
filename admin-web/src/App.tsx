@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  NavLink,
   Navigate,
   Route,
   Routes,
@@ -21,8 +22,8 @@ import { createUser, deleteUser, fetchUsers, updateUser } from "./usersApi";
 import type { AdminUser } from "./usersApi";
 import { createContent, deleteContent, fetchContent, updateContent } from "./contentApi";
 import type { ContentItem } from "./contentApi";
-import { createReport, deleteReport, fetchReports, updateReport } from "./reportsApi";
-import type { ReportItem } from "./reportsApi";
+import { fetchDishReports } from "./dishReportsApi";
+import type { DishReportItem } from "./dishReportsApi";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -131,6 +132,10 @@ function Layout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
+        <nav className="topnav">
+          <NavLink to="/companies">Companies</NavLink>
+          <NavLink to="/reports">Dish Reports</NavLink>
+        </nav>
         <div className="content">{children}</div>
       </main>
     </div>
@@ -1225,19 +1230,13 @@ function CompaniesPage() {
 }
 
 function ReportsPage() {
-  const [reports, setReports] = React.useState<ReportItem[]>([]);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [title, setTitle] = React.useState("");
-  const [category, setCategory] = React.useState<ReportItem["category"]>("abuse");
-  const [status, setStatus] = React.useState<ReportItem["status"]>("open");
-  const [createdBy, setCreatedBy] = React.useState("");
+  const [reports, setReports] = React.useState<DishReportItem[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const load = async () => {
       try {
-        const data = await fetchReports();
+        const data = await fetchDishReports();
         setReports(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load reports.");
@@ -1246,155 +1245,75 @@ function ReportsPage() {
     void load();
   }, []);
 
-  const resetForm = () => {
-    setTitle("");
-    setCategory("abuse");
-    setStatus("open");
-    setCreatedBy("");
-    setEditingId(null);
-    setShowForm(false);
+  const formatDate = (value?: string | null) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(date);
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!title.trim() || !createdBy.trim()) {
-      return;
-    }
-    try {
-      if (editingId) {
-        const next = await updateReport(editingId, {
-          title: title.trim(),
-          category,
-          status,
-          created_by: createdBy.trim()
-        });
-        setReports(next);
-      } else {
-        const newReport: ReportItem = {
-          id: crypto.randomUUID(),
-          title: title.trim(),
-          category,
-          status,
-          created_by: createdBy.trim()
-        };
-        const next = await createReport(newReport);
-        setReports(next);
-      }
-      setError(null);
-      resetForm();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save report.");
-    }
-  };
-
-  const handleEdit = (report: ReportItem) => {
-    setEditingId(report.id);
-    setTitle(report.title);
-    setCategory(report.category);
-    setStatus(report.status);
-    setCreatedBy(report.created_by);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const next = await deleteReport(id);
-      setReports(next);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete report.");
-    }
-  };
+  const reasonLabel = (reason: string) =>
+    ({
+      wrong_photo: "Wrong photo",
+      wrong_name: "Wrong name",
+      offensive: "Offensive",
+      spam_duplicate: "Spam / duplicate",
+      wrong_restaurant: "Wrong restaurant",
+      other: "Other"
+    })[reason] ?? reason;
 
   return (
     <section className="panel">
-      <h2>Reports</h2>
-      <p className="muted">Track safety, performance, and content issues.</p>
+      <h2>Dish Reports</h2>
+      <p className="muted">Review reported dish images and the reasons submitted by users.</p>
       {error && <div className="error">{error}</div>}
-      {!showForm && (
-        <button type="button" onClick={() => setShowForm(true)}>
-          New Report
-        </button>
-      )}
-      {showForm && (
-        <form onSubmit={handleSubmit} className="form-grid">
-          <label className="field">
-            <span>Title</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="API latency spike"
-              required
-            />
-          </label>
-          <label className="field">
-            <span>Created by</span>
-            <input
-              type="text"
-              value={createdBy}
-              onChange={(e) => setCreatedBy(e.target.value)}
-              placeholder="System"
-              required
-            />
-          </label>
-          <label className="field">
-            <span>Category</span>
-            <select value={category} onChange={(e) => setCategory(e.target.value as any)}>
-              <option value="abuse">Abuse</option>
-              <option value="performance">Performance</option>
-              <option value="content">Content</option>
-              <option value="user">User</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Status</span>
-            <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="open">Open</option>
-              <option value="in_review">In review</option>
-              <option value="resolved">Resolved</option>
-            </select>
-          </label>
-          <div className="form-actions">
-            <button type="submit">{editingId ? "Update Report" : "Add Report"}</button>
-            <button type="button" className="ghost" onClick={resetForm}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-      <div className="table">
-        <div className="row header">
-          <span>Title</span>
-          <span>Category</span>
+      <div className="reports-table">
+        <div className="reports-row reports-header">
+          <span>Image</span>
+          <span>Dish</span>
+          <span>Reported By</span>
+          <span>Reason</span>
+          <span>Free Text</span>
+          <span>When</span>
           <span>Status</span>
-          <span>Created by</span>
-          <span>Actions</span>
         </div>
         {reports.length === 0 && (
-          <div className="row">
-            <span>No reports yet.</span>
-            <span />
-            <span />
-            <span />
-            <span />
+          <div className="reports-empty">
+            <span>No dish reports yet.</span>
           </div>
         )}
         {reports.map((report) => (
-          <div className="row" key={report.id}>
-            <span>{report.title}</span>
-            <span>{report.category}</span>
-            <span>{report.status}</span>
-            <span>{report.created_by}</span>
-            <span className="row-actions">
-              <button type="button" className="ghost" onClick={() => handleEdit(report)}>
-                Edit
-              </button>
-              <button type="button" className="ghost" onClick={() => handleDelete(report.id)}>
-                Delete
-              </button>
-            </span>
-          </div>
+          <article className="reports-row reports-item" key={report.id}>
+            <div className="report-image-cell" data-label="Image">
+              {report.imageUrl ? (
+                <img
+                  className="report-image"
+                  src={report.imageUrl}
+                  alt={report.dishName ? `${report.dishName} report` : "Reported dish"}
+                />
+              ) : (
+                <div className="report-image report-image-fallback">No image</div>
+              )}
+            </div>
+            <div data-label="Dish">
+              <strong>{report.dishName || "Unknown dish"}</strong>
+              <div className="muted">{report.restaurantName || "Unknown restaurant"}</div>
+            </div>
+            <div data-label="Reported By">{report.reporterEmail || report.reportedByUserId}</div>
+            <div data-label="Reason">
+              <span className="vendor-badge report-reason-badge">
+                {reasonLabel(report.reason)}
+              </span>
+            </div>
+            <div data-label="Free Text">{report.details || "—"}</div>
+            <div data-label="When">{formatDate(report.createdAt)}</div>
+            <div data-label="Status">
+              <span className="users-count report-status-pill">{report.status}</span>
+            </div>
+          </article>
         ))}
       </div>
     </section>
