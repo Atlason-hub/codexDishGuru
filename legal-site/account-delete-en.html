@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DishGuru - Delete Account</title>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #fdfaf8;
+            --card: #ffffff;
+            --border: #fbd0bd;
+            --accent: #c95f2c;
+            --accent-dark: #7f351a;
+            --text: #5a2a14;
+            --muted: #8b6b5c;
+            --danger: #b13f1d;
+            --danger-soft: #fff2ec;
+            --success: #2f6c37;
+            --success-soft: #f3fbf4;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Heebo', sans-serif;
+            padding: 24px;
+        }
+        .shell {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(199, 93, 44, 0.12);
+            overflow: hidden;
+        }
+        .hero {
+            background: linear-gradient(135deg, #c95f2c 0%, #e98c4a 100%);
+            padding: 28px 24px;
+            text-align: center;
+        }
+        .hero img {
+            width: 82px;
+            height: 82px;
+            border-radius: 18px;
+            display: block;
+            margin: 0 auto 12px;
+        }
+        .hero-title {
+            color: #fff7f1;
+            font-size: 30px;
+            font-weight: 700;
+        }
+        .content {
+            padding: 28px 24px 32px;
+        }
+        h1 {
+            margin: 0 0 10px;
+            color: var(--accent-dark);
+            font-size: 34px;
+            line-height: 1.15;
+        }
+        p {
+            margin: 0 0 12px;
+            font-size: 18px;
+            line-height: 1.75;
+            color: #6e351a;
+        }
+        .note {
+            margin-top: 18px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            background: #fff7f1;
+            border: 1px solid #f3d4c3;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+        .status {
+            display: none;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+        .status.error {
+            background: var(--danger-soft);
+            border: 1px solid #f0c4af;
+            color: var(--danger);
+        }
+        .status.success {
+            background: var(--success-soft);
+            border: 1px solid #c6e4cb;
+            color: var(--success);
+        }
+        .auth-form,
+        .delete-panel {
+            margin-top: 24px;
+        }
+        .field {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--accent-dark);
+            font-size: 16px;
+            font-weight: 600;
+        }
+        input {
+            width: 100%;
+            border: 1px solid #e7c5b3;
+            border-radius: 16px;
+            padding: 16px 18px;
+            font: inherit;
+            font-size: 17px;
+            color: var(--text);
+            background: #fffdfa;
+        }
+        input:focus {
+            outline: 2px solid rgba(201, 95, 44, 0.2);
+            border-color: var(--accent);
+        }
+        .button-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+        button {
+            border: 0;
+            border-radius: 999px;
+            padding: 16px 22px;
+            font: inherit;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.15s ease;
+        }
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+        .primary {
+            background: var(--accent);
+            color: #fff;
+            flex: 1 1 220px;
+        }
+        .secondary {
+            background: #fff6ee;
+            color: var(--accent-dark);
+            border: 1px solid var(--border);
+            flex: 1 1 180px;
+        }
+        .danger {
+            background: var(--danger);
+            color: #fff;
+            width: 100%;
+        }
+        .signed-in-box {
+            margin-top: 18px;
+            padding: 18px;
+            border-radius: 18px;
+            background: #fff8f4;
+            border: 1px solid #f3d4c3;
+        }
+        .signed-in-box strong {
+            color: var(--accent-dark);
+        }
+        .hidden {
+            display: none !important;
+        }
+        .footer-link {
+            margin-top: 18px;
+            font-size: 15px;
+            color: var(--muted);
+        }
+        .footer-link a {
+            color: var(--accent);
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="card">
+            <div class="hero">
+                <img src="https://atlason-hub.github.io/codexDishGuru/DishGuru/assets/images/dishguru-email-icon.png" alt="DishGuru">
+                <div class="hero-title">DishGuru</div>
+            </div>
+            <div class="content">
+                <h1>Delete your account</h1>
+                <p>Sign in with the email and password of the DishGuru account you want to remove.</p>
+                <p>After you confirm, your account and the data tied to it will be deleted using the same secure deletion flow used inside the app.</p>
+
+                <div id="errorBox" class="status error"></div>
+                <div id="successBox" class="status success"></div>
+
+                <form id="authForm" class="auth-form">
+                    <div class="field">
+                        <label for="emailInput">Work email</label>
+                        <input id="emailInput" type="email" autocomplete="username" required>
+                    </div>
+                    <div class="field">
+                        <label for="passwordInput">Password</label>
+                        <input id="passwordInput" type="password" autocomplete="current-password" required>
+                    </div>
+                    <div class="button-row">
+                        <button id="signInButton" class="primary" type="submit">Sign in</button>
+                    </div>
+                </form>
+
+                <div id="deletePanel" class="delete-panel hidden">
+                    <div class="signed-in-box">
+                        <p><strong>Signed in as:</strong> <span id="signedInEmail"></span></p>
+                        <p>This action is permanent and cannot be undone.</p>
+                    </div>
+                    <div class="button-row">
+                        <button id="deleteButton" class="danger" type="button">Delete account permanently</button>
+                        <button id="signOutButton" class="secondary" type="button">Cancel and sign out</button>
+                    </div>
+                </div>
+
+                <div class="note">
+                    If you no longer remember your password, reset it from the DishGuru login screen first and then return here.
+                </div>
+                <div class="footer-link">
+                    Need help instead? Email <a href="mailto:support@dishguru.app">support@dishguru.app</a>.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+        const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_MhAe1ld13gUdTherOMkjKQ_ySHA_TtZ';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const authForm = document.getElementById('authForm');
+        const deletePanel = document.getElementById('deletePanel');
+        const emailInput = document.getElementById('emailInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const signInButton = document.getElementById('signInButton');
+        const deleteButton = document.getElementById('deleteButton');
+        const signOutButton = document.getElementById('signOutButton');
+        const signedInEmail = document.getElementById('signedInEmail');
+        const errorBox = document.getElementById('errorBox');
+        const successBox = document.getElementById('successBox');
+
+        const hideMessages = () => {
+            errorBox.style.display = 'none';
+            successBox.style.display = 'none';
+        };
+
+        const showError = (message) => {
+            errorBox.textContent = message;
+            errorBox.style.display = 'block';
+        };
+
+        const showSuccess = (message) => {
+            successBox.textContent = message;
+            successBox.style.display = 'block';
+        };
+
+        const setSignedOutState = () => {
+            authForm.classList.remove('hidden');
+            deletePanel.classList.add('hidden');
+            signedInEmail.textContent = '';
+            passwordInput.value = '';
+        };
+
+        const setSignedInState = (email) => {
+            authForm.classList.add('hidden');
+            deletePanel.classList.remove('hidden');
+            signedInEmail.textContent = email || '';
+        };
+
+        const syncSession = async () => {
+            const { data } = await supabase.auth.getSession();
+            const user = data.session?.user ?? null;
+            hideMessages();
+            if (user?.email) {
+                emailInput.value = user.email;
+                setSignedInState(user.email);
+            } else {
+                setSignedOutState();
+            }
+        };
+
+        authForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            hideMessages();
+            signInButton.disabled = true;
+            signInButton.textContent = 'Signing in...';
+
+            const { error } = await supabase.auth.signInWithPassword({
+                email: emailInput.value.trim(),
+                password: passwordInput.value,
+            });
+
+            if (error) {
+                showError(error.message || 'Sign-in failed. Please check your email and password.');
+                signInButton.disabled = false;
+                signInButton.textContent = 'Sign in';
+                return;
+            }
+
+            signInButton.disabled = false;
+            signInButton.textContent = 'Sign in';
+            await syncSession();
+        });
+
+        signOutButton.addEventListener('click', async () => {
+            hideMessages();
+            await supabase.auth.signOut();
+            setSignedOutState();
+        });
+
+        deleteButton.addEventListener('click', async () => {
+            hideMessages();
+
+            const confirmed = window.confirm(
+                'Delete this DishGuru account permanently? This action cannot be undone.'
+            );
+            if (!confirmed) return;
+
+            deleteButton.disabled = true;
+            deleteButton.textContent = 'Deleting...';
+            signOutButton.disabled = true;
+
+            const { error } = await supabase.rpc('delete_my_account');
+
+            if (error) {
+                showError(error.message || 'Account deletion failed. Please try again.');
+                deleteButton.disabled = false;
+                deleteButton.textContent = 'Delete account permanently';
+                signOutButton.disabled = false;
+                return;
+            }
+
+            await supabase.auth.signOut();
+            setSignedOutState();
+            showSuccess('Your account has been deleted successfully.');
+            deleteButton.disabled = false;
+            deleteButton.textContent = 'Delete account permanently';
+            signOutButton.disabled = false;
+        });
+
+        syncSession();
+    </script>
+</body>
+</html>
