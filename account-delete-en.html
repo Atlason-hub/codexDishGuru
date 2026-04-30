@@ -210,8 +210,8 @@
 
                 <form id="authForm" class="auth-form">
                     <div class="field">
-                        <label for="emailInput">Work email</label>
-                        <input id="emailInput" type="email" autocomplete="username" required>
+                        <label for="emailInput">Full work email</label>
+                        <input id="emailInput" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
                     </div>
                     <div class="field">
                         <label for="passwordInput">Password</label>
@@ -304,8 +304,20 @@
             const hash = readHashParams();
             const tokenHash = query.get('token_hash');
             const type = query.get('type');
+            const code = query.get('code');
             const accessToken = hash.get('access_token');
             const refreshToken = hash.get('refresh_token');
+
+            if (code) {
+                const { error } = await supabase.auth.exchangeCodeForSession(code);
+                if (error) {
+                    showError(error.message || 'We could not finish the secure sign-in link.');
+                    return;
+                }
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showSuccess('Secure sign-in completed. You can now delete the account.');
+                return;
+            }
 
             if (accessToken && refreshToken) {
                 const { error } = await supabase.auth.setSession({
@@ -349,7 +361,7 @@
         authForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             hideMessages();
-            const trimmedEmail = emailInput.value.trim();
+            const trimmedEmail = emailInput.value.trim().toLowerCase();
             signInButton.disabled = true;
             magicLinkButton.disabled = true;
             signInButton.textContent = 'Signing in...';
@@ -389,7 +401,7 @@
 
         magicLinkButton.addEventListener('click', async () => {
             hideMessages();
-            const trimmedEmail = emailInput.value.trim();
+            const trimmedEmail = emailInput.value.trim().toLowerCase();
             if (!trimmedEmail) {
                 showError('Please enter your email address first.');
                 return;
