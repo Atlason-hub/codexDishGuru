@@ -534,6 +534,16 @@ h1 {
   color: var(--text);
 }
 
+.users-count-button {
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.users-count-button:hover {
+  transform: none;
+  background: #e8eef9;
+}
+
 .company-actions-cell {
   display: flex;
   justify-content: flex-end;
@@ -595,6 +605,26 @@ h1 {
 
 .confirm-modal-actions {
   justify-content: flex-end;
+}
+
+.users-modal {
+  width: min(460px, 100%);
+}
+
+.users-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.users-list-item {
+  padding: 0.75rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: #fbfcfe;
+  font-size: 0.95rem;
+  word-break: break-word;
 }
 
 .company-logo-fallback {

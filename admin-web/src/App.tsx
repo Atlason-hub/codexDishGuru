@@ -18,6 +18,8 @@ import {
   uploadCompanyLogo
 } from "./companiesApi";
 import type { CityOption, Company, StreetOption } from "./companiesTypes";
+import { fetchCompanyUsers } from "./companyUsersApi";
+import type { CompanyUserItem } from "./companyUsersApi";
 import { createUser, deleteUser, fetchUsers, updateUser } from "./usersApi";
 import type { AdminUser } from "./usersApi";
 import { createContent, deleteContent, fetchContent, updateContent } from "./contentApi";
@@ -572,6 +574,10 @@ function CompaniesPage() {
   const [deletePassword, setDeletePassword] = React.useState("");
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = React.useState(false);
+  const [usersModalCompany, setUsersModalCompany] = React.useState<Company | null>(null);
+  const [companyUsers, setCompanyUsers] = React.useState<CompanyUserItem[]>([]);
+  const [isLoadingCompanyUsers, setIsLoadingCompanyUsers] = React.useState(false);
+  const [companyUsersError, setCompanyUsersError] = React.useState<string | null>(null);
 
   const withTimeout = async <T,>(promise: Promise<T>, label: string, ms = 12000) => {
     let timeoutId: number | undefined;
@@ -631,6 +637,13 @@ function CompaniesPage() {
     setDeletePassword("");
     setDeleteError(null);
     setIsConfirmingDelete(false);
+  };
+
+  const closeUsersModal = () => {
+    setUsersModalCompany(null);
+    setCompanyUsers([]);
+    setCompanyUsersError(null);
+    setIsLoadingCompanyUsers(false);
   };
 
   React.useEffect(() => {
@@ -875,6 +888,24 @@ function CompaniesPage() {
     setPendingDeleteId(id);
     setDeletePassword("");
     setDeleteError(null);
+  };
+
+  const handleUsersClick = async (event: React.MouseEvent, company: Company) => {
+    event.stopPropagation();
+    setUsersModalCompany(company);
+    setCompanyUsers([]);
+    setCompanyUsersError(null);
+    setIsLoadingCompanyUsers(true);
+    try {
+      const items = await fetchCompanyUsers(company.id);
+      setCompanyUsers(items);
+    } catch (err) {
+      setCompanyUsersError(
+        err instanceof Error ? err.message : "Failed to load company users."
+      );
+    } finally {
+      setIsLoadingCompanyUsers(false);
+    }
   };
 
   const confirmDelete = async (event: React.FormEvent) => {
@@ -1156,7 +1187,13 @@ function CompaniesPage() {
                 </div>
               </div>
               <div className="company-cell company-users-cell" data-label="#Users">
-                <span className="users-count">{company.usersCount ?? 0}</span>
+                <button
+                  type="button"
+                  className="users-count users-count-button"
+                  onClick={(event) => void handleUsersClick(event, company)}
+                >
+                  {company.usersCount ?? 0}
+                </button>
               </div>
               <div className="company-cell" data-label="Vendor">
                 <span className="vendor-badge">{company.orderVendor || "—"}</span>
@@ -1222,6 +1259,33 @@ function CompaniesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {usersModalCompany && (
+        <div className="modal-overlay" onClick={closeUsersModal}>
+          <div className="confirm-modal users-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>{usersModalCompany.name} Users</h3>
+            <p className="muted">Subscribed users for this company.</p>
+            {companyUsersError && <div className="error">{companyUsersError}</div>}
+            {isLoadingCompanyUsers ? (
+              <div className="muted">Loading users...</div>
+            ) : companyUsers.length === 0 ? (
+              <div className="muted">No subscribed users found.</div>
+            ) : (
+              <div className="users-list">
+                {companyUsers.map((item, index) => (
+                  <div className="users-list-item" key={`${item.userId ?? item.email ?? "user"}-${index}`}>
+                    {item.email || item.userId || "Unknown user"}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="form-actions confirm-modal-actions">
+              <button type="button" className="ghost" onClick={closeUsersModal}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
