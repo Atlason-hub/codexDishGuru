@@ -4,7 +4,6 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config";
 import { supabase } from "./supabaseClient";
 
 export type Role = "admin" | "viewer";
-const ADMIN_USERS_TABLE = "admin_users";
 
 type AuthContextValue = {
   user: { id: string; email: string | null } | null;
@@ -24,21 +23,22 @@ async function fetchAdminAccess(
     return { role: null, allowed: false };
   }
 
-  const { data, error } = await supabase
-    .from(ADMIN_USERS_TABLE)
-    .select("role, status")
-    .eq("email", email)
-    .maybeSingle();
+  const response = await fetch(
+    `/api/admin-access?email=${encodeURIComponent(email.trim().toLowerCase())}`
+  );
+  const payload = (await response.json()) as {
+    allowed?: boolean;
+    role?: Role | null;
+    error?: string;
+  };
 
-  if (error || !data) {
-    return { role: null, allowed: false };
+  if (!response.ok) {
+    throw new Error(payload.error || "Failed to check admin access.");
   }
 
-  const role = (data.role as Role | undefined) ?? null;
-  const status = String(data.status ?? "");
   return {
-    role,
-    allowed: Boolean(role) && status === "active"
+    role: payload.role ?? null,
+    allowed: Boolean(payload.allowed)
   };
 }
 
