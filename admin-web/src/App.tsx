@@ -118,7 +118,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         <header className="topbar">
           <div className="topbar-brand">
             <div className="brand-mark">
-              <img src="/dishguru-logo.svg" alt="DishGuru logo" />
+              <img src="/admin-topbar-logo.png" alt="DishGuru logo" />
             </div>
             <div>
               <div className="topbar-title">DishGuru Admin</div>
@@ -1232,6 +1232,7 @@ function CompaniesPage() {
 function ReportsPage() {
   const [reports, setReports] = React.useState<DishReportItem[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  const [previewImage, setPreviewImage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const load = async () => {
@@ -1289,11 +1290,17 @@ function ReportsPage() {
           <article className="reports-row reports-item" key={report.id}>
             <div className="report-image-cell" data-label="Image">
               {report.imageUrl ? (
-                <img
-                  className="report-image"
-                  src={report.imageUrl}
-                  alt={report.dishName ? `${report.dishName} report` : "Reported dish"}
-                />
+                <button
+                  type="button"
+                  className="report-image-button"
+                  onClick={() => setPreviewImage(report.imageUrl ?? null)}
+                >
+                  <img
+                    className="report-image"
+                    src={report.imageUrl}
+                    alt={report.dishName ? `${report.dishName} report` : "Reported dish"}
+                  />
+                </button>
               ) : (
                 <div className="report-image report-image-fallback">No image</div>
               )}
@@ -1316,6 +1323,20 @@ function ReportsPage() {
           </article>
         ))}
       </div>
+      {previewImage && (
+        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
+          <div className="image-modal" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="ghost image-modal-close"
+              onClick={() => setPreviewImage(null)}
+            >
+              Close
+            </button>
+            <img className="image-modal-preview" src={previewImage} alt="Reported dish preview" />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
