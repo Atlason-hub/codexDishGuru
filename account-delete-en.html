@@ -181,6 +181,12 @@
             font-size: 15px;
             color: var(--muted);
         }
+        .fallback-copy {
+            margin-top: 14px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--muted);
+        }
         .footer-link a {
             color: var(--accent);
             font-weight: 700;
@@ -213,7 +219,10 @@
                     </div>
                     <div class="button-row">
                         <button id="signInButton" class="primary" type="submit">Sign in</button>
-                        <button id="magicLinkButton" class="secondary" type="button">Send secure sign-in link</button>
+                        <button id="magicLinkButton" class="secondary" type="button">Having trouble signing in? Email me a secure link</button>
+                    </div>
+                    <div class="fallback-copy">
+                        Use the secure link only if the regular email-and-password sign-in above does not work.
                     </div>
                 </form>
 
@@ -362,14 +371,14 @@
                 showError(error.message || 'We could not send the secure sign-in link.');
                 signInButton.disabled = false;
                 magicLinkButton.disabled = false;
-                magicLinkButton.textContent = 'Send secure sign-in link';
+                magicLinkButton.textContent = 'Having trouble signing in? Email me a secure link';
                 return;
             }
 
             showSuccess('We sent a secure sign-in link to your email. Open it on this device to continue.');
             signInButton.disabled = false;
             magicLinkButton.disabled = false;
-            magicLinkButton.textContent = 'Send secure sign-in link';
+            magicLinkButton.textContent = 'Having trouble signing in? Email me a secure link';
         });
 
         signOutButton.addEventListener('click', async () => {

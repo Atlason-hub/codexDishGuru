@@ -182,6 +182,12 @@
             font-size: 15px;
             color: var(--muted);
         }
+        .fallback-copy {
+            margin-top: 14px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--muted);
+        }
         .footer-link a {
             color: var(--accent);
             font-weight: 700;
@@ -214,7 +220,10 @@
                     </div>
                     <div class="button-row">
                         <button id="signInButton" class="primary" type="submit">התחבר</button>
-                        <button id="magicLinkButton" class="secondary" type="button">שלח קישור התחברות מאובטח</button>
+                        <button id="magicLinkButton" class="secondary" type="button">יש בעיה בהתחברות? שלחו לי קישור מאובטח למייל</button>
+                    </div>
+                    <div class="fallback-copy">
+                        השתמשו בקישור המאובטח רק אם ההתחברות הרגילה עם אימייל וסיסמה למעלה לא עובדת.
                     </div>
                 </form>
 
@@ -363,14 +372,14 @@
                 showError(error.message || 'לא הצלחנו לשלוח קישור התחברות מאובטח.');
                 signInButton.disabled = false;
                 magicLinkButton.disabled = false;
-                magicLinkButton.textContent = 'שלח קישור התחברות מאובטח';
+                magicLinkButton.textContent = 'יש בעיה בהתחברות? שלחו לי קישור מאובטח למייל';
                 return;
             }
 
             showSuccess('שלחנו קישור התחברות מאובטח לאימייל שלך. פתחו אותו באותו המכשיר כדי להמשיך.');
             signInButton.disabled = false;
             magicLinkButton.disabled = false;
-            magicLinkButton.textContent = 'שלח קישור התחברות מאובטח';
+            magicLinkButton.textContent = 'יש בעיה בהתחברות? שלחו לי קישור מאובטח למייל';
         });
 
         signOutButton.addEventListener('click', async () => {
