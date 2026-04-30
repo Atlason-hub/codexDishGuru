@@ -213,6 +213,7 @@
                     </div>
                     <div class="button-row">
                         <button id="signInButton" class="primary" type="submit">Sign in</button>
+                        <button id="magicLinkButton" class="secondary" type="button">Send secure sign-in link</button>
                     </div>
                 </form>
 
@@ -249,6 +250,7 @@
         const emailInput = document.getElementById('emailInput');
         const passwordInput = document.getElementById('passwordInput');
         const signInButton = document.getElementById('signInButton');
+        const magicLinkButton = document.getElementById('magicLinkButton');
         const deleteButton = document.getElementById('deleteButton');
         const signOutButton = document.getElementById('signOutButton');
         const signedInEmail = document.getElementById('signedInEmail');
@@ -298,24 +300,76 @@
         authForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             hideMessages();
+            const trimmedEmail = emailInput.value.trim();
             signInButton.disabled = true;
+            magicLinkButton.disabled = true;
             signInButton.textContent = 'Signing in...';
 
-            const { error } = await supabase.auth.signInWithPassword({
-                email: emailInput.value.trim(),
+            let { error } = await supabase.auth.signInWithPassword({
+                email: trimmedEmail,
                 password: passwordInput.value,
             });
 
+            if (
+                error &&
+                /invalid login credentials/i.test(error.message || '') &&
+                trimmedEmail !== trimmedEmail.toLowerCase()
+            ) {
+                ({ error } = await supabase.auth.signInWithPassword({
+                    email: trimmedEmail.toLowerCase(),
+                    password: passwordInput.value,
+                }));
+            }
+
             if (error) {
-                showError(error.message || 'Sign-in failed. Please check your email and password.');
+                showError(
+                    error.message ||
+                    'Sign-in failed. Please check your email and password, or use the secure sign-in link option.'
+                );
                 signInButton.disabled = false;
+                magicLinkButton.disabled = false;
                 signInButton.textContent = 'Sign in';
                 return;
             }
 
             signInButton.disabled = false;
+            magicLinkButton.disabled = false;
             signInButton.textContent = 'Sign in';
             await syncSession();
+        });
+
+        magicLinkButton.addEventListener('click', async () => {
+            hideMessages();
+            const trimmedEmail = emailInput.value.trim();
+            if (!trimmedEmail) {
+                showError('Please enter your email address first.');
+                return;
+            }
+
+            signInButton.disabled = true;
+            magicLinkButton.disabled = true;
+            magicLinkButton.textContent = 'Sending...';
+
+            const { error } = await supabase.auth.signInWithOtp({
+                email: trimmedEmail,
+                options: {
+                    shouldCreateUser: false,
+                    emailRedirectTo: window.location.href.split('#')[0],
+                },
+            });
+
+            if (error) {
+                showError(error.message || 'We could not send the secure sign-in link.');
+                signInButton.disabled = false;
+                magicLinkButton.disabled = false;
+                magicLinkButton.textContent = 'Send secure sign-in link';
+                return;
+            }
+
+            showSuccess('We sent a secure sign-in link to your email. Open it on this device to continue.');
+            signInButton.disabled = false;
+            magicLinkButton.disabled = false;
+            magicLinkButton.textContent = 'Send secure sign-in link';
         });
 
         signOutButton.addEventListener('click', async () => {

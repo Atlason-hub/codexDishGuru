@@ -214,6 +214,7 @@
                     </div>
                     <div class="button-row">
                         <button id="signInButton" class="primary" type="submit">התחבר</button>
+                        <button id="magicLinkButton" class="secondary" type="button">שלח קישור התחברות מאובטח</button>
                     </div>
                 </form>
 
@@ -250,6 +251,7 @@
         const emailInput = document.getElementById('emailInput');
         const passwordInput = document.getElementById('passwordInput');
         const signInButton = document.getElementById('signInButton');
+        const magicLinkButton = document.getElementById('magicLinkButton');
         const deleteButton = document.getElementById('deleteButton');
         const signOutButton = document.getElementById('signOutButton');
         const signedInEmail = document.getElementById('signedInEmail');
@@ -299,24 +301,76 @@
         authForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             hideMessages();
+            const trimmedEmail = emailInput.value.trim();
             signInButton.disabled = true;
+            magicLinkButton.disabled = true;
             signInButton.textContent = 'מתחבר...';
 
-            const { error } = await supabase.auth.signInWithPassword({
-                email: emailInput.value.trim(),
+            let { error } = await supabase.auth.signInWithPassword({
+                email: trimmedEmail,
                 password: passwordInput.value,
             });
 
+            if (
+                error &&
+                /invalid login credentials/i.test(error.message || '') &&
+                trimmedEmail !== trimmedEmail.toLowerCase()
+            ) {
+                ({ error } = await supabase.auth.signInWithPassword({
+                    email: trimmedEmail.toLowerCase(),
+                    password: passwordInput.value,
+                }));
+            }
+
             if (error) {
-                showError(error.message || 'ההתחברות נכשלה. בדקו את האימייל והסיסמה ונסו שוב.');
+                showError(
+                    error.message ||
+                    'ההתחברות נכשלה. בדקו את האימייל והסיסמה, או השתמשו באפשרות של קישור התחברות מאובטח.'
+                );
                 signInButton.disabled = false;
+                magicLinkButton.disabled = false;
                 signInButton.textContent = 'התחבר';
                 return;
             }
 
             signInButton.disabled = false;
+            magicLinkButton.disabled = false;
             signInButton.textContent = 'התחבר';
             await syncSession();
+        });
+
+        magicLinkButton.addEventListener('click', async () => {
+            hideMessages();
+            const trimmedEmail = emailInput.value.trim();
+            if (!trimmedEmail) {
+                showError('יש להזין כתובת אימייל תחילה.');
+                return;
+            }
+
+            signInButton.disabled = true;
+            magicLinkButton.disabled = true;
+            magicLinkButton.textContent = 'שולח...';
+
+            const { error } = await supabase.auth.signInWithOtp({
+                email: trimmedEmail,
+                options: {
+                    shouldCreateUser: false,
+                    emailRedirectTo: window.location.href.split('#')[0],
+                },
+            });
+
+            if (error) {
+                showError(error.message || 'לא הצלחנו לשלוח קישור התחברות מאובטח.');
+                signInButton.disabled = false;
+                magicLinkButton.disabled = false;
+                magicLinkButton.textContent = 'שלח קישור התחברות מאובטח';
+                return;
+            }
+
+            showSuccess('שלחנו קישור התחברות מאובטח לאימייל שלך. פתחו אותו באותו המכשיר כדי להמשיך.');
+            signInButton.disabled = false;
+            magicLinkButton.disabled = false;
+            magicLinkButton.textContent = 'שלח קישור התחברות מאובטח';
         });
 
         signOutButton.addEventListener('click', async () => {
