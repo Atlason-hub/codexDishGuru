@@ -1343,8 +1343,8 @@ function ReportsPage() {
           <span>Uploaded By</span>
           <span>Reason</span>
           <span>Free Text</span>
-          <span>When</span>
-          <span>Status</span>
+          <span>Reported At</span>
+          <span>Uploaded At</span>
         </div>
         {reports.length === 0 && (
           <div className="reports-empty">
@@ -1384,10 +1384,8 @@ function ReportsPage() {
               </span>
             </div>
             <div data-label="Free Text">{report.details || "—"}</div>
-            <div data-label="When">{formatDate(report.createdAt)}</div>
-            <div data-label="Status">
-              <span className="users-count report-status-pill">{report.status}</span>
-            </div>
+            <div data-label="Reported At">{formatDate(report.createdAt)}</div>
+            <div data-label="Uploaded At">{formatDate(report.dishCreatedAt)}</div>
           </article>
         ))}
       </div>

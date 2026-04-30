@@ -739,7 +739,7 @@ h1 {
 
 .reports-row {
   display: grid;
-  grid-template-columns: 92px minmax(170px, 1.15fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(130px, 0.85fr) minmax(180px, 1.15fr) minmax(140px, 0.9fr) minmax(100px, 0.65fr);
+  grid-template-columns: 92px minmax(170px, 1.15fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(130px, 0.85fr) minmax(180px, 1.1fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr);
   gap: 0.9rem;
   align-items: center;
   padding: 1rem 1.1rem;
@@ -807,10 +807,6 @@ h1 {
   border-color: rgba(23, 32, 51, 0.08);
 }
 
-.report-status-pill {
-  text-transform: capitalize;
-}
-
 .image-modal {
   width: min(780px, calc(100vw - 2rem));
   max-height: calc(100vh - 2rem);
@@ -847,7 +843,7 @@ h1 {
   }
 
   .reports-row {
-    grid-template-columns: 80px minmax(140px, 1fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(110px, 0.85fr) minmax(90px, 0.7fr);
+    grid-template-columns: 80px minmax(140px, 1fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(120px, 0.85fr) minmax(120px, 0.85fr);
   }
 
   .topbar {
