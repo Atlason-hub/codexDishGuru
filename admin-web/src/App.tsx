@@ -1340,6 +1340,7 @@ function ReportsPage() {
           <span>Image</span>
           <span>Dish</span>
           <span>Reported By</span>
+          <span>Uploaded By</span>
           <span>Reason</span>
           <span>Free Text</span>
           <span>When</span>
@@ -1374,6 +1375,9 @@ function ReportsPage() {
               <div className="muted">{report.restaurantName || "Unknown restaurant"}</div>
             </div>
             <div data-label="Reported By">{report.reporterEmail || report.reportedByUserId}</div>
+            <div data-label="Uploaded By">
+              {report.uploadedByEmail || report.uploadedByUserId || "—"}
+            </div>
             <div data-label="Reason">
               <span className="vendor-badge report-reason-badge">
                 {reasonLabel(report.reason)}

@@ -3,6 +3,8 @@ export type DishReportItem = {
   dishAssociationId: string;
   reportedByUserId: string;
   reporterEmail: string;
+  uploadedByUserId?: string | null;
+  uploadedByEmail?: string | null;
   reason: string;
   details?: string | null;
   status: string;

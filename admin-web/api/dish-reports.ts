@@ -48,11 +48,12 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
 
     const dishes = dishIds.length
       ? ((await fetchRest(
-          `dish_associations?select=id,dish_name,restaurant_name,image_url,image_path,created_at&id=in.(${dishIds
+          `dish_associations?select=id,user_id,dish_name,restaurant_name,image_url,image_path,created_at&id=in.(${dishIds
             .map(encodeURIComponent)
             .join(",")})`
         )) as Array<{
           id: string;
+          user_id?: string | null;
           dish_name?: string | null;
           restaurant_name?: string | null;
           image_url?: string | null;
@@ -60,6 +61,10 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
           created_at?: string | null;
         }>)
       : [];
+
+    const uploaderIds = Array.from(
+      new Set(dishes.map((dish) => dish.user_id).filter(Boolean))
+    ) as string[];
 
     const reporters = reporterIds.length
       ? ((await fetchRest(
@@ -72,18 +77,33 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
         }>)
       : [];
 
+    const uploaders = uploaderIds.length
+      ? ((await fetchRest(
+          `AppUsers?select=user_id,email&user_id=in.(${uploaderIds
+            .map(encodeURIComponent)
+            .join(",")})`
+        )) as Array<{
+          user_id: string;
+          email?: string | null;
+        }>)
+      : [];
+
     const dishesById = new Map(dishes.map((dish) => [dish.id, dish]));
     const reportersById = new Map(reporters.map((reporter) => [reporter.user_id, reporter]));
+    const uploadersById = new Map(uploaders.map((uploader) => [uploader.user_id, uploader]));
 
     const payload = reports.map((report) => {
       const dish = dishesById.get(report.dish_association_id);
       const reporter = reportersById.get(report.reported_by_user_id);
+      const uploader = dish?.user_id ? uploadersById.get(dish.user_id) : null;
 
       return {
         id: report.id,
         dishAssociationId: report.dish_association_id,
         reportedByUserId: report.reported_by_user_id,
         reporterEmail: reporter?.email ?? report.reported_by_user_id,
+        uploadedByUserId: dish?.user_id ?? null,
+        uploadedByEmail: uploader?.email ?? dish?.user_id ?? null,
         reason: report.reason,
         details: report.details ?? null,
         status: report.status,
