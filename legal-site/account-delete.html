@@ -300,6 +300,42 @@
             signedInEmail.textContent = email || '';
         };
 
+        const signInWithPasswordDirect = async (email, password) => {
+            const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+                method: 'POST',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email,
+                    password,
+                }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(
+                    payload.error_description ||
+                    payload.msg ||
+                    payload.message ||
+                    'ההתחברות נכשלה. בדקו את האימייל והסיסמה ונסו שוב.'
+                );
+            }
+
+            const accessToken = payload.access_token;
+            const refreshToken = payload.refresh_token;
+            if (!accessToken || !refreshToken) {
+                throw new Error('ההתחברות הצליחה אבל לא התקבלה סשן תקינה.');
+            }
+
+            const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+            });
+            if (error) throw error;
+        };
+
         const restoreSessionFromLink = async () => {
             const query = new URLSearchParams(window.location.search);
             const hash = readHashParams();
@@ -367,26 +403,13 @@
             magicLinkButton.disabled = true;
             signInButton.textContent = 'מתחבר...';
 
-            let { error } = await supabase.auth.signInWithPassword({
-                email: trimmedEmail,
-                password: passwordInput.value,
-            });
-
-            if (
-                error &&
-                /invalid login credentials/i.test(error.message || '') &&
-                trimmedEmail !== trimmedEmail.toLowerCase()
-            ) {
-                ({ error } = await supabase.auth.signInWithPassword({
-                    email: trimmedEmail.toLowerCase(),
-                    password: passwordInput.value,
-                }));
-            }
-
-            if (error) {
+            try {
+                await signInWithPasswordDirect(trimmedEmail, passwordInput.value);
+            } catch (error) {
                 showError(
-                    error.message ||
-                    'ההתחברות נכשלה. בדקו את האימייל והסיסמה, או השתמשו באפשרות של קישור התחברות מאובטח.'
+                    error instanceof Error
+                        ? error.message
+                        : 'ההתחברות נכשלה. בדקו את האימייל והסיסמה, או השתמשו באפשרות של קישור התחברות מאובטח.'
                 );
                 signInButton.disabled = false;
                 magicLinkButton.disabled = false;

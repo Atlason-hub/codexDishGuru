@@ -299,6 +299,42 @@
             signedInEmail.textContent = email || '';
         };
 
+        const signInWithPasswordDirect = async (email, password) => {
+            const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+                method: 'POST',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email,
+                    password,
+                }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(
+                    payload.error_description ||
+                    payload.msg ||
+                    payload.message ||
+                    'Sign-in failed. Please check your email and password.'
+                );
+            }
+
+            const accessToken = payload.access_token;
+            const refreshToken = payload.refresh_token;
+            if (!accessToken || !refreshToken) {
+                throw new Error('Sign-in succeeded but no session was returned.');
+            }
+
+            const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+            });
+            if (error) throw error;
+        };
+
         const restoreSessionFromLink = async () => {
             const query = new URLSearchParams(window.location.search);
             const hash = readHashParams();
@@ -366,26 +402,13 @@
             magicLinkButton.disabled = true;
             signInButton.textContent = 'Signing in...';
 
-            let { error } = await supabase.auth.signInWithPassword({
-                email: trimmedEmail,
-                password: passwordInput.value,
-            });
-
-            if (
-                error &&
-                /invalid login credentials/i.test(error.message || '') &&
-                trimmedEmail !== trimmedEmail.toLowerCase()
-            ) {
-                ({ error } = await supabase.auth.signInWithPassword({
-                    email: trimmedEmail.toLowerCase(),
-                    password: passwordInput.value,
-                }));
-            }
-
-            if (error) {
+            try {
+                await signInWithPasswordDirect(trimmedEmail, passwordInput.value);
+            } catch (error) {
                 showError(
-                    error.message ||
-                    'Sign-in failed. Please check your email and password, or use the secure sign-in link option.'
+                    error instanceof Error
+                        ? error.message
+                        : 'Sign-in failed. Please check your email and password, or use the secure sign-in link option.'
                 );
                 signInButton.disabled = false;
                 magicLinkButton.disabled = false;
