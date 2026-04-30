@@ -281,6 +281,11 @@
             successBox.style.display = 'block';
         };
 
+        const readHashParams = () => {
+            const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+            return new URLSearchParams(hash);
+        };
+
         const setSignedOutState = () => {
             authForm.classList.remove('hidden');
             deletePanel.classList.add('hidden');
@@ -294,10 +299,45 @@
             signedInEmail.textContent = email || '';
         };
 
+        const restoreSessionFromLink = async () => {
+            const query = new URLSearchParams(window.location.search);
+            const hash = readHashParams();
+            const tokenHash = query.get('token_hash');
+            const type = query.get('type');
+            const accessToken = hash.get('access_token');
+            const refreshToken = hash.get('refresh_token');
+
+            if (accessToken && refreshToken) {
+                const { error } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                });
+                if (error) {
+                    showError(error.message || 'We could not finish the secure sign-in link.');
+                    return;
+                }
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showSuccess('Secure sign-in completed. You can now delete the account.');
+                return;
+            }
+
+            if (tokenHash && type) {
+                const { error } = await supabase.auth.verifyOtp({
+                    token_hash: tokenHash,
+                    type,
+                });
+                if (error) {
+                    showError(error.message || 'This secure sign-in link is invalid or has expired.');
+                    return;
+                }
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showSuccess('Secure sign-in completed. You can now delete the account.');
+            }
+        };
+
         const syncSession = async () => {
             const { data } = await supabase.auth.getSession();
             const user = data.session?.user ?? null;
-            hideMessages();
             if (user?.email) {
                 emailInput.value = user.email;
                 setSignedInState(user.email);
@@ -417,7 +457,11 @@
             signOutButton.disabled = false;
         });
 
-        syncSession();
+        (async () => {
+            hideMessages();
+            await restoreSessionFromLink();
+            await syncSession();
+        })();
     </script>
 </body>
 </html>
