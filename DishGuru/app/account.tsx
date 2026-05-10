@@ -29,6 +29,7 @@ export default function AccountScreen() {
 
   const router = useRouter();
   const { isRTL, locale, setLocale, t } = useLocale();
+  const [changingLocale, setChangingLocale] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [tempAvatarUrl, setTempAvatarUrl] = useState<string | null>(null);
@@ -174,8 +175,18 @@ export default function AccountScreen() {
                     styles.languageChip,
                     !isRTL && styles.languageChipLtr,
                     locale === value && styles.languageChipActive,
+                    changingLocale && styles.languageChipDisabled,
                   ]}
-                  onPress={() => setLocale(value as Locale)}
+                  onPress={async () => {
+                    if (changingLocale || locale === value) return;
+                    try {
+                      setChangingLocale(true);
+                      await setLocale(value as Locale);
+                    } finally {
+                      setChangingLocale(false);
+                    }
+                  }}
+                  disabled={changingLocale}
                 >
                   <Text
                     style={[
@@ -586,6 +597,9 @@ const styles = StyleSheet.create({
   languageChipActive: {
     borderColor: theme.colors.accent,
     backgroundColor: theme.colors.accentSoft,
+  },
+  languageChipDisabled: {
+    opacity: 0.6,
   },
   languageChipText: {
     fontSize: 12,

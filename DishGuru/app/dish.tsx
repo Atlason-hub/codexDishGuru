@@ -2,11 +2,15 @@ import {
   AppState,
   FlatList,
   Image,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -75,10 +79,29 @@ export default function DishScreen() {
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
+  const [reportModalDish, setReportModalDish] = useState<DishAssociation | null>(null);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportDetails, setReportDetails] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportSuccessPending, setReportSuccessPending] = useState(false);
+  const [reportKeyboardHeight, setReportKeyboardHeight] = useState(0);
+  const reportScrollRef = useRef<ScrollView | null>(null);
   const [avgScores, setAvgScores] = useState<{
     tasty: number;
     filling: number;
   } | null>(null);
+
+  const reportReasons = useMemo(
+    () => [
+      { value: 'wrong_photo', label: t('dishReportReasonWrongPhoto') },
+      { value: 'wrong_name', label: t('dishReportReasonWrongName') },
+      { value: 'offensive', label: t('dishReportReasonOffensive') },
+      { value: 'spam_duplicate', label: t('dishReportReasonSpam') },
+      { value: 'wrong_restaurant', label: t('dishReportReasonWrongRestaurant') },
+      { value: 'other', label: t('dishReportReasonOther') },
+    ],
+    [t]
+  );
 
   const sortedAssociations = useMemo(() => {
     return [...dishAssociations].sort((a, b) => {
@@ -353,6 +376,37 @@ export default function DishScreen() {
     return () => subscription.remove();
   }, [refreshContent]);
 
+  useEffect(() => {
+    if (!reportModalDish) {
+      setReportKeyboardHeight(0);
+      return;
+    }
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setReportKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setReportKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [reportModalDish]);
+
+  useEffect(() => {
+    if (!reportSuccessPending || reportModalDish) return;
+    const timer = setTimeout(() => {
+      setReportSuccessPending(false);
+      showAppAlert(t('dishReportSuccessTitle'), t('dishReportSuccessMessage'));
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [reportModalDish, reportSuccessPending, t]);
+
   const handleOpenRestaurant = useCallback(
     (dish: DishAssociation) => {
       router.push({
@@ -409,6 +463,66 @@ export default function DishScreen() {
     [toggleFavorite]
   );
 
+  const handleOpenReport = useCallback(
+    (dish: DishAssociation) => {
+      if (!currentUserId) {
+        showAppAlert(t('authGuestActionTitle'), t('authGuestActionMessage'));
+        return;
+      }
+      setReportModalDish(dish);
+      setReportReason(null);
+      setReportDetails('');
+    },
+    [currentUserId, t]
+  );
+
+  const handleCloseReportModal = useCallback(() => {
+    if (isSubmittingReport) return;
+    setReportModalDish(null);
+    setReportReason(null);
+    setReportDetails('');
+  }, [isSubmittingReport]);
+
+  const handleSubmitReport = useCallback(async () => {
+    if (!reportModalDish || !currentUserId) {
+      showAppAlert(t('authGuestActionTitle'), t('authGuestActionMessage'));
+      return;
+    }
+    if (!reportReason) {
+      showAppAlert(t('dishReportTitle'), t('dishReportReasonRequired'));
+      return;
+    }
+
+    try {
+      setIsSubmittingReport(true);
+      const { error: insertError } = await supabase.from('dish_reports').insert({
+        dish_association_id: reportModalDish.id,
+        reported_by_user_id: currentUserId,
+        reason: reportReason,
+        details: reportDetails.trim() ? reportDetails.trim() : null,
+      });
+      if (insertError) throw insertError;
+
+      setReportModalDish(null);
+      setReportReason(null);
+      setReportDetails('');
+      setReportSuccessPending(true);
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'message' in error ? String(error.message ?? '') : '';
+      if (
+        message.toLowerCase().includes('duplicate') ||
+        message.includes('dish_reports_unique_reporter_per_dish')
+      ) {
+        showAppAlert(t('dishReportDuplicateTitle'), t('dishReportDuplicateMessage'));
+      } else {
+        showAppAlert(t('dishReportFailedTitle'), t('dishReportFailedMessage'));
+      }
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  }, [currentUserId, reportDetails, reportModalDish, reportReason, t]);
+
   const handleOrder = useCallback(
     (dish: DishAssociation) => {
       openVendorDish(orderVendor, dish.restaurant_id, dish.dish_id);
@@ -434,6 +548,7 @@ export default function DishScreen() {
         onDelete={deleteDishAssociation}
         onEdit={handleEdit}
         onOrder={handleOrder}
+        onReport={handleOpenReport}
       />
     ),
     [
@@ -445,6 +560,7 @@ export default function DishScreen() {
       handleOpenCamera,
       handleAvatarPress,
       handleOpenPhoto,
+      handleOpenReport,
       handleOpenRestaurant,
       handleOrder,
       handleToggleFavorite,
@@ -555,6 +671,103 @@ export default function DishScreen() {
       ) : !loading && !error && hasLoaded ? (
         <View style={styles.results}>
           <Text style={styles.placeholderText}>אין מנות להצגה</Text>
+        </View>
+      ) : null}
+      {reportModalDish ? (
+        <View style={styles.reportOverlay} pointerEvents="box-none">
+          <Pressable style={styles.reportOverlayBackdrop} onPress={handleCloseReportModal} />
+          <View
+            style={[
+              styles.reportOverlayContent,
+              Platform.OS === 'ios' ? styles.reportOverlayContentIos : null,
+              reportKeyboardHeight > 0
+                ? Platform.OS === 'ios'
+                  ? { paddingBottom: Math.max(reportKeyboardHeight - 12, 0), paddingTop: 16 }
+                  : { paddingBottom: Math.max(reportKeyboardHeight - 24, 0) }
+                : null,
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.reportModalCard}>
+              <ScrollView
+                ref={reportScrollRef}
+                style={styles.reportModalScroll}
+                contentContainerStyle={styles.reportModalScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={[styles.reportModalHeader, !isRTL && styles.reportModalHeaderLtr]}>
+                  <Text style={[styles.reportModalTitle, !isRTL && styles.reportModalTitleLtr]}>
+                    {t('dishReportTitle')}
+                  </Text>
+                  <Pressable
+                    style={styles.reportModalClose}
+                    onPress={handleCloseReportModal}
+                    disabled={isSubmittingReport}
+                  >
+                    <Ionicons name="close" size={20} color={theme.colors.ink} />
+                  </Pressable>
+                </View>
+                <Text style={[styles.reportModalSubtitle, !isRTL && styles.reportModalSubtitleLtr]}>
+                  {t('dishReportSubtitle')}
+                </Text>
+                <View style={styles.reportReasonList}>
+                  {reportReasons.map((reasonItem) => {
+                    const selected = reportReason === reasonItem.value;
+                    return (
+                      <Pressable
+                        key={reasonItem.value}
+                        style={[
+                          styles.reportReasonButton,
+                          selected && styles.reportReasonButtonSelected,
+                        ]}
+                        onPress={() => setReportReason(reasonItem.value)}
+                        disabled={isSubmittingReport}
+                      >
+                        <Text
+                          style={[
+                            styles.reportReasonText,
+                            selected && styles.reportReasonTextSelected,
+                            !isRTL && styles.reportReasonTextLtr,
+                          ]}
+                        >
+                          {reasonItem.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <TextInput
+                  style={[styles.reportTextInput, !isRTL && styles.reportTextInputLtr]}
+                  value={reportDetails}
+                  onChangeText={setReportDetails}
+                  onFocus={() => {
+                    setTimeout(() => {
+                      reportScrollRef.current?.scrollToEnd({ animated: true });
+                    }, Platform.OS === 'ios' ? 180 : 120);
+                  }}
+                  placeholder={t('dishReportDetailsPlaceholder')}
+                  placeholderTextColor={theme.colors.textMuted}
+                  multiline
+                  maxLength={280}
+                  editable={!isSubmittingReport}
+                  textAlign={isRTL ? 'right' : 'left'}
+                />
+                <Pressable
+                  style={[
+                    styles.reportSubmitButton,
+                    isSubmittingReport && styles.reportSubmitButtonDisabled,
+                  ]}
+                  onPress={handleSubmitReport}
+                  disabled={isSubmittingReport}
+                >
+                  <Text style={styles.reportSubmitButtonText}>
+                    {isSubmittingReport ? `${t('dishReportSubmit')}...` : t('dishReportSubmit')}
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            </View>
+          </View>
         </View>
       ) : null}
       <Modal
@@ -751,6 +964,141 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingRight: 0,
     paddingLeft: 4,
+  },
+  reportOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    elevation: 40,
+  },
+  reportOverlayBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  reportOverlayContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  reportOverlayContentIos: {
+    justifyContent: 'flex-start',
+    paddingTop: 32,
+    paddingBottom: 12,
+  },
+  reportModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: Platform.OS === 'ios' ? '68%' : '88%',
+    borderRadius: 20,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 18,
+    shadowColor: theme.colors.ink,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  reportModalScroll: {
+    width: '100%',
+  },
+  reportModalScrollContent: {
+    paddingBottom: 6,
+  },
+  reportModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reportModalHeaderLtr: {
+    flexDirection: 'row-reverse',
+  },
+  reportModalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text,
+    textAlign: 'right',
+  },
+  reportModalTitleLtr: {
+    textAlign: 'left',
+  },
+  reportModalClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportModalSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    color: theme.colors.textMuted,
+    textAlign: 'right',
+  },
+  reportModalSubtitleLtr: {
+    textAlign: 'left',
+  },
+  reportReasonList: {
+    marginTop: 14,
+    gap: 10,
+  },
+  reportReasonButton: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 14,
+    backgroundColor: theme.colors.background,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  reportReasonButtonSelected: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
+  reportReasonText: {
+    fontSize: 14,
+    color: theme.colors.text,
+    textAlign: 'right',
+  },
+  reportReasonTextLtr: {
+    textAlign: 'left',
+  },
+  reportReasonTextSelected: {
+    color: theme.colors.accent,
+    fontWeight: '700',
+  },
+  reportTextInput: {
+    minHeight: 100,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 14,
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: theme.colors.text,
+    textAlignVertical: 'top',
+  },
+  reportTextInputLtr: {
+    writingDirection: 'ltr',
+  },
+  reportSubmitButton: {
+    marginTop: 14,
+    borderRadius: 16,
+    backgroundColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+  },
+  reportSubmitButtonDisabled: {
+    opacity: 0.6,
+  },
+  reportSubmitButtonText: {
+    color: theme.colors.white,
+    fontSize: 15,
+    fontWeight: '700',
   },
   fullscreenOverlay: {
     flex: 1,

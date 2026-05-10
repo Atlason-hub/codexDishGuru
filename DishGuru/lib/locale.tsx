@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export type Locale = 'he' | 'en';
 
@@ -14,6 +14,9 @@ const translations = {
     commonDelete: 'מחק',
     commonOpenSettings: 'פתח הגדרות',
     commonNoDishesToShow: 'אין מנות להצגה',
+    homeTabDishes: 'מנות',
+    homeTabRestaurants: 'מסעדות',
+    restaurantsTabEmpty: 'אין מסעדות להצגה',
     commonUnexpectedError: 'אירעה שגיאה לא צפויה.',
     headerMenuAccount: 'החשבון שלי',
     headerMenuMyDishes: 'המנות שלי',
@@ -144,6 +147,24 @@ const translations = {
     dishDeleteTitle: 'מחיקת מנה',
     dishDeleteMessage: 'האם למחוק את המנה והביקורות שלה?',
     dishDeleteUnauthorized: 'אפשר למחוק רק מנות שהעלית.',
+    dishReportAction: 'דווח',
+    dishReportTitle: 'דיווח על מנה',
+    dishReportSubtitle: 'בחר סיבה והוסף פירוט קצר אם צריך.',
+    dishReportReasonWrongPhoto: 'תמונה לא נכונה',
+    dishReportReasonWrongName: 'שם מנה שגוי',
+    dishReportReasonOffensive: 'תוכן פוגעני',
+    dishReportReasonSpam: 'ספאם או כפילות',
+    dishReportReasonWrongRestaurant: 'מסעדה שגויה',
+    dishReportReasonOther: 'אחר',
+    dishReportDetailsPlaceholder: 'אפשר להוסיף הערה קצרה',
+    dishReportSubmit: 'שלח דיווח',
+    dishReportReasonRequired: 'יש לבחור סיבה לדיווח.',
+    dishReportSuccessTitle: 'הדיווח נשלח',
+    dishReportSuccessMessage: 'תודה. נבדוק את הדיווח בהקדם.',
+    dishReportDuplicateTitle: 'כבר דיווחת',
+    dishReportDuplicateMessage: 'כבר נשלח דיווח על המנה הזו מהחשבון שלך.',
+    dishReportFailedTitle: 'הדיווח נכשל',
+    dishReportFailedMessage: 'לא הצלחנו לשלוח את הדיווח. נסה שוב.',
   },
   en: {
     commonSave: 'Save',
@@ -153,6 +174,9 @@ const translations = {
     commonDelete: 'Delete',
     commonOpenSettings: 'Open Settings',
     commonNoDishesToShow: 'No Dishes to Show',
+    homeTabDishes: 'Dishes',
+    homeTabRestaurants: 'Restaurants',
+    restaurantsTabEmpty: 'No Restaurants to Show',
     commonUnexpectedError: 'An unexpected error occurred.',
     headerMenuAccount: 'My account',
     headerMenuMyDishes: 'My dishes',
@@ -283,6 +307,24 @@ const translations = {
     dishDeleteTitle: 'Delete Dish',
     dishDeleteMessage: 'Delete this dish and its reviews?',
     dishDeleteUnauthorized: 'You can only delete dishes you uploaded.',
+    dishReportAction: 'Report',
+    dishReportTitle: 'Report dish',
+    dishReportSubtitle: 'Choose a reason and add a short note if needed.',
+    dishReportReasonWrongPhoto: 'Wrong photo',
+    dishReportReasonWrongName: 'Wrong dish name',
+    dishReportReasonOffensive: 'Offensive content',
+    dishReportReasonSpam: 'Spam or duplicate',
+    dishReportReasonWrongRestaurant: 'Wrong restaurant',
+    dishReportReasonOther: 'Other',
+    dishReportDetailsPlaceholder: 'Add a short note if you want',
+    dishReportSubmit: 'Send report',
+    dishReportReasonRequired: 'Please choose a report reason.',
+    dishReportSuccessTitle: 'Report sent',
+    dishReportSuccessMessage: 'Thanks. We will review this report soon.',
+    dishReportDuplicateTitle: 'Already reported',
+    dishReportDuplicateMessage: 'A report for this dish was already sent from your account.',
+    dishReportFailedTitle: 'Report failed',
+    dishReportFailedMessage: 'We could not send the report. Please try again.',
   },
 } as const;
 
@@ -307,6 +349,7 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('he');
+  const localeUpdateRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -322,8 +365,31 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setLocale = async (next: Locale) => {
-    setLocaleState(next);
-    await AsyncStorage.setItem(LOCALE_STORAGE_KEY, next);
+    if (next === locale) {
+      return;
+    }
+
+    if (localeUpdateRef.current) {
+      await localeUpdateRef.current;
+      if (next === locale) {
+        return;
+      }
+    }
+
+    const task = (async () => {
+      await AsyncStorage.setItem(LOCALE_STORAGE_KEY, next);
+      setLocaleState(next);
+    })();
+
+    localeUpdateRef.current = task;
+
+    try {
+      await task;
+    } finally {
+      if (localeUpdateRef.current === task) {
+        localeUpdateRef.current = null;
+      }
+    }
   };
 
   const value = useMemo<LocaleContextValue>(

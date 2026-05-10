@@ -3,7 +3,10 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -56,52 +59,66 @@ export default function ResetPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.card}>
-        <Text style={[styles.title, !isRTL && styles.titleLtr]}>{t('authResetPasswordTitle')}</Text>
-        <Text style={[styles.subtitle, !isRTL && styles.titleLtr]}>{t('authResetPasswordSubtitle')}</Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoiding}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.card}>
+            <Text style={[styles.title, !isRTL && styles.titleLtr]}>{t('authResetPasswordTitle')}</Text>
+            <Text style={[styles.subtitle, !isRTL && styles.titleLtr]}>{t('authResetPasswordSubtitle')}</Text>
 
-        <View style={styles.fieldGroup}>
-          <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>{t('authPassword')}</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.inputField}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              textAlign="left"
-              selectionColor={theme.colors.accent}
-              cursorColor={theme.colors.accent}
-            />
-            <Pressable style={styles.eyeButton} onPress={() => setShowPassword((value) => !value)}>
-              <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>{t('authPassword')}</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.inputField}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  textAlign="left"
+                  selectionColor={theme.colors.accent}
+                  cursorColor={theme.colors.accent}
+                />
+                <Pressable style={styles.eyeButton} onPress={() => setShowPassword((value) => !value)}>
+                  <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>{t('authPasswordConfirm')}</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.inputField}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  textAlign="left"
+                  selectionColor={theme.colors.accent}
+                  cursorColor={theme.colors.accent}
+                />
+                <Pressable style={styles.eyeButton} onPress={() => setShowConfirmPassword((value) => !value)}>
+                  <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
+                </Pressable>
+              </View>
+            </View>
+
+            {error ? <Text style={[styles.errorText, !isRTL && styles.fieldLabelLtr]}>{error}</Text> : null}
+
+            <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={submit} disabled={loading}>
+              {loading ? <ActivityIndicator color={theme.colors.white} /> : <Text style={styles.buttonText}>{t('authUpdatePassword')}</Text>}
             </Pressable>
           </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>{t('authPasswordConfirm')}</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.inputField}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-              textAlign="left"
-              selectionColor={theme.colors.accent}
-              cursorColor={theme.colors.accent}
-            />
-            <Pressable style={styles.eyeButton} onPress={() => setShowConfirmPassword((value) => !value)}>
-              <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
-            </Pressable>
-          </View>
-        </View>
-
-        {error ? <Text style={[styles.errorText, !isRTL && styles.fieldLabelLtr]}>{error}</Text> : null}
-
-        <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={submit} disabled={loading}>
-          {loading ? <ActivityIndicator color={theme.colors.white} /> : <Text style={styles.buttonText}>{t('authUpdatePassword')}</Text>}
-        </Pressable>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -110,8 +127,15 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  keyboardAvoiding: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 24,
   },
   card: {
     backgroundColor: theme.colors.card,

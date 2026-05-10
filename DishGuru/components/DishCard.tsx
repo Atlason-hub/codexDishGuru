@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
-  PanResponder,
-  Platform,
   Pressable,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,8 +36,6 @@ export type DishCardItem = {
 
 const IMAGE_HEIGHT = 260;
 
-type Rect = { x: number; y: number; width: number; height: number };
-
 type DishCardProps = {
   items: DishCardItem[];
   favorites?: Record<string, boolean>;
@@ -54,11 +53,7 @@ type DishCardProps = {
   onEdit?: (item: DishCardItem) => void;
   onDelete?: (item: DishCardItem) => void;
   onOrder?: (item: DishCardItem) => void;
-};
-
-const isInsideLayout = (layout: Rect | undefined, x: number, y: number) => {
-  if (!layout) return false;
-  return x >= layout.x && x <= layout.x + layout.width && y >= layout.y && y <= layout.y + layout.height;
+  onReport?: (item: DishCardItem) => void;
 };
 
 function DishCard({
@@ -78,6 +73,7 @@ function DishCard({
   onEdit,
   onDelete,
   onOrder,
+  onReport,
 }: DishCardProps) {
   const { isRTL, t } = useLocale();
   const [imageWidth, setImageWidth] = useState(0);
@@ -92,15 +88,7 @@ function DishCard({
   const trashScale = useRef(new Animated.Value(1)).current;
   const avatarScale = useRef(new Animated.Value(1)).current;
   const orderScale = useRef(new Animated.Value(1)).current;
-  const [buttonLayouts, setButtonLayouts] = useState<{
-    camera?: Rect;
-    heart?: Rect;
-    order?: Rect;
-    avatar?: Rect;
-    edit?: Rect;
-    trash?: Rect;
-  }>({});
-
+  const reportScale = useRef(new Animated.Value(1)).current;
   const currentItem = items[currentIndex] ?? items[0];
   const reviewValue = currentItem?.review_text?.trim();
   const shouldShowReview = Boolean(reviewValue);
@@ -113,6 +101,11 @@ function DishCard({
   const avatarLabel = currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null;
   const hasRestaurantTarget = Boolean(
     currentItem && (currentItem.restaurant_id || currentItem.restaurant_name)
+  );
+  const canReport = Boolean(
+    currentItem &&
+      onReport &&
+      (!currentItem.user_id || !currentUserId || currentItem.user_id !== currentUserId)
   );
 
   const bouncePress = (scale: Animated.Value) => {
@@ -154,60 +147,15 @@ function DishCard({
     }).start();
   }, [currentIndex, dotAnim]);
 
-  const panResponder = useMemo(
-    () =>
-      items.length > 1
-        ? PanResponder.create({
-            onStartShouldSetPanResponder: (evt) => {
-              const { locationX, locationY } = evt.nativeEvent;
-              if (
-                isInsideLayout(buttonLayouts.camera, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.heart, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.order, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.avatar, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.edit, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.trash, locationX, locationY)
-              ) {
-                return false;
-              }
-              return true;
-            },
-            onMoveShouldSetPanResponder: (evt, gesture) => {
-              const { locationX, locationY } = evt.nativeEvent;
-              if (
-                isInsideLayout(buttonLayouts.camera, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.heart, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.order, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.avatar, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.edit, locationX, locationY) ||
-                isInsideLayout(buttonLayouts.trash, locationX, locationY)
-              ) {
-                return false;
-              }
-              return Math.abs(gesture.dx) > Math.abs(gesture.dy) && Math.abs(gesture.dx) > 8;
-            },
-            onPanResponderRelease: (_evt, gesture) => {
-              const width = imageWidth || 1;
-              const current = currentIndex;
-              let next = current;
-              if (gesture.dx < -30 && current < items.length - 1) {
-                next = current + 1;
-              } else if (gesture.dx > 30 && current > 0) {
-                next = current - 1;
-              }
-              if (next !== current) {
-                contentDirectionRef.current = next > current ? 1 : -1;
-                setCurrentIndex(next);
-                scrollRef.current?.scrollTo({ x: next * width, animated: true });
-              }
-              if (Math.abs(gesture.dx) < 8 && currentItem) {
-                onOpenPhoto?.(currentItem);
-              }
-            },
-          })
-        : null,
-    [buttonLayouts, currentIndex, imageWidth, items.length, currentItem, onOpenPhoto]
-  );
+  const handleCarouselMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const width = imageWidth || event.nativeEvent.layoutMeasurement.width || 1;
+    const rawIndex = event.nativeEvent.contentOffset.x / width;
+    const nextIndex = Math.max(0, Math.min(items.length - 1, Math.round(rawIndex)));
+    if (nextIndex !== currentIndex) {
+      contentDirectionRef.current = nextIndex > currentIndex ? 1 : -1;
+      setCurrentIndex(nextIndex);
+    }
+  };
 
   return (
     <View style={styles.feedCard}>
@@ -226,9 +174,12 @@ function DishCard({
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
-            scrollEnabled={false}
-            pointerEvents="none"
-            contentOffset={{ x: currentIndex * (imageWidth || 0), y: 0 }}
+            scrollEnabled
+            nestedScrollEnabled
+            disableIntervalMomentum
+            decelerationRate="fast"
+            directionalLockEnabled
+            onMomentumScrollEnd={handleCarouselMomentumEnd}
             style={styles.carouselScroll}
           >
             {items.map((imageItem) => (
@@ -254,13 +205,32 @@ function DishCard({
             )}
           </Pressable>
         )}
-        {items.length > 1 ? (
-          <View
-            style={styles.carouselSwipeZone}
-            pointerEvents="auto"
-            {...(panResponder ? panResponder.panHandlers : {})}
-          />
-        ) : null}
+        <View
+          style={[
+            styles.cameraTapTarget,
+            isRTL ? styles.cameraTapTargetRtl : styles.cameraTapTargetLtr,
+          ]}
+          pointerEvents="box-none"
+        >
+          <Animated.View
+            style={[styles.cameraBadge, { transform: [{ scale: cameraScale }] }]}
+            pointerEvents="box-none"
+          >
+            <Pressable
+              style={styles.cameraBadgePressable}
+              hitSlop={10}
+              pressRetentionOffset={18}
+              onPress={() => {
+                if (currentItem) {
+                  onOpenCamera?.(currentItem);
+                  bouncePress(cameraScale);
+                }
+              }}
+            >
+              <Ionicons name="camera" size={18} color={dishActionColor} />
+            </Pressable>
+          </Animated.View>
+        </View>
         <View style={styles.imageOverlay} pointerEvents="box-none">
           <LinearGradient
             colors={['rgba(0,0,0,0.7)', 'rgba(0,0,0,0.0)']}
@@ -279,36 +249,12 @@ function DishCard({
             ]}
             pointerEvents="box-none"
           >
-            <Animated.View style={[styles.cameraBadge, { transform: [{ scale: cameraScale }] }]}>
-              <Pressable
-                style={styles.badgePressable}
-                hitSlop={12}
-                onStartShouldSetResponder={() => true}
-                onStartShouldSetResponderCapture={() => true}
-                onLayout={(event) => {
-                  const { x, y, width, height } = event.nativeEvent.layout;
-                  setButtonLayouts((prev) => ({ ...prev, camera: { x, y, width, height } }));
-                }}
-                onPress={() => {
-                  if (currentItem) {
-                    onOpenCamera?.(currentItem);
-                    bouncePress(cameraScale);
-                  }
-                }}
-              >
-                <Ionicons name="camera" size={18} color={dishActionColor} />
-              </Pressable>
-            </Animated.View>
             <Animated.View style={[styles.heartBadge, { transform: [{ scale: heartScale }] }]}>
               <Pressable
                 style={styles.badgePressable}
                 hitSlop={12}
                 onStartShouldSetResponder={() => true}
                 onStartShouldSetResponderCapture={() => true}
-                onLayout={(event) => {
-                  const { x, y, width, height } = event.nativeEvent.layout;
-                  setButtonLayouts((prev) => ({ ...prev, heart: { x, y, width, height } }));
-                }}
                 onPress={() => {
                   if (currentItem?.id) {
                     onToggleFavorite?.(currentItem.id);
@@ -328,10 +274,6 @@ function DishCard({
                 <Pressable
                   style={styles.badgePressable}
                   hitSlop={12}
-                  onLayout={(event) => {
-                    const { x, y, width, height } = event.nativeEvent.layout;
-                    setButtonLayouts((prev) => ({ ...prev, edit: { x, y, width, height } }));
-                  }}
                   onPress={() => {
                     onEdit(currentItem);
                     bouncePress(editScale);
@@ -346,10 +288,6 @@ function DishCard({
                 <Pressable
                   style={styles.badgePressable}
                   hitSlop={12}
-                  onLayout={(event) => {
-                    const { x, y, width, height } = event.nativeEvent.layout;
-                    setButtonLayouts((prev) => ({ ...prev, trash: { x, y, width, height } }));
-                  }}
                   onPress={() => {
                     if (currentItem) {
                       onDelete?.(currentItem);
@@ -379,10 +317,6 @@ function DishCard({
           >
             <Pressable
               style={styles.badgePressable}
-              onLayout={(event) => {
-                const { x, y, width, height } = event.nativeEvent.layout;
-                setButtonLayouts((prev) => ({ ...prev, avatar: { x, y, width, height } }));
-              }}
               onPress={() => {
                 if (onAvatarPress) {
                   onAvatarPress(resolvedAvatarUrl ?? null, avatarLabel ?? null);
@@ -398,6 +332,27 @@ function DishCard({
               )}
             </Pressable>
           </Animated.View>
+          {canReport ? (
+            <Animated.View
+              style={[
+                styles.reportBadge,
+                isRTL ? styles.reportBadgeRtl : styles.reportBadgeLtr,
+                { transform: [{ scale: reportScale }] },
+              ]}
+            >
+              <Pressable
+                style={styles.badgePressable}
+                onPress={() => {
+                  if (currentItem) {
+                    onReport?.(currentItem);
+                    bouncePress(reportScale);
+                  }
+                }}
+              >
+                <Ionicons name="flag-outline" size={16} color={dishActionColor} />
+              </Pressable>
+            </Animated.View>
+          ) : null}
           <View
             style={[
               styles.imageTextBlock,
@@ -500,10 +455,6 @@ function DishCard({
         <Animated.View style={{ transform: [{ scale: orderScale }] }}>
           <Pressable
             style={[styles.orderButton, !isRTL && styles.orderButtonLtr]}
-            onLayout={(event) => {
-              const { x, y, width, height } = event.nativeEvent.layout;
-              setButtonLayouts((prev) => ({ ...prev, order: { x, y, width, height } }));
-            }}
             onPressIn={() =>
               Animated.timing(orderScale, {
                 toValue: 0.96,
@@ -667,6 +618,7 @@ export default React.memo(DishCard, (prev, next) => {
   if (prev.onEdit !== next.onEdit) return false;
   if (prev.onDelete !== next.onDelete) return false;
   if (prev.onOrder !== next.onOrder) return false;
+  if (prev.onReport !== next.onReport) return false;
   return true;
 });
 
@@ -730,14 +682,6 @@ const styles = StyleSheet.create({
   carouselScroll: {
     flex: 1,
   },
-  carouselSwipeZone: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 60,
-    right: 60,
-    zIndex: 4,
-  },
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 5,
@@ -752,6 +696,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 6,
   },
+  cameraTapTarget: {
+    position: 'absolute',
+    top: 44,
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 11,
+    elevation: 30,
+  },
+  cameraTapTargetRtl: {
+    left: 0,
+  },
+  cameraTapTargetLtr: {
+    right: 0,
+  },
   overlayActionStackRtl: {
     left: 12,
   },
@@ -759,11 +719,9 @@ const styles = StyleSheet.create({
     right: 12,
   },
   cameraBadge: {
-    position: 'absolute',
-    top: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
     borderColor: dishActionColor,
@@ -782,6 +740,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
+  },
+  cameraBadgePressable: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
   },
   heartBadge: {
     position: 'absolute',
@@ -863,6 +828,30 @@ const styles = StyleSheet.create({
     right: 16,
   },
   avatarBadgeLtr: {
+    left: 16,
+  },
+  reportBadge: {
+    position: 'absolute',
+    bottom: 52,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: dishActionColor,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 7,
+    shadowColor: theme.colors.ink,
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  reportBadgeRtl: {
+    right: 16,
+  },
+  reportBadgeLtr: {
     left: 16,
   },
   avatarImage: {

@@ -13,6 +13,7 @@ import { applyPaletteFromLogo } from '../lib/brandPalette';
 import { getLegalUrl, useLocale } from '../lib/locale';
 import { fetchGlobalCompanyContext } from '../lib/appData';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
+import { publishHomeTab } from '../lib/homeTabs';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 let lastKnownCompanyLogoUrl: string | null = null;
@@ -253,13 +254,8 @@ export default function AppHeader() {
 
   const goHome = () => {
     setMenuVisible(false);
-    const isPlainHome =
-      pathname === '/' &&
-      guestModeParam !== '1' &&
-      favoritesParam !== '1' &&
-      restaurantIdParam.length === 0 &&
-      restaurantNameParam.length === 0;
-    if (isPlainHome) {
+    if (pathname === '/') {
+      publishHomeTab('dishes');
       return;
     }
     router.replace({
@@ -268,6 +264,7 @@ export default function AppHeader() {
         refresh: String(Date.now()),
         headerSync: String(Date.now()),
         guestMode: isGuestMode ? '1' : '0',
+        homeTab: 'dishes',
       },
     });
   };

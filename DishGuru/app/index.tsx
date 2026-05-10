@@ -28,6 +28,7 @@ import DishCard from '../components/DishCard';
 import StaggeredEntrance from '../components/StaggeredEntrance';
 import LegalModal from '../components/LegalModal';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
+import RestaurantsTab from '../components/RestaurantsTab';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -41,6 +42,7 @@ import {
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { getLegalUrl, Locale, useLocale } from '../lib/locale';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
+import { publishHomeTab, subscribeHomeTab, type HomeTabKey } from '../lib/homeTabs';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 const primaryActionColor = '#C75D2C';
@@ -64,6 +66,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { isRTL, locale, setLocale, t } = useLocale();
   const params = useLocalSearchParams();
+  const homeTabParam = typeof params.homeTab === 'string' ? params.homeTab : '';
   const refreshParam = typeof params.refresh === 'string' ? params.refresh : '';
   const scrollParam = typeof params.scrollY === 'string' ? params.scrollY : '';
   const emailConfirmedParam = typeof params.emailConfirmed === 'string' ? params.emailConfirmed : '';
@@ -101,6 +104,8 @@ export default function HomeScreen() {
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [debouncedHomeSearch, setDebouncedHomeSearch] = useState('');
+  const [activeHomeTab, setActiveHomeTab] = useState<HomeTabKey>('dishes');
+  const [hasVisitedRestaurantsTab, setHasVisitedRestaurantsTab] = useState(false);
   const appStateRef = useRef(AppState.currentState);
   const cacheHydratedRef = useRef(false);
   const lastRefreshRef = useRef(0);
@@ -893,6 +898,35 @@ export default function HomeScreen() {
     typeof params.restaurantName === 'string' ? params.restaurantName : null;
   const showRestaurantOnly =
     !showFavoritesOnly && (restaurantFilterId !== null || Boolean(restaurantFilterName));
+  const shouldShowMainTabs = !showFavoritesOnly && !showRestaurantOnly;
+
+  useEffect(() => {
+    if (!shouldShowMainTabs && activeHomeTab !== 'dishes') {
+      setActiveHomeTab('dishes');
+    }
+  }, [activeHomeTab, shouldShowMainTabs]);
+
+  useEffect(() => {
+    if (homeTabParam === 'restaurants' || homeTabParam === 'dishes') {
+      setActiveHomeTab(homeTabParam);
+      return;
+    }
+    if (shouldShowMainTabs) {
+      setActiveHomeTab('dishes');
+    }
+  }, [homeTabParam, shouldShowMainTabs]);
+
+  useEffect(() => {
+    if (activeHomeTab === 'restaurants') {
+      setHasVisitedRestaurantsTab(true);
+    }
+  }, [activeHomeTab]);
+
+  useEffect(() => {
+    return subscribeHomeTab((tab) => {
+      setActiveHomeTab(tab);
+    });
+  }, []);
 
   const visibleAssociations = showFavoritesOnly
     ? dishAssociations.filter((item) => favorites[item.id])
@@ -954,6 +988,43 @@ export default function HomeScreen() {
             placeholderTextColor={theme.colors.textMuted}
             value={homeSearch}
             onChangeText={setHomeSearch}
+            onSubmitEditing={() => {
+              const normalizedNeedle = homeSearch
+                .toLowerCase()
+                .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+              if (!normalizedNeedle) return;
+
+              const matchingDishGroups = groupedAssociations.filter((group) => {
+                const dishName = (group.dishName ?? '')
+                  .toLowerCase()
+                  .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+                return dishName.includes(normalizedNeedle);
+              });
+
+              if (matchingDishGroups.length === 1 && matchingDishGroups[0].items.length > 0) {
+                handleOpenDish(matchingDishGroups[0].items[0]);
+                return;
+              }
+
+              const matchingRestaurants = visibleAssociations.filter((dish) => {
+                const restaurantName = (dish.restaurant_name ?? '')
+                  .toLowerCase()
+                  .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+                return restaurantName.includes(normalizedNeedle);
+              });
+
+              if (matchingRestaurants.length > 0 && shouldShowMainTabs) {
+                publishHomeTab('restaurants');
+                setActiveHomeTab('restaurants');
+              }
+            }}
+            returnKeyType="search"
             textAlign={isRTL ? 'right' : 'left'}
           />
           {homeSearch.trim().length > 0 ? (
@@ -968,6 +1039,38 @@ export default function HomeScreen() {
               <Ionicons name="close" size={16} color={theme.colors.textMuted} />
             </Pressable>
           ) : null}
+        </View>
+      ) : null}
+      {shouldShowMainTabs ? (
+        <View style={[styles.tabsRow, !isRTL && styles.tabsRowLtr]}>
+          {([
+            ['dishes', t('homeTabDishes')],
+            ['restaurants', t('homeTabRestaurants')],
+          ] as const).map(([tabKey, label]) => {
+            const isActive = activeHomeTab === tabKey;
+            return (
+              <Pressable
+                key={tabKey}
+                style={[
+                  styles.tabChip,
+                  isActive && styles.tabChipActive,
+                ]}
+                onPress={() => {
+                  publishHomeTab(tabKey);
+                  setActiveHomeTab(tabKey);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.tabChipText,
+                    isActive && styles.tabChipTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       ) : null}
     </View>
@@ -1389,45 +1492,89 @@ export default function HomeScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       ) : (
-        <FlatList
-          ref={listRef}
-          data={groupedAssociations}
-          keyExtractor={(item) => item.key}
-          initialNumToRender={4}
-          maxToRenderPerBatch={4}
-          updateCellsBatchingPeriod={50}
-          windowSize={7}
-          removeClippedSubviews
-          contentContainerStyle={[
-            styles.feedContent,
-            !hasHeaderContent && styles.feedContentNoHeader,
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={() => refreshContent(true)}
-              tintColor={theme.colors.accent}
-              colors={[theme.colors.accent]}
+        <View style={styles.tabScene}>
+          <View
+            style={[
+              styles.tabPane,
+              activeHomeTab === 'dishes' ? styles.tabPaneVisible : styles.tabPaneHidden,
+            ]}
+            pointerEvents={activeHomeTab === 'dishes' ? 'auto' : 'none'}
+          >
+            <FlatList
+              ref={listRef}
+              data={groupedAssociations}
+              keyExtractor={(item) => item.key}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              updateCellsBatchingPeriod={50}
+              windowSize={7}
+              removeClippedSubviews
+              contentContainerStyle={[
+                styles.feedContent,
+                !hasHeaderContent && styles.feedContentNoHeader,
+              ]}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={() => refreshContent(true)}
+                  tintColor={theme.colors.accent}
+                  colors={[theme.colors.accent]}
+                />
+              }
+              onScroll={(event) => {
+                const y = event.nativeEvent.contentOffset.y;
+                scrollYRef.current = y;
+              }}
+              scrollEventThrottle={16}
+              ListHeaderComponent={listHeader}
+              ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
+              ListEmptyComponent={
+                !loading && !error && hasLoaded ? (
+                  <View style={styles.results}>
+                    <Text style={[styles.placeholderText, !isRTL && styles.placeholderTextLtr]}>
+                      {showFavoritesOnly ? t('favoritesEmpty') : t('commonNoDishesToShow')}
+                    </Text>
+                  </View>
+                ) : null
+              }
+              renderItem={renderDishGroup}
             />
-          }
-          onScroll={(event) => {
-            const y = event.nativeEvent.contentOffset.y;
-            scrollYRef.current = y;
-          }}
-          scrollEventThrottle={16}
-          ListHeaderComponent={listHeader}
-          ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
-          ListEmptyComponent={
-            !loading && !error && hasLoaded ? (
-              <View style={styles.results}>
-                <Text style={[styles.placeholderText, !isRTL && styles.placeholderTextLtr]}>
-                  {showFavoritesOnly ? t('favoritesEmpty') : t('commonNoDishesToShow')}
-                </Text>
-              </View>
-            ) : null
-          }
-          renderItem={renderDishGroup}
-        />
+          </View>
+          {(activeHomeTab === 'restaurants' || hasVisitedRestaurantsTab) ? (
+            <View
+              style={[
+                styles.tabPane,
+                activeHomeTab === 'restaurants' ? styles.tabPaneVisible : styles.tabPaneHidden,
+              ]}
+              pointerEvents={activeHomeTab === 'restaurants' ? 'auto' : 'none'}
+            >
+            <ScrollView
+              contentContainerStyle={styles.restaurantsTabScrollContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={() => refreshContent(true)}
+                  tintColor={theme.colors.accent}
+                  colors={[theme.colors.accent]}
+                />
+              }
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {listHeader}
+              <RestaurantsTab
+                dishes={dishAssociations}
+                loading={loading}
+                hasLoaded={hasLoaded}
+                error={error}
+                canAddDish={isAuthenticated}
+                onRequireLogin={showGuestLoginDialog}
+                searchQuery={debouncedHomeSearch}
+              />
+            </ScrollView>
+            </View>
+          ) : null}
+        </View>
       )}
       {(isAuthenticated || isGuestMode) && (
         <>
@@ -1885,6 +2032,42 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 15,
   },
+  tabsRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  tabsRowLtr: {
+    flexDirection: 'row',
+  },
+  tabChip: {
+    minWidth: 92,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: '#F5F1ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ scale: 1 }],
+  },
+  tabChipActive: {
+    borderColor: '#E9D6CB',
+    backgroundColor: '#F0E2D8',
+    transform: [{ scale: 1.02 }],
+  },
+  tabChipText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+  },
+  tabChipTextActive: {
+    color: theme.colors.accent,
+  },
   cardSeparator: {
     height: 16,
   },
@@ -1921,6 +2104,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
     backgroundColor: theme.colors.white,
+  },
+  restaurantsTabScrollContent: {
+    paddingBottom: 140,
+  },
+  tabScene: {
+    flex: 1,
+  },
+  tabPane: {
+    flex: 1,
+  },
+  tabPaneVisible: {
+    flex: 1,
+    opacity: 1,
+  },
+  tabPaneHidden: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0,
   },
   fabWrapAnimated: {
     position: 'absolute',

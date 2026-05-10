@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import * as Font from 'expo-font';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { subscribeTheme } from '../lib/theme';
-import { clearInvalidStoredSession } from '../lib/supabase';
+import { clearInvalidStoredSession, startSupabaseAutoRefresh, stopSupabaseAutoRefresh } from '../lib/supabase';
 import { LocaleProvider, useLocale } from '../lib/locale';
 
 function AppShell() {
@@ -83,6 +83,7 @@ export default function RootLayout() {
     const prepareAuth = async () => {
       try {
         await clearInvalidStoredSession();
+        await startSupabaseAutoRefresh();
       } finally {
         if (isMounted) {
           setAuthReady(true);
@@ -92,6 +93,7 @@ export default function RootLayout() {
     prepareAuth();
     return () => {
       isMounted = false;
+      void stopSupabaseAutoRefresh();
     };
   }, []);
 

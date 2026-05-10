@@ -7,7 +7,7 @@ const supabaseAnonKey = 'sb_publishable_MhAe1ld13gUdTherOMkjKQ_ySHA_TtZ';
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    autoRefreshToken: true,
+    autoRefreshToken: false,
     persistSession: true,
     detectSessionInUrl: false,
   },
@@ -97,4 +97,18 @@ export async function clearInvalidStoredSession() {
       await recoverInvalidStoredSession();
     }
   }
+}
+
+let autoRefreshStarted = false;
+
+export async function startSupabaseAutoRefresh() {
+  if (autoRefreshStarted) return;
+  autoRefreshStarted = true;
+  await supabase.auth.startAutoRefresh();
+}
+
+export async function stopSupabaseAutoRefresh() {
+  if (!autoRefreshStarted) return;
+  autoRefreshStarted = false;
+  await supabase.auth.stopAutoRefresh();
 }

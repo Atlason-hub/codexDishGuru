@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.dishguru.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -23,6 +23,7 @@
     },
     "android": {
       "package": "com.dishguru.app",
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#F9EDE4",
         "foregroundImage": "./assets/images/android-adaptive-foreground.png"
