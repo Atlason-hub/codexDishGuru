@@ -16,6 +16,7 @@ import {
 import { Buffer } from 'buffer';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../lib/theme';
 import { starsToScore } from '../../lib/ratings';
@@ -72,6 +73,8 @@ const normalizeDishId = (raw: unknown) => {
 };
 
 const isSystemEntry = (value: string) => value.toLowerCase().includes('system');
+const DEFAULT_CITY_ID = 14;
+const DEFAULT_STREET_ID = 54730;
 
 const mapMenuToCategories = (data: any): DishCategory[] => {
   const categories: any[] = Array.isArray(data?.Data)
@@ -228,6 +231,7 @@ const buildRestaurantRows = (
 export default function CameraDetailsScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const scrollRef = useRef<ScrollView | null>(null);
   const hasNudgedRestaurantSearchRef = useRef(false);
@@ -384,33 +388,55 @@ export default function CameraDetailsScreen() {
     try {
       setLoading(true);
       setRestaurants([]);
-      const useCity = cityId ?? 14;
-      const useStreet = streetId ?? 54730;
-      const response = await fetch(
-        `https://www.10bis.co.il/api/SearchResListWithOrderHistoryAndPopularDishesAndRes?cityId=${useCity}&streetId=${useStreet}`,
-        { headers: { Accept: 'application/json' } }
-      );
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-      const text = await response.text();
-      const data = JSON.parse(text);
-      const list: Restaurant[] = Array.isArray(data?.Data?.ResList)
-        ? data.Data.ResList.map((item: any) => ({
-            RestaurantId: item?.RestaurantId,
-            RestaurantName: item?.RestaurantName,
-            RestaurantCuisineList:
-              typeof item?.RestaurantCuisineList === 'string' ? item.RestaurantCuisineList : null,
-          }))
-        : [];
+      const loadRestaurantList = async (useCity: number, useStreet: number) => {
+        const response = await fetch(
+          `https://www.10bis.co.il/api/SearchResListWithOrderHistoryAndPopularDishesAndRes?cityId=${useCity}&streetId=${useStreet}`,
+          { headers: { Accept: 'application/json' } }
+        );
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status}`);
+        }
+        const text = await response.text();
+        const data = JSON.parse(text);
+        const list: Restaurant[] = Array.isArray(data?.Data?.ResList)
+          ? data.Data.ResList.map((item: any) => ({
+              RestaurantId: item?.RestaurantId,
+              RestaurantName: item?.RestaurantName,
+              RestaurantCuisineList:
+                typeof item?.RestaurantCuisineList === 'string' ? item.RestaurantCuisineList : null,
+            }))
+          : [];
+        return list;
+      };
+
+      const requestedCity = cityId ?? DEFAULT_CITY_ID;
+      const requestedStreet = streetId ?? DEFAULT_STREET_ID;
+      let list: Restaurant[] = [];
+
+      try {
+        list = await loadRestaurantList(requestedCity, requestedStreet);
+      } catch (primaryError) {
+        const shouldFallback =
+          requestedCity !== DEFAULT_CITY_ID || requestedStreet !== DEFAULT_STREET_ID;
+        if (!shouldFallback) {
+          throw primaryError;
+        }
+        list = await loadRestaurantList(DEFAULT_CITY_ID, DEFAULT_STREET_ID);
+      }
+
       setRestaurants(list);
       const categories = mapRestaurantsToCategories(list, t('cameraRestaurantsGroup'));
       setRestaurantCategories(categories);
       setCollapsedRestaurantCategories(new Set(categories.map((cat) => cat.id)));
     } catch (err) {
-      console.error(err);
+      setRestaurants([]);
+      setRestaurantCategories([]);
+      setCollapsedRestaurantCategories(new Set());
+      showAppAlert(t('cameraNoRestaurantsFound'), t('cameraNoRestaurantsFound'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const fetchCompanyRestaurants = useCallback(async () => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -440,13 +466,87 @@ export default function CameraDetailsScreen() {
     }
   }, [fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
 
+  const handleSave = async () => {
+    if (saving) return;
+    if (!photoUri) {
+      showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
+      return;
+    }
+    if (!selectedRestaurantId) {
+      showAppAlert(t('cameraMissingRestaurantTitle'), t('cameraChooseRestaurant'));
+      return;
+    }
+    if (!selectedDish?.id) {
+      showAppAlert(t('cameraMissingDishTitle'), t('cameraChooseDish'));
+      return;
+    }
+    try {
+      setSaving(true);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      if (!userId) {
+        showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
+        return;
+      }
+      if (!photoBase64) {
+        showAppAlert(t('cameraMissingImageTitle'), t('cameraRetakePhotoPrompt'));
+        return;
+      }
+      const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
+      const filePath = `${userId}/${Date.now()}.${ext}`;
+      const base64ToArrayBuffer = (b64: string) => {
+        const binary = globalThis.atob ? globalThis.atob(b64) : Buffer.from(b64, 'base64').toString('binary');
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+        return bytes.buffer;
+      };
+      const bytes = base64ToArrayBuffer(photoBase64);
+      const upload = await supabase.storage
+        .from('dish-images')
+        .upload(filePath, bytes, {
+          contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+          upsert: true,
+        });
+      if (upload.error) throw upload.error;
+      const { data: publicData } = supabase.storage.from('dish-images').getPublicUrl(filePath);
+      const insert = await supabase.from('dish_associations').insert({
+        user_id: userId,
+        restaurant_id: selectedRestaurantId,
+        restaurant_name: selectedName ?? null,
+        cuisine: selectedRestaurantCuisine,
+        dish_id: selectedDish.id,
+        dish_name: selectedDish.name,
+        review_text: reviewText,
+        tasty_score: starsToScore(tastyScore),
+        filling_score: starsToScore(fillingScore),
+        image_url: publicData?.publicUrl ?? null,
+        image_path: filePath,
+        created_at: new Date().toISOString(),
+      });
+      if (insert.error) throw insert.error;
+      router.replace('/');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showAppAlert(t('cameraSaveFailed'), message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
+    <SafeAreaView style={styles.screen} edges={['left', 'right', 'bottom']}>
       <ScrollView
         ref={scrollRef}
         style={styles.body}
         contentContainerStyle={[
           styles.bodyContent,
-          keyboardInset > 0 ? { paddingBottom: 24 + keyboardInset } : null,
+          {
+            paddingBottom:
+              keyboardInset > 0
+                ? 24 + keyboardInset
+                : 120 + Math.max(insets.bottom, 12),
+          },
         ]}
         keyboardShouldPersistTaps="handled"
       >
@@ -774,6 +874,9 @@ export default function CameraDetailsScreen() {
           </View>
         </View>
 
+        </Pressable>
+      </ScrollView>
+      <View style={[styles.saveFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <Pressable
           style={({ pressed }) => [
             styles.saveButton,
@@ -781,73 +884,7 @@ export default function CameraDetailsScreen() {
             pressed && !saving && photoUri && photoBase64 && styles.saveButtonPressed,
             (saving || !photoUri || !photoBase64) && styles.saveButtonDisabled,
           ]}
-          onPress={async () => {
-            if (saving) return;
-            if (!photoUri) {
-              showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
-              return;
-            }
-            if (!selectedRestaurantId) {
-              showAppAlert(t('cameraMissingRestaurantTitle'), t('cameraChooseRestaurant'));
-              return;
-            }
-            if (!selectedDish?.id) {
-              showAppAlert(t('cameraMissingDishTitle'), t('cameraChooseDish'));
-              return;
-            }
-            try {
-              setSaving(true);
-              const { data: sessionData } = await supabase.auth.getSession();
-              const userId = sessionData.session?.user?.id;
-              if (!userId) {
-                showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
-                return;
-              }
-            if (!photoBase64) {
-                showAppAlert(t('cameraMissingImageTitle'), t('cameraRetakePhotoPrompt'));
-              return;
-            }
-              const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
-              const filePath = `${userId}/${Date.now()}.${ext}`;
-              const base64ToArrayBuffer = (b64: string) => {
-                const binary = globalThis.atob ? globalThis.atob(b64) : Buffer.from(b64, 'base64').toString('binary');
-                const len = binary.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
-                return bytes.buffer;
-              };
-              const bytes = base64ToArrayBuffer(photoBase64);
-              const upload = await supabase.storage
-                .from('dish-images')
-                .upload(filePath, bytes, {
-                  contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-                  upsert: true,
-                });
-              if (upload.error) throw upload.error;
-              const { data: publicData } = supabase.storage.from('dish-images').getPublicUrl(filePath);
-              const insert = await supabase.from('dish_associations').insert({
-                user_id: userId,
-                restaurant_id: selectedRestaurantId,
-                restaurant_name: selectedName ?? null,
-                cuisine: selectedRestaurantCuisine,
-                dish_id: selectedDish.id,
-                dish_name: selectedDish.name,
-                review_text: reviewText,
-                tasty_score: starsToScore(tastyScore),
-                filling_score: starsToScore(fillingScore),
-                image_url: publicData?.publicUrl ?? null,
-                image_path: filePath,
-                created_at: new Date().toISOString(),
-              });
-              if (insert.error) throw insert.error;
-              router.replace('/');
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              showAppAlert(t('cameraSaveFailed'), message);
-            } finally {
-              setSaving(false);
-            }
-          }}
+          onPress={handleSave}
         >
           {saving ? (
             <ActivityIndicator color={theme.colors.accent} />
@@ -855,8 +892,8 @@ export default function CameraDetailsScreen() {
             <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
           )}
         </Pressable>
-        </Pressable>
-      </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -873,6 +910,13 @@ const styles = StyleSheet.create({
   },
   bodyContent: {
     paddingBottom: 24,
+  },
+  saveFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: theme.colors.background,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
   },
   scrollHint: {
     alignSelf: 'flex-start',
@@ -1213,14 +1257,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   saveButton: {
-    marginTop: 18,
     paddingVertical: 10,
     paddingHorizontal: 28,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
     alignSelf: 'flex-start',
-    marginBottom: 12,
   },
   saveButtonLtr: {
     alignSelf: 'flex-end',
