@@ -797,7 +797,7 @@ export default function HomeScreen() {
     try {
       setAuthLoading(true);
       setAuthError(null);
-      const trimmedEmail = email.trim();
+      const trimmedEmail = email.trim().toLowerCase();
       const domainPart = trimmedEmail.includes('@')
         ? trimmedEmail.split('@').pop()?.trim().toLowerCase() ?? ''
         : '';
@@ -816,6 +816,18 @@ export default function HomeScreen() {
       if (!companyMatch?.id) {
         throw new Error('לא נמצאה חברה לדומיין האימייל');
       }
+      const { data: existingProfile, error: existingProfileError } = await supabase
+        .from('AppUsers')
+        .select('user_id')
+        .ilike('email', trimmedEmail)
+        .limit(1)
+        .maybeSingle();
+      if (existingProfileError) {
+        throw existingProfileError;
+      }
+      if (existingProfile?.user_id) {
+        throw new Error('User already registered');
+      }
       const redirectTo = buildAuthRedirectUrl(locale);
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -829,6 +841,10 @@ export default function HomeScreen() {
         throw error;
       }
       const supabaseUserId = data.user?.id;
+      const createdNewAuthUser = Array.isArray(data.user?.identities) && data.user.identities.length > 0;
+      if (!createdNewAuthUser) {
+        throw new Error('User already registered');
+      }
       if (supabaseUserId) {
       const { error: profileError } = await supabase.from('AppUsers').insert({
         user_id: supabaseUserId,
