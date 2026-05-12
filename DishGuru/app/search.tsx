@@ -118,6 +118,8 @@ const normalizeDishId = (raw: unknown) => {
 };
 
 const isSystemEntry = (value: string) => value.toLowerCase().includes('system');
+const DEFAULT_CITY_ID = 14;
+const DEFAULT_STREET_ID = 54730;
 
 const mapMenuToCategories = (data: any): MenuCategory[] => {
   const categories: any[] = Array.isArray(data?.Data)
@@ -559,25 +561,39 @@ export default function SearchScreen() {
       try {
         setLoading(true);
         setError(null);
-        const useCity = companyCityId ?? 14;
-        const useStreet = companyStreetId ?? 54730;
-        const response = await fetch(
-          `https://www.10bis.co.il/api/SearchResListWithOrderHistoryAndPopularDishesAndRes?cityId=${useCity}&streetId=${useStreet}`,
-          { headers: { Accept: 'application/json' } }
-        );
-        if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-        const text = await response.text();
-        const data = JSON.parse(text);
-        const list: RestaurantApi[] = Array.isArray(data?.Data?.ResList)
-          ? data.Data.ResList.map((item: any) => ({
-              RestaurantId: item?.RestaurantId,
-              RestaurantName: item?.RestaurantName,
-              RestaurantCuisineList:
-                typeof item?.RestaurantCuisineList === 'string'
-                  ? item.RestaurantCuisineList
-                  : null,
-            }))
-          : [];
+        const loadRestaurantList = async (cityId: number, streetId: number) => {
+          const response = await fetch(
+            `https://www.10bis.co.il/api/SearchResListWithOrderHistoryAndPopularDishesAndRes?cityId=${cityId}&streetId=${streetId}`,
+            { headers: { Accept: 'application/json' } }
+          );
+          if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+          const text = await response.text();
+          const data = JSON.parse(text);
+          return Array.isArray(data?.Data?.ResList)
+            ? data.Data.ResList.map((item: any) => ({
+                RestaurantId: item?.RestaurantId,
+                RestaurantName: item?.RestaurantName,
+                RestaurantCuisineList:
+                  typeof item?.RestaurantCuisineList === 'string'
+                    ? item.RestaurantCuisineList
+                    : null,
+              }))
+            : [];
+        };
+
+        const requestedCity = companyCityId ?? DEFAULT_CITY_ID;
+        const requestedStreet = companyStreetId ?? DEFAULT_STREET_ID;
+        let list: RestaurantApi[] = [];
+
+        try {
+          list = await loadRestaurantList(requestedCity, requestedStreet);
+        } catch (primaryError) {
+          const shouldFallback =
+            requestedCity !== DEFAULT_CITY_ID || requestedStreet !== DEFAULT_STREET_ID;
+          if (!shouldFallback) throw primaryError;
+          list = await loadRestaurantList(DEFAULT_CITY_ID, DEFAULT_STREET_ID);
+        }
+
         const restaurantNeedle = trimmedRestaurant.toLowerCase();
         const filteredRestaurants = trimmedRestaurant
           ? list.filter((item) => {
@@ -586,11 +602,7 @@ export default function SearchScreen() {
             })
           : list;
 
-        if (trimmedRestaurant) {
-          if (mounted) setRestaurantResults(filteredRestaurants);
-        } else {
-          if (mounted) setRestaurantResults([]);
-        }
+        if (mounted) setRestaurantResults(filteredRestaurants);
 
         if (mounted) {
           setApiDishResults([]);

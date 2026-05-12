@@ -56,6 +56,7 @@ export default function EditDishScreen() {
   const [fillingScore, setFillingScore] = useState(2.5);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   const decodedPhotoUri = useMemo(() => {
     if (!photoUriParam) return '';
@@ -72,10 +73,22 @@ export default function EditDishScreen() {
   }, [decodedPhotoUri, photoBase64Param]);
 
   useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => {
-      scrollRef.current?.scrollTo({ y: 220, animated: true });
-    });
-    return () => sub.remove();
+    const handleKeyboardShow = (event: any) => {
+      const height = event?.endCoordinates?.height ?? 280;
+      setKeyboardInset(height);
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: 320, animated: true });
+      }, 80);
+    };
+    const handleKeyboardHide = () => {
+      setKeyboardInset(0);
+    };
+    const showSub = Keyboard.addListener('keyboardDidShow', handleKeyboardShow);
+    const hideSub = Keyboard.addListener('keyboardDidHide', handleKeyboardHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -287,7 +300,10 @@ export default function EditDishScreen() {
         <ScrollView
           ref={scrollRef}
           style={styles.bodyScroll}
-          contentContainerStyle={styles.bodyScrollContent}
+          contentContainerStyle={[
+            styles.bodyScrollContent,
+            keyboardInset > 0 ? { paddingBottom: keyboardInset + 36 } : null,
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           automaticallyAdjustKeyboardInsets
@@ -327,7 +343,7 @@ export default function EditDishScreen() {
               textAlign={isRTL ? 'right' : 'left'}
               onFocus={() => {
                 setTimeout(() => {
-                  scrollRef.current?.scrollTo({ y: 220, animated: true });
+                  scrollRef.current?.scrollTo({ y: 320, animated: true });
                 }, 120);
               }}
             />

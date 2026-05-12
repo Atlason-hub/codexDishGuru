@@ -158,7 +158,8 @@ function DishCard({
   };
 
   return (
-    <View style={styles.feedCard}>
+    <View style={styles.feedCardShadow}>
+      <View style={styles.feedCard}>
       <View
         style={styles.feedImageWrap}
         pointerEvents="box-none"
@@ -184,11 +185,16 @@ function DishCard({
           >
             {items.map((imageItem) => (
               <View key={imageItem.id} style={[styles.imageSlide, { width: imageWidth || '100%' }]}>
-                {imageItem.image_url ? (
-                  <CachedLogo uri={imageItem.image_url} style={styles.feedImage} />
-                ) : (
-                  <View style={styles.feedImagePlaceholder} />
-                )}
+                <Pressable
+                  style={styles.imagePressable}
+                  onPress={() => onOpenPhoto?.(imageItem)}
+                >
+                  {imageItem.image_url ? (
+                    <CachedLogo uri={imageItem.image_url} style={styles.feedImage} />
+                  ) : (
+                    <View style={styles.feedImagePlaceholder} />
+                  )}
+                </Pressable>
               </View>
             ))}
           </ScrollView>
@@ -546,6 +552,7 @@ function DishCard({
           </View>
         </Animated.View>
       </View>
+      </View>
     </View>
   );
 }
@@ -623,22 +630,29 @@ export default React.memo(DishCard, (prev, next) => {
 });
 
 const styles = StyleSheet.create({
-  feedCard: {
+  feedCardShadow: {
     position: 'relative',
-    backgroundColor: theme.colors.card,
-    borderRadius: 22,
+    borderRadius: 16,
     shadowColor: theme.colors.ink,
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+    marginHorizontal: 2,
+  },
+  feedCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(50, 34, 20, 0.06)',
   },
   feedImageWrap: {
     position: 'relative',
     width: '100%',
     height: IMAGE_HEIGHT,
     backgroundColor: theme.colors.card,
-    borderRadius: 22,
+    borderRadius: 16,
     overflow: 'hidden',
     margin: 0,
   },
@@ -966,7 +980,7 @@ const styles = StyleSheet.create({
   reviewCard: {
     marginTop: 10,
     marginHorizontal: 12,
-    borderRadius: 14,
+    borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
     backgroundColor: '#FFFDFB',

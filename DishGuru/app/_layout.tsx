@@ -17,41 +17,25 @@ import { LocaleProvider, useLocale } from '../lib/locale';
 
 function AppShell() {
   const colorScheme = useColorScheme();
-  const { isRTL } = useLocale();
-  const primaryScreenAnimation = isRTL ? 'slide_from_left' : 'slide_from_right';
+  useLocale();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack
         screenOptions={{
           header: () => <AppHeader />,
-          animationDuration: 95,
-          animation: Platform.OS === 'ios' ? 'simple_push' : primaryScreenAnimation,
-          fullScreenGestureEnabled: true,
-          animationMatchesGesture: true,
+          animationDuration: 0,
+          animation: 'none',
+          fullScreenGestureEnabled: false,
+          animationMatchesGesture: false,
         }}
       >
         <Stack.Screen name="index" />
-        <Stack.Screen name="auth-callback" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="reset-password" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen
-          name="restaurant"
-          options={{
-            animation: primaryScreenAnimation,
-          }}
-        />
-        <Stack.Screen
-          name="dish"
-          options={{
-            animation: primaryScreenAnimation,
-          }}
-        />
-        <Stack.Screen
-          name="edit-dish"
-          options={{
-            animation: primaryScreenAnimation,
-          }}
-        />
+        <Stack.Screen name="auth-callback" options={{ headerShown: false, animation: 'none' }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false, animation: 'none' }} />
+        <Stack.Screen name="restaurant" options={{ animation: 'none' }} />
+        <Stack.Screen name="dish" options={{ animation: 'none' }} />
+        <Stack.Screen name="edit-dish" options={{ animation: 'none' }} />
         <Stack.Screen name="camera" options={{ headerShown: false }} />
         <Stack.Screen name="camera/result" options={{ headerShown: false }} />
         <Stack.Screen name="camera/details" options={{ headerShown: false }} />
@@ -81,16 +65,18 @@ export default function RootLayout() {
   useEffect(() => {
     let isMounted = true;
     const prepareAuth = async () => {
+      if (isMounted) {
+        setAuthReady(true);
+      }
       try {
         await clearInvalidStoredSession();
         await startSupabaseAutoRefresh();
-      } finally {
-        if (isMounted) {
-          setAuthReady(true);
-        }
+      } catch {
+        // Let the app render immediately and allow the screen-level session
+        // bootstrap to recover gracefully if auth storage is stale.
       }
     };
-    prepareAuth();
+    void prepareAuth();
     return () => {
       isMounted = false;
       void stopSupabaseAutoRefresh();

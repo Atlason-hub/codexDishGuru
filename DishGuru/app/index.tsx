@@ -33,9 +33,11 @@ import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   fetchCompanyIdForUser,
+  fetchCompanyUserIds,
   fetchFavoritesMap,
   fetchGlobalCompanyContext,
   fetchGlobalDishes,
+  mergeCompanyVisibleRows,
   fetchUserAvatarMaps,
   fetchVisibleDishes,
 } from '../lib/appData';
@@ -98,6 +100,8 @@ export default function HomeScreen() {
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
   const [orderVendor, setOrderVendor] = useState<string | null>(null);
+  const [resolvedGlobalUserId, setResolvedGlobalUserId] = useState<string | null>(null);
+  const [resolvedGlobalDishIds, setResolvedGlobalDishIds] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
@@ -211,6 +215,8 @@ export default function HomeScreen() {
         setCompanyLogoPath(globalContext?.logoUrl ?? null);
         setCompanyLogoUrl(resolvedGlobalLogoUrl);
         setOrderVendor(globalContext?.orderVendor ?? null);
+        setResolvedGlobalUserId(globalContext?.userId ?? null);
+        setResolvedGlobalDishIds(globalRows.map((row: any) => String(row.id)).filter(Boolean));
         await cacheLogo({
           logoUrl: resolvedGlobalLogoUrl,
           logoPath: globalContext?.logoUrl ?? null,
@@ -259,37 +265,32 @@ export default function HomeScreen() {
           }
         }
         if (companyId) {
-          const { data: companyUsers, error: usersError } = await supabase
-            .from('AppUsers')
-            .select('user_id')
-            .eq('company_id', companyId);
-          if (!usersError) {
-            allowedUserIds = (companyUsers ?? [])
-              .map((row: any) => row?.user_id)
-              .filter(Boolean);
-          }
-          const rpcData = await fetchVisibleDishes(companyId);
-          const { data: directData, error: directError } = await supabase
-            .from('dish_associations')
-            .select(
-              'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
-            )
-            .in('user_id', allowedUserIds ?? []);
+          allowedUserIds = await fetchCompanyUserIds(companyId, userEmail ? getEmailDomain(userEmail) : null);
+          const [rpcData, globalContext, globalRows] = await Promise.all([
+            fetchVisibleDishes(companyId),
+            fetchGlobalCompanyContext(),
+            fetchGlobalDishes(),
+          ]);
+          setResolvedGlobalUserId(globalContext?.userId ?? null);
+          setResolvedGlobalDishIds(globalRows.map((row: any) => String(row.id)).filter(Boolean));
+          const { data: directData, error: directError } =
+            allowedUserIds.length > 0
+              ? await supabase
+                  .from('dish_associations')
+                  .select(
+                    'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
+                  )
+                  .in('user_id', allowedUserIds)
+              : { data: [], error: null };
           if (Array.isArray(rpcData)) {
-            const merged = new Map<string, DishAssociation>();
-            (rpcData as DishAssociation[]).forEach((row) => {
-              if (row?.id) merged.set(String(row.id), row);
-            });
-            if (!directError && Array.isArray(directData)) {
-              (directData as DishAssociation[]).forEach((row) => {
-                if (row?.id) merged.set(String(row.id), row);
-              });
-            }
-            const sorted = [...merged.values()].sort((a: any, b: any) => {
-              const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
-              const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
-              return bTime - aTime;
-            });
+            const ownCompanyRows =
+              !directError && Array.isArray(directData) ? (directData as DishAssociation[]) : [];
+            const sorted = mergeCompanyVisibleRows(
+              (rpcData as DishAssociation[]) ?? [],
+              ownCompanyRows,
+              allowedUserIds,
+              globalContext?.userId ?? null
+            );
             setDishAssociations((sorted as DishAssociation[]) ?? []);
             loadUserAvatars(sorted as DishAssociation[]);
             if (userId) {
@@ -305,6 +306,8 @@ export default function HomeScreen() {
       if (!allowedUserIds || allowedUserIds.length === 0) {
         setDishAssociations([]);
         setFavorites({});
+        setResolvedGlobalUserId(null);
+        setResolvedGlobalDishIds([]);
         return;
       }
       const { data, error: fetchError } = await supabase
@@ -318,6 +321,8 @@ export default function HomeScreen() {
       const rows = (data ?? []) as DishAssociation[];
       setDishAssociations(rows);
       loadUserAvatars(rows);
+      setResolvedGlobalUserId(null);
+      setResolvedGlobalDishIds([]);
       if (userId) {
         await AsyncStorage.setItem(
           getHomeCacheKey(userId),
@@ -505,10 +510,10 @@ export default function HomeScreen() {
           const domain = getEmailDomain(data.session.user.email ?? null);
           void fetchCompanyLogoForUser(data.session.user.id, domain);
           void loadFavorites(data.session.user.id);
-          await loadDishAssociations({ useCache: true, showLoading: false });
+          void loadDishAssociations({ useCache: true, showLoading: false });
           void setGuestModeEnabled(false);
         } else if (guestModeEnabled) {
-          await loadDishAssociations({ showLoading: false, guestModeOverride: true });
+          void loadDishAssociations({ showLoading: false, guestModeOverride: true });
         } else {
           setDishAssociations([]);
           setFavorites({});
@@ -521,6 +526,7 @@ export default function HomeScreen() {
       } finally {}
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSessionChecked(true);
       setIsAuthenticated(Boolean(session));
       setCurrentUserId(session?.user?.id ?? null);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
@@ -534,15 +540,15 @@ export default function HomeScreen() {
       if (session?.user?.id) {
         setIsGuestMode(false);
         await setGuestModeEnabled(false);
-        fetchCompanyLogoForUser(session.user.id, getEmailDomain(session?.user?.email ?? null));
-        loadDishAssociations();
-        loadFavorites(session.user.id);
+        void fetchCompanyLogoForUser(session.user.id, getEmailDomain(session?.user?.email ?? null));
+        void loadDishAssociations();
+        void loadFavorites(session.user.id);
       } else {
         const guestModeEnabled = await loadGuestMode();
         setIsGuestMode(guestModeEnabled);
         if (guestModeEnabled) {
           if (!guestActivationInFlightRef.current) {
-            loadDishAssociations({ showLoading: false, guestModeOverride: true });
+            void loadDishAssociations({ showLoading: false, guestModeOverride: true });
           }
           setFavorites({});
         } else {
@@ -553,7 +559,6 @@ export default function HomeScreen() {
           clearCachedLogo();
         }
       }
-      setSessionChecked(true);
     });
     return () => {
       mounted = false;
@@ -957,6 +962,16 @@ export default function HomeScreen() {
           return true;
         })
       : dishAssociations;
+  const renderAssociations =
+    !isGuestMode && resolvedGlobalDishIds.length > 0
+      ? (() => {
+          const globalDishIdSet = new Set(resolvedGlobalDishIds);
+          const nonGlobalRows = visibleAssociations.filter(
+            (item) => !globalDishIdSet.has(String(item.id))
+          );
+          return nonGlobalRows.length >= 3 ? nonGlobalRows : visibleAssociations;
+        })()
+      : visibleAssociations;
   const hasHeaderContent = true;
   const listHeader = (
     <View style={styles.listHeader}>
@@ -1026,7 +1041,7 @@ export default function HomeScreen() {
                 return;
               }
 
-              const matchingRestaurants = visibleAssociations.filter((dish) => {
+              const matchingRestaurants = renderAssociations.filter((dish) => {
                 const restaurantName = (dish.restaurant_name ?? '')
                   .toLowerCase()
                   .replace(/[^\p{L}\p{N}]+/gu, ' ')
@@ -1058,7 +1073,8 @@ export default function HomeScreen() {
         </View>
       ) : null}
       {shouldShowMainTabs ? (
-        <View style={[styles.tabsRow, !isRTL && styles.tabsRowLtr]}>
+        <View style={styles.tabsSection}>
+          <View style={[styles.tabsRow, !isRTL && styles.tabsRowLtr]}>
           {([
             ['dishes', t('homeTabDishes')],
             ['restaurants', t('homeTabRestaurants')],
@@ -1069,24 +1085,33 @@ export default function HomeScreen() {
                 key={tabKey}
                 style={[
                   styles.tabChip,
-                  isActive && styles.tabChipActive,
                 ]}
                 onPress={() => {
                   publishHomeTab(tabKey);
                   setActiveHomeTab(tabKey);
                 }}
               >
-                <Text
-                  style={[
-                    styles.tabChipText,
-                    isActive && styles.tabChipTextActive,
-                  ]}
-                >
-                  {label}
-                </Text>
+                <View style={styles.tabChipInner}>
+                  <Text
+                    style={[
+                      styles.tabChipText,
+                      isActive && styles.tabChipTextActive,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.tabUnderline,
+                      isActive && styles.tabUnderlineActive,
+                    ]}
+                  />
+                </View>
               </Pressable>
             );
           })}
+        </View>
+          <View style={styles.tabsDivider} />
         </View>
       ) : null}
     </View>
@@ -1095,12 +1120,12 @@ export default function HomeScreen() {
   const groupedAssociations = useMemo(() => {
     const needle = debouncedHomeSearch.trim().toLowerCase();
     const filtered = needle
-      ? visibleAssociations.filter((item) => {
+      ? renderAssociations.filter((item) => {
           const dishName = (item.dish_name ?? '').toLowerCase();
           const restName = (item.restaurant_name ?? '').toLowerCase();
           return dishName.includes(needle) || restName.includes(needle);
         })
-      : visibleAssociations;
+      : renderAssociations;
     const groups = new Map<string, DishAssociation[]>();
     filtered.forEach((item) => {
       const normalizedDish = (item.dish_name ?? '').trim().toLowerCase();
@@ -1134,7 +1159,7 @@ export default function HomeScreen() {
         restaurantId: items[0]?.restaurant_id ?? null,
       };
     });
-  }, [debouncedHomeSearch, visibleAssociations]);
+  }, [debouncedHomeSearch, renderAssociations]);
 
   const handleAvatarPress = useCallback((url: string | null, label: string | null) => {
     setAvatarPreviewUrl(url);
@@ -2048,41 +2073,57 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 15,
   },
+  tabsSection: {
+    marginTop: 12,
+  },
   tabsRow: {
     flexDirection: 'row-reverse',
-    gap: 8,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 10,
-    paddingHorizontal: 4,
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    paddingHorizontal: 6,
   },
   tabsRowLtr: {
     flexDirection: 'row',
   },
   tabChip: {
-    minWidth: 92,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    backgroundColor: '#F5F1ED',
+    minWidth: 96,
     alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ scale: 1 }],
+    justifyContent: 'flex-end',
   },
-  tabChipActive: {
-    borderColor: '#E9D6CB',
-    backgroundColor: '#F0E2D8',
-    transform: [{ scale: 1.02 }],
+  tabChipInner: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 4,
   },
   tabChipText: {
-    fontSize: 13,
+    fontSize: 16,
     color: theme.colors.textMuted,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   tabChipTextActive: {
-    color: theme.colors.accent,
+    color: theme.colors.text,
+    fontWeight: '800',
+  },
+  tabUnderline: {
+    width: '100%',
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: 'transparent',
+  },
+  tabUnderlineActive: {
+    backgroundColor: theme.colors.accent,
+  },
+  tabsDivider: {
+    marginTop: -1,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    shadowColor: theme.colors.ink,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardSeparator: {
     height: 16,
