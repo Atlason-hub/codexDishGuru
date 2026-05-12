@@ -250,12 +250,101 @@ export const fetchVisibleDishes = async (companyId: string | number | null) => {
     return visibleData as any[];
   }
 
+  return fetchCompanyDishes(companyId);
+};
+
+export const fetchCompanyDishes = async (companyId: string | number | null) => {
+  if (!companyId) return [];
+
   const { data: companyData, error: companyError } = await supabase.rpc('get_company_dishes', {
     company_id: companyId,
   });
 
   if (companyError) throw companyError;
   return (companyData as any[]) ?? [];
+};
+
+export const fetchCompanyUserIds = async (
+  companyId: string | number | null,
+  emailDomain?: string | null
+) => {
+  const scopedUserIds = new Set<string>();
+
+  if (companyId) {
+    const { data: companyUsers, error: usersError } = await supabase
+      .from('AppUsers')
+      .select('user_id')
+      .eq('company_id', companyId);
+
+    if (usersError) {
+      throw usersError;
+    }
+
+    (companyUsers ?? []).forEach((row: any) => {
+      if (row?.user_id) scopedUserIds.add(String(row.user_id));
+    });
+  }
+
+  if (emailDomain) {
+    const normalizedDomain = emailDomain.trim().toLowerCase();
+    if (normalizedDomain) {
+      const { data: domainUsers, error: domainUsersError } = await supabase
+        .from('AppUsers')
+        .select('user_id')
+        .ilike('email', `%@${normalizedDomain}`);
+
+      if (domainUsersError) {
+        throw domainUsersError;
+      }
+
+      (domainUsers ?? []).forEach((row: any) => {
+        if (row?.user_id) scopedUserIds.add(String(row.user_id));
+      });
+    }
+  }
+
+  return [...scopedUserIds];
+};
+
+const sortRowsByCreatedAtDesc = <T extends { created_at?: string | null }>(rows: T[]) => {
+  return [...rows].sort((a, b) => {
+    const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
+    return bTime - aTime;
+  });
+};
+
+export const mergeCompanyVisibleRows = <
+  T extends { id?: string | number | null; user_id?: string | null; created_at?: string | null }
+>(
+  visibleRows: T[],
+  companyRows: T[],
+  companyUserIds: string[],
+  globalUserId?: string | null
+) => {
+  const merged = new Map<string, T>();
+  visibleRows.forEach((row) => {
+    if (row?.id != null) merged.set(String(row.id), row);
+  });
+  companyRows.forEach((row) => {
+    if (row?.id != null) merged.set(String(row.id), row);
+  });
+
+  const mergedRows = [...merged.values()];
+  const nonGlobalRows =
+    globalUserId
+      ? mergedRows.filter((row) => !row?.user_id || String(row.user_id) !== String(globalUserId))
+      : mergedRows;
+
+  if (globalUserId && nonGlobalRows.length >= 3) {
+    return sortRowsByCreatedAtDesc(nonGlobalRows);
+  }
+
+  if (companyRows.length >= 3) {
+    return sortRowsByCreatedAtDesc(companyRows);
+  }
+
+  return sortRowsByCreatedAtDesc(mergedRows);
 };
 
 export const fetchUserAvatarMaps = async (userIds: string[]) => {

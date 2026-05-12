@@ -25,8 +25,11 @@ import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import {
   fetchCompanyIdForUser,
+  fetchCompanyUserIds,
+  fetchGlobalCompanyContext,
   fetchVisibleDishes,
   loadCachedRestaurantMenu,
+  mergeCompanyVisibleRows,
   saveCachedRestaurantMenu,
 } from '../lib/appData';
 import { useFocusEffect } from '@react-navigation/native';
@@ -370,6 +373,7 @@ export default function RestaurantScreen() {
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id ?? null;
+      const userEmail = sessionData.session?.user?.email ?? null;
       const cachedMenu = await loadCachedRestaurantMenu<MenuCategory[]>(restaurantId);
       const fetchMenuPromise = fetch(
         `https://www.10bis.co.il/api/GetMenu?ResId=${restaurantId}&websiteID=10bis&domainID=10bis`,
@@ -395,8 +399,30 @@ export default function RestaurantScreen() {
         const companyId = await fetchCompanyIdForUser(userId);
         if (companyId) {
           hasScopedSource = true;
-          list = ((await fetchVisibleDishes(companyId)) as DishAssociation[]).filter(
-            (row) => row.restaurant_id === restaurantId
+          const emailDomain = userEmail?.includes('@')
+            ? userEmail.split('@').pop()?.trim().toLowerCase() ?? null
+            : null;
+          const companyUserIds = await fetchCompanyUserIds(companyId, emailDomain);
+          const [globalContext, visibleRowsRaw] = await Promise.all([
+            fetchGlobalCompanyContext(),
+            fetchVisibleDishes(companyId),
+          ]);
+          const visibleRows = (visibleRowsRaw as DishAssociation[]).filter((row) => row.restaurant_id === restaurantId);
+          const { data: ownRows, error: ownRowsError } =
+            companyUserIds.length > 0
+              ? await supabase
+                  .from('dish_associations')
+                  .select(
+                    'id, user_id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at, restaurant_id'
+                  )
+                  .eq('restaurant_id', restaurantId)
+                  .in('user_id', companyUserIds)
+              : { data: [], error: null };
+          list = mergeCompanyVisibleRows(
+            visibleRows,
+            !ownRowsError && Array.isArray(ownRows) ? (ownRows as DishAssociation[]) : [],
+            companyUserIds,
+            globalContext?.userId ?? null
           );
         }
       }
