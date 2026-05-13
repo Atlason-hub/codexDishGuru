@@ -25,6 +25,30 @@ type GuestFeedSnapshot = {
 };
 
 let guestFeedSnapshotPromise: Promise<GuestFeedSnapshot | null> | null = null;
+const SIMPLE_CACHE_TTL_MS = 60 * 1000;
+
+type TimedCacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const companyIdCache = new Map<string, TimedCacheEntry<string | null>>();
+const orderVendorCache = new Map<string, TimedCacheEntry<string | null>>();
+const companyUserIdsCache = new Map<string, TimedCacheEntry<string[]>>();
+let globalCompanyContextCache: TimedCacheEntry<GuestCompanyContext | null> | null = null;
+
+const readTimedCache = <T>(entry: TimedCacheEntry<T> | null | undefined) => {
+  if (!entry) return { hit: false as const, value: null as T | null };
+  if (Date.now() > entry.expiresAt) {
+    return { hit: false as const, value: null as T | null };
+  }
+  return { hit: true as const, value: entry.value };
+};
+
+const writeTimedCache = <T>(value: T): TimedCacheEntry<T> => ({
+  value,
+  expiresAt: Date.now() + SIMPLE_CACHE_TTL_MS,
+});
 
 const fetchPublicCompanyContextById = async (companyId: string, userId: string | null) => {
   const { data: company, error: companyError } = await supabase
@@ -111,16 +135,26 @@ export const fetchFavoritesMap = async (userId: string) => {
 };
 
 export const fetchCompanyIdForUser = async (userId: string) => {
+  const cached = readTimedCache(companyIdCache.get(userId));
+  if (cached.hit) {
+    return cached.value;
+  }
   const { data: profile, error: profileError } = await supabase
     .from('AppUsers')
     .select('company_id')
     .eq('user_id', userId)
     .maybeSingle();
   if (profileError) return null;
-  return profile?.company_id ?? null;
+  const companyId = profile?.company_id ?? null;
+  companyIdCache.set(userId, writeTimedCache(companyId));
+  return companyId;
 };
 
 export const fetchOrderVendorForUser = async (userId: string) => {
+  const cached = readTimedCache(orderVendorCache.get(userId));
+  if (cached.hit) {
+    return cached.value;
+  }
   const companyId = await fetchCompanyIdForUser(userId);
   if (!companyId) {
     return null;
@@ -133,10 +167,17 @@ export const fetchOrderVendorForUser = async (userId: string) => {
   if (companyError) {
     return null;
   }
-  return company?.order_vendor ?? null;
+  const orderVendor = company?.order_vendor ?? null;
+  orderVendorCache.set(userId, writeTimedCache(orderVendor));
+  return orderVendor;
 };
 
 export const fetchGlobalCompanyContext = async () => {
+  const cached = readTimedCache(globalCompanyContextCache);
+  if (cached.hit) {
+    return cached.value;
+  }
+
   const { data: globalRow, error: globalError } = await supabase
     .from('dish_associations')
     .select('user_id')
@@ -152,10 +193,15 @@ export const fetchGlobalCompanyContext = async () => {
   if (!globalRow?.user_id) {
     if (GUEST_COMPANY_ID) {
       const companyContext = await fetchPublicCompanyContextById(GUEST_COMPANY_ID, null);
-      if (companyContext) return companyContext;
+      if (companyContext) {
+        globalCompanyContextCache = writeTimedCache(companyContext);
+        return companyContext;
+      }
     }
     const snapshot = await fetchGuestFeedSnapshotFromApi();
-    return snapshot?.context ?? null;
+    const context = snapshot?.context ?? null;
+    globalCompanyContextCache = writeTimedCache(context);
+    return context;
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -171,18 +217,26 @@ export const fetchGlobalCompanyContext = async () => {
   if (!profile?.company_id) {
     if (GUEST_COMPANY_ID) {
       const companyContext = await fetchPublicCompanyContextById(GUEST_COMPANY_ID, globalRow.user_id);
-      if (companyContext) return companyContext;
+      if (companyContext) {
+        globalCompanyContextCache = writeTimedCache(companyContext);
+        return companyContext;
+      }
     }
     const snapshot = await fetchGuestFeedSnapshotFromApi();
-    return snapshot?.context ?? null;
+    const context = snapshot?.context ?? null;
+    globalCompanyContextCache = writeTimedCache(context);
+    return context;
   }
 
   const companyContext = await fetchPublicCompanyContextById(profile.company_id, globalRow.user_id);
   if (!companyContext) {
     const snapshot = await fetchGuestFeedSnapshotFromApi();
-    return snapshot?.context ?? null;
+    const context = snapshot?.context ?? null;
+    globalCompanyContextCache = writeTimedCache(context);
+    return context;
   }
 
+  globalCompanyContextCache = writeTimedCache(companyContext);
   return companyContext;
 };
 
@@ -268,6 +322,11 @@ export const fetchCompanyUserIds = async (
   companyId: string | number | null,
   emailDomain?: string | null
 ) => {
+  const cacheKey = `${companyId ?? ''}::${emailDomain?.trim().toLowerCase() ?? ''}`;
+  const cached = readTimedCache(companyUserIdsCache.get(cacheKey));
+  if (cached.hit) {
+    return cached.value;
+  }
   const scopedUserIds = new Set<string>();
 
   if (companyId) {
@@ -303,7 +362,9 @@ export const fetchCompanyUserIds = async (
     }
   }
 
-  return [...scopedUserIds];
+  const userIds = [...scopedUserIds];
+  companyUserIdsCache.set(cacheKey, writeTimedCache(userIds));
+  return userIds;
 };
 
 const sortRowsByCreatedAtDesc = <T extends { created_at?: string | null }>(rows: T[]) => {

@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
     gap: 2,
     justifyContent: 'flex-end',
     width: '100%',
-    paddingRight: 6,
+    paddingRight: Platform.OS === 'ios' ? 0 : 6,
   },
   sliderRowLtr: {
     flexDirection: 'row',
@@ -566,9 +566,8 @@ const styles = StyleSheet.create({
   sliderLabelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    width: 76,
     justifyContent: 'flex-end',
-    marginLeft: 2,
+    marginLeft: Platform.OS === 'ios' ? 0 : 2,
     paddingRight: 0,
     height: 44,
   },
@@ -576,7 +575,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textMuted,
     textAlign: 'right',
-    width: '100%',
     lineHeight: 44,
   },
   sliderTextLtr: {

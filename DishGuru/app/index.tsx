@@ -629,9 +629,14 @@ export default function HomeScreen() {
         return;
       }
       lastRefreshRef.current = now;
+      const shouldShowRefreshSpinner = Boolean(
+        currentUserId && hasLoaded && (dishAssociations.length > 0 || error)
+      );
       try {
         if (currentUserId) {
-          setIsRefreshing(true);
+          if (shouldShowRefreshSpinner) {
+            setIsRefreshing(true);
+          }
           await Promise.all([
             loadDishAssociations({ showLoading: false }),
             loadFavorites(currentUserId),
@@ -640,31 +645,31 @@ export default function HomeScreen() {
           await loadDishAssociations({ showLoading: false });
         }
       } finally {
-        if (currentUserId) {
+        if (currentUserId && shouldShowRefreshSpinner) {
           setIsRefreshing(false);
         }
       }
     },
-    [currentUserId, isGuestMode, loadDishAssociations, loadFavorites]
+    [currentUserId, dishAssociations.length, error, hasLoaded, isGuestMode, loadDishAssociations, loadFavorites]
   );
 
   useFocusEffect(
     useCallback(() => {
-      if (!currentUserId) return;
+      if (!currentUserId || !hasLoaded) return;
       refreshContent();
-    }, [currentUserId, refreshContent])
+    }, [currentUserId, hasLoaded, refreshContent])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       const wasInactive = /inactive|background/.test(appStateRef.current);
-      if (wasInactive && nextState === 'active' && currentUserId) {
+      if (wasInactive && nextState === 'active' && currentUserId && hasLoaded) {
         refreshContent();
       }
       appStateRef.current = nextState;
     });
     return () => subscription.remove();
-  }, [currentUserId, refreshContent]);
+  }, [currentUserId, hasLoaded, refreshContent]);
 
   useEffect(() => {
     if (!isGuestMode) {

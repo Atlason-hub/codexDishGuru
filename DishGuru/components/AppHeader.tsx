@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
-import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
+import { cacheAvatar, loadCachedAvatar } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedLogo from './CachedLogo';
 import LegalModal from './LegalModal';
@@ -68,6 +68,9 @@ const fetchCompanyLogoForUser = async (userId: string, fallbackDomain?: string |
   return resolveLogoUrl((company as any)?.logo_url ?? null);
 };
 
+const getSessionAvatarUrl = (session: any) =>
+  ((session?.user?.user_metadata as any)?.avatar_url as string | null | undefined) ?? null;
+
 export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
@@ -94,6 +97,19 @@ export default function AppHeader() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const lastPaletteLogoRef = useRef<string | null>(null);
+
+  const applyResolvedLogo = (url: string | null) => {
+    setCompanyLogoUrl(url);
+    lastKnownCompanyLogoUrl = url;
+    if (url && lastPaletteLogoRef.current !== url) {
+      lastPaletteLogoRef.current = url;
+      applyPaletteFromLogo(url);
+    }
+    if (!url) {
+      lastPaletteLogoRef.current = null;
+      applyPaletteFromLogo(null);
+    }
+  };
 
   useEffect(() => {
     if (!menuVisible) {
@@ -128,16 +144,11 @@ export default function AppHeader() {
       const cached = await loadCachedLogo();
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
-        setCompanyLogoUrl(resolved);
-        lastKnownCompanyLogoUrl = resolved;
-        if (resolved && lastPaletteLogoRef.current !== resolved) {
-          lastPaletteLogoRef.current = resolved;
-          applyPaletteFromLogo(resolved);
-        }
+        applyResolvedLogo(resolved);
       }
       const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
-      const metaAvatar = await fetchAvatarFromAuth();
+      const metaAvatar = getSessionAvatarUrl(data.session);
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
         await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
@@ -148,13 +159,8 @@ export default function AppHeader() {
           getEmailDomain(sessionEmail)
         );
         if (url) {
-          setCompanyLogoUrl(url);
-          lastKnownCompanyLogoUrl = url;
+          applyResolvedLogo(url);
           cacheLogo({ logoUrl: url, logoPath: null });
-          if (lastPaletteLogoRef.current !== url) {
-            lastPaletteLogoRef.current = url;
-            applyPaletteFromLogo(url);
-          }
         }
       } else if (guestModeEnabled) {
         const globalContext = await fetchGlobalCompanyContext();
@@ -163,15 +169,9 @@ export default function AppHeader() {
           hasContext: Boolean(globalContext),
           hasLogo: Boolean(resolved),
         });
-        setCompanyLogoUrl(resolved);
-        lastKnownCompanyLogoUrl = resolved;
-        if (resolved && lastPaletteLogoRef.current !== resolved) {
-          lastPaletteLogoRef.current = resolved;
-          applyPaletteFromLogo(resolved);
-        }
+        applyResolvedLogo(resolved);
       } else {
-        setCompanyLogoUrl(null);
-        lastKnownCompanyLogoUrl = null;
+        applyResolvedLogo(null);
       }
     };
 
@@ -193,13 +193,8 @@ export default function AppHeader() {
         setIsGuestMode(false);
         fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail)).then((url) => {
           if (url) {
-            setCompanyLogoUrl(url);
-            lastKnownCompanyLogoUrl = url;
+            applyResolvedLogo(url);
             cacheLogo({ logoUrl: url, logoPath: null });
-            if (lastPaletteLogoRef.current !== url) {
-              lastPaletteLogoRef.current = url;
-              applyPaletteFromLogo(url);
-            }
           }
         });
       } else {
@@ -212,18 +207,10 @@ export default function AppHeader() {
             hasContext: Boolean(globalContext),
             hasLogo: Boolean(resolved),
           });
-          setCompanyLogoUrl(resolved);
-          lastKnownCompanyLogoUrl = resolved;
-          if (resolved && lastPaletteLogoRef.current !== resolved) {
-            lastPaletteLogoRef.current = resolved;
-            applyPaletteFromLogo(resolved);
-          }
+          applyResolvedLogo(resolved);
         } else {
-          setCompanyLogoUrl(null);
-          lastKnownCompanyLogoUrl = null;
+          applyResolvedLogo(null);
           clearCachedLogo();
-          lastPaletteLogoRef.current = null;
-          applyPaletteFromLogo(null);
         }
       }
     });
@@ -254,7 +241,13 @@ export default function AppHeader() {
 
   const goHome = () => {
     setMenuVisible(false);
-    if (pathname === '/') {
+    const isPlainHomeRoute =
+      pathname === '/' &&
+      favoritesParam !== '1' &&
+      !restaurantIdParam &&
+      !restaurantNameParam;
+
+    if (isPlainHomeRoute) {
       publishHomeTab('dishes');
       return;
     }

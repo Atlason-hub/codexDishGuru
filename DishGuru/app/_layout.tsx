@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { I18nManager, Platform, Text, TextInput, useColorScheme } from 'react-native';
+import { I18nManager, Image, Platform, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import AppHeader from '../components/AppHeader';
 import AppDialogHost from '../components/AppDialogHost';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -14,6 +14,7 @@ import { deactivateKeepAwake } from 'expo-keep-awake';
 import { subscribeTheme } from '../lib/theme';
 import { clearInvalidStoredSession, startSupabaseAutoRefresh, stopSupabaseAutoRefresh } from '../lib/supabase';
 import { LocaleProvider, useLocale } from '../lib/locale';
+import { RATING_IMAGES } from '../lib/ratings';
 
 function AppShell() {
   const colorScheme = useColorScheme();
@@ -41,6 +42,16 @@ function AppShell() {
         <Stack.Screen name="camera/details" options={{ headerShown: false }} />
       </Stack>
       <AppDialogHost />
+      <View pointerEvents="none" style={styles.hiddenAssetPreload}>
+        {RATING_IMAGES.map((source, index) => (
+          <Image
+            key={`rating-preload-${index}`}
+            source={source}
+            style={styles.hiddenAssetImage}
+            fadeDuration={0}
+          />
+        ))}
+      </View>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
@@ -154,3 +165,17 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  hiddenAssetPreload: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    overflow: 'hidden',
+  },
+  hiddenAssetImage: {
+    width: 1,
+    height: 1,
+  },
+});
