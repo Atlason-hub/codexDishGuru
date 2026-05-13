@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import CrossfadeView from '../components/CrossfadeView';
 import { theme } from '../lib/theme';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
@@ -49,6 +50,11 @@ export default function MyDishesScreen() {
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<{
+    imageUrl: string | null;
+    title: string | null;
+    subtitle: string | null;
+  } | null>(null);
 
   const groupedMyDishes = useMemo(() => {
     const map = new Map<string, DishAssociation[]>();
@@ -352,6 +358,13 @@ export default function MyDishesScreen() {
         onAvatarPress={handleAvatarPress}
         onToggleFavorite={handleToggleFavorite}
         onOpenPhoto={handleOpenDish}
+        onPreviewImage={(dish) =>
+          setImagePreview({
+            imageUrl: dish.image_url ?? null,
+            title: dish.dish_name ?? null,
+            subtitle: dish.restaurant_name ?? null,
+          })
+        }
         onOpenDish={handleOpenDish}
         onOpenRestaurant={handleOpenRestaurant}
         onDelete={deleteDishAssociation}
@@ -436,6 +449,13 @@ export default function MyDishesScreen() {
           setAvatarPreviewUrl(null);
           setAvatarPreviewLabel(null);
         }}
+      />
+      <ImagePreviewModal
+        visible={Boolean(imagePreview?.imageUrl)}
+        imageUrl={imagePreview?.imageUrl ?? null}
+        title={imagePreview?.title ?? null}
+        subtitle={imagePreview?.subtitle ?? null}
+        onClose={() => setImagePreview(null)}
       />
     </SafeAreaView>
   );

@@ -580,7 +580,18 @@ export default function CameraDetailsScreen() {
               <Image source={{ uri: photoUri }} style={styles.photo} />
             ) : defaultImageUrl ? (
               <Image source={{ uri: defaultImageUrl }} style={styles.photo} />
-            ) : null}
+            ) : (
+              <View style={styles.photoPlaceholderInner}>
+                <Ionicons
+                  name="image-outline"
+                  size={22}
+                  color={theme.colors.textMuted}
+                />
+                <Text style={styles.photoPlaceholderHint}>
+                  אין עדיין תמונה
+                </Text>
+              </View>
+            )}
             <View style={styles.cameraOverlay}>
               <Ionicons name="camera" size={20} color="#ffffff" />
               <Text style={styles.cameraOverlayText}>
@@ -994,6 +1005,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  photoPlaceholderInner: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.cardAlt,
+    gap: 6,
+  },
+  photoPlaceholderHint: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '500',
   },
   cameraOverlay: {
     position: 'absolute',

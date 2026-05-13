@@ -197,7 +197,6 @@ const buildRowsFromMenu = (
   const needle = normalizeDishLookup(searchQuery) ?? '';
   const byDishId = new Map<number, DishSummary>();
   const byDishName = new Map<string, DishSummary>();
-  const seenReviewedKeys = new Set<string>();
   summaries.forEach((dish) => {
     const normalizedName = normalizeDishLookup(dish.name);
     if (normalizedName) byDishName.set(normalizedName, dish);
@@ -214,8 +213,6 @@ const buildRowsFromMenu = (
     rows.push({ type: 'header', id: `header-${reviewedSectionKey}`, title: reviewedSectionTitle });
     if (!collapsed.has(reviewedSectionKey)) {
       reviewedDishes.forEach((dish) => {
-        const reviewedKey = normalizeDishLookup(dish.name) ?? dish.key;
-        seenReviewedKeys.add(reviewedKey);
         rows.push({
           type: 'dish',
           id: `reviewed-${dish.key}`,
@@ -237,10 +234,6 @@ const buildRowsFromMenu = (
     filteredItems.forEach((dish) => {
       const summary =
         byDishName.get(normalizeDishLookup(dish.name) ?? '') ?? byDishId.get(dish.id);
-      const normalizedDish = normalizeDishLookup(dish.name) ?? String(dish.id);
-      if (summary?.hasUploads && seenReviewedKeys.has(normalizedDish)) {
-        return;
-      }
       rows.push({
         type: 'dish',
         id: `${cat.id}-${dish.id}`,
@@ -669,8 +662,8 @@ export default function RestaurantScreen() {
                           params: {
                             restaurantId: restaurantId ? String(restaurantId) : '',
                             restaurantName,
-                            dishId: item.dish.key,
                             dishName: item.dish.name,
+                            dishQuery: item.dish.name,
                           },
                         });
                         return;
@@ -1007,23 +1000,23 @@ const styles = StyleSheet.create({
   },
   placeholderOverlay: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    bottom: 0,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   placeholderOverlayLtr: {
     flexDirection: 'row',
   },
   placeholderOverlayText: {
     color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
   },
   results: {
     alignSelf: 'stretch',

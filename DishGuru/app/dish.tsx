@@ -1,9 +1,7 @@
 import {
   AppState,
   FlatList,
-  Image,
   Keyboard,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -21,6 +19,7 @@ import { supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import CrossfadeView from '../components/CrossfadeView';
 import RatingValueRow from '../components/RatingValueRow';
 import { DishScreenSkeleton } from '../components/LoadingSkeleton';
@@ -71,7 +70,11 @@ export default function DishScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [orderVendor, setOrderVendor] = useState<string | null>(null);
-  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<{
+    imageUrl: string | null;
+    title: string | null;
+    subtitle: string | null;
+  } | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const appStateRef = useRef(AppState.currentState);
@@ -235,13 +238,24 @@ export default function DishScreen() {
           const allRows = (await fetchVisibleDishes(companyId)) as DishAssociation[];
           const normalizedQuery = dishQuery.trim().toLowerCase();
           list = allRows.filter((row) => {
-            if (dishIdParam !== null) {
-              return row.dish_id === dishIdParam;
+            const matchesDish =
+              dishIdParam !== null
+                ? row.dish_id === dishIdParam
+                : normalizedQuery
+                  ? (row.dish_name ?? '').toLowerCase().includes(normalizedQuery)
+                  : (row.dish_name ?? '').toLowerCase() === dishName.toLowerCase();
+
+            if (!matchesDish) {
+              return false;
             }
-            if (normalizedQuery) {
-              return (row.dish_name ?? '').toLowerCase().includes(normalizedQuery);
+
+            if (restaurantIdParam) {
+              return row.restaurant_id === restaurantIdParam;
             }
-            return (row.dish_name ?? '').toLowerCase() === dishName.toLowerCase();
+            if (restaurantName) {
+              return (row.restaurant_name ?? '').toLowerCase() === restaurantName.toLowerCase();
+            }
+            return true;
           });
         }
       }
@@ -447,7 +461,11 @@ export default function DishScreen() {
   );
 
   const handleOpenPhoto = useCallback((dish: DishAssociation) => {
-    setFullScreenImage(dish.image_url ?? null);
+    setImagePreview({
+      imageUrl: dish.image_url ?? null,
+      title: dish.dish_name ?? null,
+      subtitle: dish.restaurant_name ?? null,
+    });
   }, []);
 
   const handleAvatarPress = useCallback((url: string | null, label: string | null) => {
@@ -542,6 +560,7 @@ export default function DishScreen() {
         showReview
         onToggleFavorite={handleToggleFavorite}
         onOpenPhoto={handleOpenPhoto}
+        onPreviewImage={handleOpenPhoto}
         onAvatarPress={handleAvatarPress}
         onOpenRestaurant={handleOpenRestaurant}
         onOpenCamera={handleOpenCamera}
@@ -770,23 +789,13 @@ export default function DishScreen() {
           </View>
         </View>
       ) : null}
-      <Modal
-        visible={Boolean(fullScreenImage)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setFullScreenImage(null)}
-      >
-        <Pressable style={styles.fullscreenOverlay} onPress={() => setFullScreenImage(null)}>
-          <Pressable style={styles.fullscreenContent} onPress={() => {}}>
-            {fullScreenImage ? (
-              <Image source={{ uri: fullScreenImage }} style={styles.fullscreenImage} />
-            ) : null}
-            <Pressable style={styles.fullscreenClose} onPress={() => setFullScreenImage(null)}>
-              <Ionicons name="close" size={22} color="#fff" />
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <ImagePreviewModal
+        visible={Boolean(imagePreview?.imageUrl)}
+        imageUrl={imagePreview?.imageUrl ?? null}
+        title={imagePreview?.title ?? null}
+        subtitle={imagePreview?.subtitle ?? null}
+        onClose={() => setImagePreview(null)}
+      />
       <AvatarPreviewModal
         visible={avatarPreviewOpen}
         avatarUrl={avatarPreviewUrl}

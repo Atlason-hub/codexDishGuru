@@ -47,6 +47,7 @@ type DishCardProps = {
   onAvatarPress?: (url: string | null, label: string | null) => void;
   onToggleFavorite?: (id: string) => void;
   onOpenPhoto?: (item: DishCardItem) => void;
+  onPreviewImage?: (item: DishCardItem) => void;
   onOpenDish?: (item: DishCardItem) => void;
   onOpenRestaurant?: (item: DishCardItem) => void;
   onOpenCamera?: (item: DishCardItem) => void;
@@ -67,6 +68,7 @@ function DishCard({
   onAvatarPress,
   onToggleFavorite,
   onOpenPhoto,
+  onPreviewImage,
   onOpenDish,
   onOpenRestaurant,
   onOpenCamera,
@@ -188,6 +190,8 @@ function DishCard({
                 <Pressable
                   style={styles.imagePressable}
                   onPress={() => onOpenPhoto?.(imageItem)}
+                  onLongPress={() => onPreviewImage?.(imageItem)}
+                  delayLongPress={180}
                 >
                   {imageItem.image_url ? (
                     <CachedLogo uri={imageItem.image_url} style={styles.feedImage} />
@@ -203,6 +207,8 @@ function DishCard({
             style={styles.imagePressable}
             pointerEvents="box-only"
             onPress={() => currentItem && onOpenPhoto?.(currentItem)}
+            onLongPress={() => currentItem && onPreviewImage?.(currentItem)}
+            delayLongPress={180}
           >
             {currentItem?.image_url ? (
               <CachedLogo uri={currentItem.image_url} style={styles.feedImage} />
@@ -619,6 +625,7 @@ export default React.memo(DishCard, (prev, next) => {
   if (prev.onAvatarPress !== next.onAvatarPress) return false;
   if (prev.onToggleFavorite !== next.onToggleFavorite) return false;
   if (prev.onOpenPhoto !== next.onOpenPhoto) return false;
+  if (prev.onPreviewImage !== next.onPreviewImage) return false;
   if (prev.onOpenDish !== next.onOpenDish) return false;
   if (prev.onOpenRestaurant !== next.onOpenRestaurant) return false;
   if (prev.onOpenCamera !== next.onOpenCamera) return false;
@@ -644,8 +651,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(50, 34, 20, 0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(50, 34, 20, 0.045)',
   },
   feedImageWrap: {
     position: 'relative',

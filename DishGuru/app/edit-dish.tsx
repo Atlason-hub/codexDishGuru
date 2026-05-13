@@ -76,9 +76,11 @@ export default function EditDishScreen() {
     const handleKeyboardShow = (event: any) => {
       const height = event?.endCoordinates?.height ?? 280;
       setKeyboardInset(height);
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ y: 320, animated: true });
-      }, 80);
+      if (Platform.OS === 'android') {
+        setTimeout(() => {
+          scrollRef.current?.scrollTo({ y: 180, animated: true });
+        }, 80);
+      }
     };
     const handleKeyboardHide = () => {
       setKeyboardInset(0);
@@ -342,9 +344,11 @@ export default function EditDishScreen() {
               multiline
               textAlign={isRTL ? 'right' : 'left'}
               onFocus={() => {
-                setTimeout(() => {
-                  scrollRef.current?.scrollTo({ y: 320, animated: true });
-                }, 120);
+                if (Platform.OS === 'android') {
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({ y: 180, animated: true });
+                  }, 120);
+                }
               }}
             />
 

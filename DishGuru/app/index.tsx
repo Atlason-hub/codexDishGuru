@@ -27,6 +27,7 @@ import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avata
 import DishCard from '../components/DishCard';
 import StaggeredEntrance from '../components/StaggeredEntrance';
 import LegalModal from '../components/LegalModal';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
 import RestaurantsTab from '../components/RestaurantsTab';
 import { theme } from '../lib/theme';
@@ -106,6 +107,11 @@ export default function HomeScreen() {
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<{
+    imageUrl: string | null;
+    title: string | null;
+    subtitle: string | null;
+  } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [debouncedHomeSearch, setDebouncedHomeSearch] = useState('');
   const [activeHomeTab, setActiveHomeTab] = useState<HomeTabKey>('dishes');
@@ -1256,6 +1262,13 @@ export default function HomeScreen() {
           onAvatarPress={handleAvatarPress}
           onToggleFavorite={handleToggleFavorite}
           onOpenPhoto={handleOpenDish}
+          onPreviewImage={(dish) =>
+            setImagePreview({
+              imageUrl: dish.image_url ?? null,
+              title: dish.dish_name ?? null,
+              subtitle: dish.restaurant_name ?? null,
+            })
+          }
           onOpenDish={handleOpenDish}
           onOpenRestaurant={handleOpenRestaurant}
           onDelete={deleteDishAssociation}
@@ -1646,6 +1659,13 @@ export default function HomeScreen() {
           setAvatarPreviewUrl(null);
           setAvatarPreviewLabel(null);
         }}
+      />
+      <ImagePreviewModal
+        visible={Boolean(imagePreview?.imageUrl)}
+        imageUrl={imagePreview?.imageUrl ?? null}
+        title={imagePreview?.title ?? null}
+        subtitle={imagePreview?.subtitle ?? null}
+        onClose={() => setImagePreview(null)}
       />
       <LegalModal
         visible={Boolean(legalModal)}
@@ -2107,8 +2127,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   tabUnderline: {
-    width: '100%',
-    height: 3,
+    width: '88%',
+    height: 2,
     borderRadius: 999,
     backgroundColor: 'transparent',
   },
@@ -2117,13 +2137,13 @@ const styles = StyleSheet.create({
   },
   tabsDivider: {
     marginTop: -1,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border,
     shadowColor: theme.colors.ink,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   cardSeparator: {
     height: 16,

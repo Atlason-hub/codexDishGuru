@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -10,10 +9,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import RatingValueRow from '../components/RatingValueRow';
+import CachedLogo from '../components/CachedLogo';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import { useLocale } from '../lib/locale';
 
 type DishPhoto = {
@@ -142,7 +142,7 @@ export default function PhotoScreen() {
       ) : photo?.image_url ? (
         <View style={styles.content}>
           <Pressable style={styles.imageWrap} onPress={() => setPreviewOpen(true)}>
-            <Image source={{ uri: photo.image_url }} style={styles.image} contentFit="cover" />
+            <CachedLogo uri={photo.image_url} style={styles.image} />
             <View style={styles.imageHint}>
               <Ionicons name="expand" size={16} color="#ffffff" />
               <Text style={styles.imageHintText}>הצג במסך מלא</Text>
@@ -185,31 +185,13 @@ export default function PhotoScreen() {
           <Text style={styles.placeholderText}>אין תמונה להצגה</Text>
         </View>
       )}
-      <Modal
+      <ImagePreviewModal
         visible={previewOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPreviewOpen(false)}
-      >
-        <View style={styles.previewBackdrop}>
-          <Pressable
-            style={styles.previewOverlay}
-            onPress={() => setPreviewOpen(false)}
-          />
-          <Pressable style={styles.previewClose} onPress={() => setPreviewOpen(false)}>
-            <Ionicons name="close" size={22} color="#ffffff" />
-          </Pressable>
-          {photo?.image_url ? (
-            <View style={styles.previewImageWrap}>
-              <Image
-                source={{ uri: photo.image_url }}
-                style={styles.previewImage}
-                contentFit="contain"
-              />
-            </View>
-          ) : null}
-        </View>
-      </Modal>
+        imageUrl={photo?.image_url ?? null}
+        title={photo?.dish_name ?? null}
+        subtitle={photo?.restaurant_name ?? null}
+        onClose={() => setPreviewOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -349,42 +331,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     alignSelf: 'flex-end',
     lineHeight: 30,
-  },
-  previewBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  previewOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-  previewImageWrap: {
-    width: '92%',
-    height: '92%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewClose: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    zIndex: 5,
   },
   results: {
     alignSelf: 'stretch',
