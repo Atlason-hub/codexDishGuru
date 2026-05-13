@@ -22,6 +22,15 @@ create table if not exists public.dish_reports (
 create unique index if not exists dish_reports_unique_reporter_per_dish
   on public.dish_reports (dish_association_id, reported_by_user_id);
 
+-- Explicit Data API grants for Supabase/PostgREST access.
+grant select, insert
+  on public.dish_reports
+  to authenticated;
+
+grant select, insert, update, delete
+  on public.dish_reports
+  to service_role;
+
 alter table public.dish_reports enable row level security;
 
 drop policy if exists "Users can insert their own dish reports" on public.dish_reports;
