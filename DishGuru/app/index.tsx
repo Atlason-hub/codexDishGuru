@@ -125,6 +125,7 @@ export default function HomeScreen() {
   const lastRefreshRef = useRef(0);
   const guestActivationInFlightRef = useRef(false);
   const loadRequestIdRef = useRef(0);
+  const bootstrapRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadDishAssociationsRef = useRef<
     ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
   >(null);
@@ -203,7 +204,7 @@ export default function HomeScreen() {
       if (shouldShowLoading) {
         setHasLoaded(false);
       }
-      if (shouldShowLoading) setLoading(true);
+      if (shouldShowLoading || !hasLoaded) setLoading(true);
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
@@ -248,6 +249,7 @@ export default function HomeScreen() {
               setDishAssociations(cached.items as DishAssociation[]);
               loadUserAvatars(cached.items as DishAssociation[]);
               setHasLoaded(true);
+              setLoading(false);
               cacheHydratedRef.current = true;
             }
           } catch {
@@ -275,17 +277,10 @@ export default function HomeScreen() {
         }
         if (!isCurrentRequest()) return;
         if (companyId) {
+          const rpcPromise = fetchVisibleDishes(companyId);
           allowedUserIds = await fetchCompanyUserIds(companyId, userEmail ? getEmailDomain(userEmail) : null);
           if (!isCurrentRequest()) return;
-          const [rpcData, globalContext, globalRows] = await Promise.all([
-            fetchVisibleDishes(companyId),
-            fetchGlobalCompanyContext(),
-            fetchGlobalDishes(),
-          ]);
-          if (!isCurrentRequest()) return;
-          setResolvedGlobalUserId(globalContext?.userId ?? null);
-          setResolvedGlobalDishIds(globalRows.map((row: any) => String(row.id)).filter(Boolean));
-          const { data: directData, error: directError } =
+          const directResult =
             allowedUserIds.length > 0
               ? await supabase
                   .from('dish_associations')
@@ -295,29 +290,65 @@ export default function HomeScreen() {
                   .in('user_id', allowedUserIds)
               : { data: [], error: null };
           if (!isCurrentRequest()) return;
-          if (Array.isArray(rpcData)) {
-            const ownCompanyRows =
-              !directError && Array.isArray(directData) ? (directData as DishAssociation[]) : [];
-            const sorted = mergeCompanyVisibleRows(
-              (rpcData as DishAssociation[]) ?? [],
-              ownCompanyRows,
-              allowedUserIds,
-              globalContext?.userId ?? null
-            );
-            setDishAssociations((sorted as DishAssociation[]) ?? []);
-            loadUserAvatars(sorted as DishAssociation[]);
-            if (userId) {
-              await AsyncStorage.setItem(
-                getHomeCacheKey(userId),
-                JSON.stringify({ updatedAt: Date.now(), items: sorted })
+          const { data: directData, error: directError } = directResult;
+          const ownCompanyRows =
+            !directError && Array.isArray(directData) ? (directData as DishAssociation[]) : [];
+
+          setResolvedGlobalUserId(null);
+          setResolvedGlobalDishIds([]);
+          setDishAssociations(ownCompanyRows);
+          loadUserAvatars(ownCompanyRows);
+          setHasLoaded(true);
+          setLoading(false);
+
+          void (async () => {
+            try {
+              const rpcData = await rpcPromise;
+              if (!isCurrentRequest() || !Array.isArray(rpcData)) return;
+              const initialSorted = mergeCompanyVisibleRows(
+                (rpcData as DishAssociation[]) ?? [],
+                ownCompanyRows,
+                allowedUserIds ?? [],
+                null
               );
-            }
-            return;
-          }
+              if (!isCurrentRequest()) return;
+              setDishAssociations((initialSorted as DishAssociation[]) ?? []);
+              loadUserAvatars(initialSorted as DishAssociation[]);
+              if (userId) {
+                await AsyncStorage.setItem(
+                  getHomeCacheKey(userId),
+                  JSON.stringify({ updatedAt: Date.now(), items: initialSorted })
+                );
+              }
+              const [globalContext, globalRows] = await Promise.all([
+                fetchGlobalCompanyContext(),
+                fetchGlobalDishes(),
+              ]);
+              if (!isCurrentRequest()) return;
+              setResolvedGlobalUserId(globalContext?.userId ?? null);
+              setResolvedGlobalDishIds(globalRows.map((row: any) => String(row.id)).filter(Boolean));
+              const refinedSorted = mergeCompanyVisibleRows(
+                (rpcData as DishAssociation[]) ?? [],
+                ownCompanyRows,
+                allowedUserIds ?? [],
+                globalContext?.userId ?? null
+              );
+              setDishAssociations((refinedSorted as DishAssociation[]) ?? []);
+              loadUserAvatars(refinedSorted as DishAssociation[]);
+              if (userId) {
+                await AsyncStorage.setItem(
+                  getHomeCacheKey(userId),
+                  JSON.stringify({ updatedAt: Date.now(), items: refinedSorted })
+                );
+              }
+            } catch {}
+          })();
+          return;
         }
       }
       if (!isCurrentRequest()) return;
-      if (!allowedUserIds || allowedUserIds.length === 0) {
+      const effectiveAllowedUserIds = allowedUserIds ?? [];
+      if (effectiveAllowedUserIds.length === 0) {
         setDishAssociations([]);
         setFavorites({});
         setResolvedGlobalUserId(null);
@@ -329,7 +360,7 @@ export default function HomeScreen() {
         .select(
           'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
         )
-        .in('user_id', allowedUserIds)
+        .in('user_id', effectiveAllowedUserIds)
         .order('created_at', { ascending: false });
       if (fetchError) throw fetchError;
       if (!isCurrentRequest()) return;
@@ -593,6 +624,28 @@ export default function HomeScreen() {
       loadDishAssociations({ showLoading: false });
     }
   }, [currentUserId, isGuestMode, loadDishAssociations, refreshParam]);
+
+  useEffect(() => {
+    if (bootstrapRetryTimeoutRef.current) {
+      clearTimeout(bootstrapRetryTimeoutRef.current);
+      bootstrapRetryTimeoutRef.current = null;
+    }
+    if (!sessionChecked || loading || hasLoaded || error || (!currentUserId && !isGuestMode)) {
+      return;
+    }
+    bootstrapRetryTimeoutRef.current = setTimeout(() => {
+      void loadDishAssociations({
+        useCache: Boolean(currentUserId),
+        showLoading: false,
+      });
+    }, 2200);
+    return () => {
+      if (bootstrapRetryTimeoutRef.current) {
+        clearTimeout(bootstrapRetryTimeoutRef.current);
+        bootstrapRetryTimeoutRef.current = null;
+      }
+    };
+  }, [currentUserId, error, hasLoaded, isGuestMode, loadDishAssociations, loading, sessionChecked]);
 
   useEffect(() => {
     cacheHydratedRef.current = false;
