@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
@@ -845,7 +845,7 @@ const styles = StyleSheet.create({
   },
   controlText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
     color: theme.colors.textMuted,
   },
   controlTextActive: {
@@ -867,7 +867,7 @@ const styles = StyleSheet.create({
   },
   sectionHeaderText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     color: theme.colors.accent,
     textAlign: 'right',
   },
@@ -896,7 +896,7 @@ const styles = StyleSheet.create({
   },
   dishName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',
     marginBottom: 6,
@@ -915,7 +915,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
     color: theme.colors.textMuted,
     textAlign: 'right',
   },

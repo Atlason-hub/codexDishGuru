@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
@@ -111,115 +111,90 @@ export default function AppHeader() {
     }
   };
 
-  useEffect(() => {
-    if (!menuVisible) {
-      return;
-    }
+  const syncHeaderState = useCallback(async (sessionOverride?: any, options?: {
+    useCachedAssets?: boolean;
+  }) => {
+    const session =
+      sessionOverride ?? (await supabase.auth.getSession()).data.session;
+    const userId = session?.user?.id ?? null;
+    const guestModeEnabled = !userId ? await loadGuestMode() : false;
+    const sessionEmail = session?.user?.email ?? null;
 
-    let active = true;
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!active) return;
-      const guestModeEnabled = !data.session?.user?.id ? await loadGuestMode() : false;
-      setIsAuthenticated(Boolean(data.session?.user?.id));
-      setCurrentUserId(data.session?.user?.id ?? null);
-      setIsGuestMode(guestModeEnabled);
-    })();
+    setIsGuestMode(guestModeEnabled);
+    setIsAuthenticated(Boolean(userId));
+    setCurrentUserId(userId);
 
-    return () => {
-      active = false;
-    };
-  }, [menuVisible]);
-
-  useEffect(() => {
-    let mounted = true;
-    const syncHeaderState = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      const guestModeEnabled = !data.session?.user?.id ? await loadGuestMode() : false;
-      setIsGuestMode(guestModeEnabled);
-      const sessionEmail = data.session?.user?.email ?? null;
-      setIsAuthenticated(Boolean(data.session?.user?.id));
-      setCurrentUserId(data.session?.user?.id ?? null);
-      const cached = await loadCachedLogo();
+    if (options?.useCachedAssets) {
+      const [cached, cachedAvatar] = await Promise.all([
+        loadCachedLogo(),
+        loadCachedAvatar(userId),
+      ]);
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
         applyResolvedLogo(resolved);
       }
-      const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
-      if (cachedAvatar) setAvatarUrl(cachedAvatar);
-      const metaAvatar = getSessionAvatarUrl(data.session);
-      if (metaAvatar) {
-        setAvatarUrl(metaAvatar);
-        await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
+      if (cachedAvatar) {
+        setAvatarUrl(cachedAvatar);
       }
-      if (data.session?.user?.id) {
-        const url = await fetchCompanyLogoForUser(
-          data.session.user.id,
-          getEmailDomain(sessionEmail)
-        );
-        if (url) {
-          applyResolvedLogo(url);
-          cacheLogo({ logoUrl: url, logoPath: null });
-        }
-      } else if (guestModeEnabled) {
-        const globalContext = await fetchGlobalCompanyContext();
-        const resolved = resolveLogoUrl(globalContext?.logoUrl ?? null);
-        console.info('[guest-mode] header resolved guest logo', {
-          hasContext: Boolean(globalContext),
-          hasLogo: Boolean(resolved),
-        });
-        applyResolvedLogo(resolved);
+    }
+
+    const metaAvatar = getSessionAvatarUrl(session);
+    if (metaAvatar) {
+      setAvatarUrl(metaAvatar);
+      await cacheAvatar(userId, metaAvatar);
+    } else if (!userId) {
+      setAvatarUrl(null);
+      await cacheAvatar(null, null);
+    }
+
+    if (userId) {
+      const url = await fetchCompanyLogoForUser(userId, getEmailDomain(sessionEmail));
+      if (url) {
+        applyResolvedLogo(url);
+        await cacheLogo({ logoUrl: url, logoPath: null });
       } else {
         applyResolvedLogo(null);
       }
+      return;
+    }
+
+    if (guestModeEnabled) {
+      const globalContext = await fetchGlobalCompanyContext();
+      const resolved = resolveLogoUrl(globalContext?.logoUrl ?? null);
+      console.info('[guest-mode] header resolved guest logo', {
+        hasContext: Boolean(globalContext),
+        hasLogo: Boolean(resolved),
+      });
+      applyResolvedLogo(resolved);
+      return;
+    }
+
+    applyResolvedLogo(null);
+    await clearCachedLogo();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const runSync = async () => {
+      await syncHeaderState(undefined, { useCachedAssets: true });
     };
 
-    syncHeaderState();
+    runSync().catch(() => {
+      if (mounted) {
+        applyResolvedLogo(null);
+      }
+    });
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const sessionEmail = session?.user?.email ?? null;
-      setIsAuthenticated(Boolean(session?.user?.id));
-      setCurrentUserId(session?.user?.id ?? null);
-      const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
-      if (metaAvatar) {
-        setAvatarUrl(metaAvatar);
-        cacheAvatar(session?.user?.id ?? null, metaAvatar);
-      } else {
-        setAvatarUrl(null);
-        cacheAvatar(session?.user?.id ?? null, null);
-      }
-      if (session?.user?.id) {
-        setIsGuestMode(false);
-        fetchCompanyLogoForUser(session.user.id, getEmailDomain(sessionEmail)).then((url) => {
-          if (url) {
-            applyResolvedLogo(url);
-            cacheLogo({ logoUrl: url, logoPath: null });
-          }
-        });
-      } else {
-        const guestModeEnabled = await loadGuestMode();
-        setIsGuestMode(guestModeEnabled);
-        if (guestModeEnabled) {
-          const globalContext = await fetchGlobalCompanyContext();
-          const resolved = resolveLogoUrl(globalContext?.logoUrl ?? null);
-          console.info('[guest-mode] header auth-change guest logo', {
-            hasContext: Boolean(globalContext),
-            hasLogo: Boolean(resolved),
-          });
-          applyResolvedLogo(resolved);
-        } else {
-          applyResolvedLogo(null);
-          clearCachedLogo();
-        }
-      }
+      if (!mounted) return;
+      await syncHeaderState(session);
     });
 
     return () => {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [pathname, refreshParam, headerSyncParam]);
+  }, [guestModeParam, headerSyncParam, refreshParam, syncHeaderState]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -456,7 +431,7 @@ const styles = StyleSheet.create({
   },
   logoText: {
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
   },
   logoImage: {
@@ -520,6 +495,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textMuted,
     flex: 1,
+    fontFamily: theme.typography.semibold,
   },
   menuOptionDanger: {
     color: theme.colors.danger,
@@ -536,7 +512,7 @@ const styles = StyleSheet.create({
   signOutMenuText: {
     color: theme.colors.white,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.typography.bold,
   },
   menuOptionRow: {
     paddingVertical: 14,

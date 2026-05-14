@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 import {
   Animated,
   Image,
@@ -23,7 +23,7 @@ type Props = {
   iconsContainer?: ReactNode;
 };
 
-export default function RatingValueRow({
+function RatingValueRow({
   label,
   score,
   iconSize = 24,
@@ -65,6 +65,21 @@ export default function RatingValueRow({
     </View>
   );
 }
+
+const stylePropEqual = (left: unknown, right: unknown) => left === right;
+
+export default React.memo(RatingValueRow, (prev, next) => {
+  return (
+    prev.label === next.label &&
+    prev.score === next.score &&
+    prev.iconSize === next.iconSize &&
+    stylePropEqual(prev.rowStyle, next.rowStyle) &&
+    stylePropEqual(prev.labelStyle, next.labelStyle) &&
+    stylePropEqual(prev.iconsWrapStyle, next.iconsWrapStyle) &&
+    stylePropEqual(prev.iconStyle, next.iconStyle) &&
+    prev.iconsContainer === next.iconsContainer
+  );
+});
 
 const styles = StyleSheet.create({
   starRow: {

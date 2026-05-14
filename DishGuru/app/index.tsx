@@ -3,17 +3,16 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
+import HomeAuthView from '../components/HomeAuthView';
+import HomeFeedHeader from '../components/HomeFeedHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +27,6 @@ import DishCard from '../components/DishCard';
 import StaggeredEntrance from '../components/StaggeredEntrance';
 import LegalModal from '../components/LegalModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
-import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
 import RestaurantsTab from '../components/RestaurantsTab';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
@@ -42,8 +40,14 @@ import {
   fetchUserAvatarMaps,
   fetchVisibleDishes,
 } from '../lib/appData';
+import {
+  getRenderableHomeAssociations,
+  groupHomeAssociations,
+  normalizeHomeSearchNeedle,
+  type GroupedHomeAssociation,
+} from '../lib/homeFeed';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
-import { getLegalUrl, Locale, useLocale } from '../lib/locale';
+import { getLegalUrl, useLocale } from '../lib/locale';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 import { publishHomeTab, subscribeHomeTab, type HomeTabKey } from '../lib/homeTabs';
 
@@ -120,6 +124,7 @@ export default function HomeScreen() {
   const cacheHydratedRef = useRef(false);
   const lastRefreshRef = useRef(0);
   const guestActivationInFlightRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
   const loadDishAssociationsRef = useRef<
     ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
   >(null);
@@ -190,6 +195,9 @@ export default function HomeScreen() {
     showLoading?: boolean;
     guestModeOverride?: boolean;
   }) => {
+    const requestId = ++loadRequestIdRef.current;
+    const isCurrentRequest = () => loadRequestIdRef.current === requestId;
+
     try {
       const shouldShowLoading = options?.showLoading ?? true;
       if (shouldShowLoading) {
@@ -208,6 +216,7 @@ export default function HomeScreen() {
           fetchGlobalDishes(),
           fetchGlobalCompanyContext(),
         ]);
+        if (!isCurrentRequest()) return;
         const resolvedGlobalLogoUrl = resolveLogoUrl(globalContext?.logoUrl ?? null);
         console.info('[guest-mode] guest home feed resolved', {
           dishes: globalRows.length,
@@ -235,6 +244,7 @@ export default function HomeScreen() {
           try {
             const cached = JSON.parse(cachedRaw);
             if (Array.isArray(cached?.items)) {
+              if (!isCurrentRequest()) return;
               setDishAssociations(cached.items as DishAssociation[]);
               loadUserAvatars(cached.items as DishAssociation[]);
               setHasLoaded(true);
@@ -247,14 +257,7 @@ export default function HomeScreen() {
       }
       let allowedUserIds: string[] | null = null;
       if (userId) {
-        const { data: profile, error: profileError } = await supabase
-          .from('AppUsers')
-          .select('company_id')
-          .eq('user_id', userId)
-          .limit(1)
-          .maybeSingle();
-        if (profileError) throw profileError;
-        let companyId = profile?.company_id ?? null;
+        let companyId = await fetchCompanyIdForUser(userId);
         if (!companyId && userEmail) {
           const domain = userEmail.includes('@')
             ? userEmail.split('@').pop()?.trim().toLowerCase()
@@ -270,13 +273,16 @@ export default function HomeScreen() {
             companyId = companyFromDomain?.id ?? null;
           }
         }
+        if (!isCurrentRequest()) return;
         if (companyId) {
           allowedUserIds = await fetchCompanyUserIds(companyId, userEmail ? getEmailDomain(userEmail) : null);
+          if (!isCurrentRequest()) return;
           const [rpcData, globalContext, globalRows] = await Promise.all([
             fetchVisibleDishes(companyId),
             fetchGlobalCompanyContext(),
             fetchGlobalDishes(),
           ]);
+          if (!isCurrentRequest()) return;
           setResolvedGlobalUserId(globalContext?.userId ?? null);
           setResolvedGlobalDishIds(globalRows.map((row: any) => String(row.id)).filter(Boolean));
           const { data: directData, error: directError } =
@@ -288,6 +294,7 @@ export default function HomeScreen() {
                   )
                   .in('user_id', allowedUserIds)
               : { data: [], error: null };
+          if (!isCurrentRequest()) return;
           if (Array.isArray(rpcData)) {
             const ownCompanyRows =
               !directError && Array.isArray(directData) ? (directData as DishAssociation[]) : [];
@@ -309,6 +316,7 @@ export default function HomeScreen() {
           }
         }
       }
+      if (!isCurrentRequest()) return;
       if (!allowedUserIds || allowedUserIds.length === 0) {
         setDishAssociations([]);
         setFavorites({});
@@ -324,6 +332,7 @@ export default function HomeScreen() {
         .in('user_id', allowedUserIds)
         .order('created_at', { ascending: false });
       if (fetchError) throw fetchError;
+      if (!isCurrentRequest()) return;
       const rows = (data ?? []) as DishAssociation[];
       setDishAssociations(rows);
       loadUserAvatars(rows);
@@ -336,10 +345,13 @@ export default function HomeScreen() {
         );
       }
     } catch (err) {
+      if (!isCurrentRequest()) return;
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setLoading(false);
-      setHasLoaded(true);
+      if (isCurrentRequest()) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
   }, []);
 
@@ -515,11 +527,8 @@ export default function HomeScreen() {
         if (data.session?.user?.id) {
           const domain = getEmailDomain(data.session.user.email ?? null);
           void fetchCompanyLogoForUser(data.session.user.id, domain);
-          void loadFavorites(data.session.user.id);
-          void loadDishAssociations({ useCache: true, showLoading: false });
           void setGuestModeEnabled(false);
         } else if (guestModeEnabled) {
-          void loadDishAssociations({ showLoading: false, guestModeOverride: true });
         } else {
           setDishAssociations([]);
           setFavorites({});
@@ -547,15 +556,10 @@ export default function HomeScreen() {
         setIsGuestMode(false);
         await setGuestModeEnabled(false);
         void fetchCompanyLogoForUser(session.user.id, getEmailDomain(session?.user?.email ?? null));
-        void loadDishAssociations();
-        void loadFavorites(session.user.id);
       } else {
         const guestModeEnabled = await loadGuestMode();
         setIsGuestMode(guestModeEnabled);
         if (guestModeEnabled) {
-          if (!guestActivationInFlightRef.current) {
-            void loadDishAssociations({ showLoading: false, guestModeOverride: true });
-          }
           setFavorites({});
         } else {
           setDishAssociations([]);
@@ -593,6 +597,14 @@ export default function HomeScreen() {
   useEffect(() => {
     cacheHydratedRef.current = false;
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (currentUserId) {
+      void loadFavorites(currentUserId);
+    } else {
+      setFavorites({});
+    }
+  }, [currentUserId, loadFavorites]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -960,222 +972,35 @@ export default function HomeScreen() {
     });
   }, []);
 
-  const visibleAssociations = showFavoritesOnly
-    ? dishAssociations.filter((item) => favorites[item.id])
-    : showRestaurantOnly
-      ? dishAssociations.filter((item) => {
-          if (restaurantFilterId !== null) {
-            return item.restaurant_id === restaurantFilterId;
-          }
-          if (restaurantFilterName) {
-            return (item.restaurant_name ?? '') === restaurantFilterName;
-          }
-          return true;
-        })
-      : dishAssociations;
-  const renderAssociations =
-    !isGuestMode && resolvedGlobalDishIds.length > 0
-      ? (() => {
-          const globalDishIdSet = new Set(resolvedGlobalDishIds);
-          const nonGlobalRows = visibleAssociations.filter(
-            (item) => !globalDishIdSet.has(String(item.id))
-          );
-          return nonGlobalRows.length >= 3 ? nonGlobalRows : visibleAssociations;
-        })()
-      : visibleAssociations;
+  const renderAssociations = getRenderableHomeAssociations({
+    dishAssociations,
+    favorites,
+    showFavoritesOnly,
+    showRestaurantOnly,
+    restaurantFilterId,
+    restaurantFilterName,
+    isGuestMode,
+    resolvedGlobalDishIds,
+  });
   const hasHeaderContent = true;
-  const listHeader = (
-    <View style={styles.listHeader}>
-      {showRestaurantOnly && (
-        <View style={[styles.favoritesHeader, !isRTL && styles.favoritesHeaderLtr]}>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-          >
-            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
-          </Pressable>
-          <Text style={[styles.favoritesHeaderText, !isRTL && styles.favoritesHeaderTextLtr]}>
-            {restaurantFilterName ?? 'מסעדה'}
-          </Text>
-        </View>
-      )}
-      {showFavoritesOnly && (
-        <View style={[styles.favoritesHeader, !isRTL && styles.favoritesHeaderLtr]}>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-          >
-            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
-          </Pressable>
-          <Text style={[styles.favoritesHeaderText, !isRTL && styles.favoritesHeaderTextLtr]}>
-            {t('favoritesTitle')}
-          </Text>
-        </View>
-      )}
-      {loading && !isRefreshing ? (
-        <View style={styles.results}>
-          <HomeFeedSkeleton />
-        </View>
-      ) : error ? (
-        <View style={styles.results}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : null}
-      {!showFavoritesOnly ? (
-        <View style={[styles.homeSearchBox, !isRTL && styles.homeSearchBoxLtr]}>
-          <Ionicons name="search" size={16} color={theme.colors.accent} />
-          <TextInput
-            style={styles.homeSearchInput}
-            placeholder={t('homeSearchPlaceholder')}
-            placeholderTextColor={theme.colors.textMuted}
-            value={homeSearch}
-            onChangeText={setHomeSearch}
-            onSubmitEditing={() => {
-              const normalizedNeedle = homeSearch
-                .toLowerCase()
-                .replace(/[^\p{L}\p{N}]+/gu, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-              if (!normalizedNeedle) return;
 
-              const matchingDishGroups = groupedAssociations.filter((group) => {
-                const dishName = (group.dishName ?? '')
-                  .toLowerCase()
-                  .replace(/[^\p{L}\p{N}]+/gu, ' ')
-                  .replace(/\s+/g, ' ')
-                  .trim();
-                return dishName.includes(normalizedNeedle);
-              });
-
-              if (matchingDishGroups.length === 1 && matchingDishGroups[0].items.length > 0) {
-                handleOpenDish(matchingDishGroups[0].items[0]);
-                return;
-              }
-
-              const matchingRestaurants = renderAssociations.filter((dish) => {
-                const restaurantName = (dish.restaurant_name ?? '')
-                  .toLowerCase()
-                  .replace(/[^\p{L}\p{N}]+/gu, ' ')
-                  .replace(/\s+/g, ' ')
-                  .trim();
-                return restaurantName.includes(normalizedNeedle);
-              });
-
-              if (matchingRestaurants.length > 0 && shouldShowMainTabs) {
-                publishHomeTab('restaurants');
-                setActiveHomeTab('restaurants');
-              }
-            }}
-            returnKeyType="search"
-            textAlign={isRTL ? 'right' : 'left'}
-          />
-          {homeSearch.trim().length > 0 ? (
-            <Pressable
-              style={styles.homeSearchClear}
-              onPress={() => {
-                setHomeSearch('');
-                setDebouncedHomeSearch('');
-              }}
-              hitSlop={6}
-            >
-              <Ionicons name="close" size={16} color={theme.colors.textMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-      {shouldShowMainTabs ? (
-        <View style={styles.tabsSection}>
-          <View style={[styles.tabsRow, !isRTL && styles.tabsRowLtr]}>
-          {([
-            ['dishes', t('homeTabDishes')],
-            ['restaurants', t('homeTabRestaurants')],
-          ] as const).map(([tabKey, label]) => {
-            const isActive = activeHomeTab === tabKey;
-            return (
-              <Pressable
-                key={tabKey}
-                style={[
-                  styles.tabChip,
-                ]}
-                onPress={() => {
-                  publishHomeTab(tabKey);
-                  setActiveHomeTab(tabKey);
-                }}
-              >
-                <View style={styles.tabChipInner}>
-                  <Text
-                    style={[
-                      styles.tabChipText,
-                      isActive && styles.tabChipTextActive,
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                  <View
-                    style={[
-                      styles.tabUnderline,
-                      isActive && styles.tabUnderlineActive,
-                    ]}
-                  />
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-          <View style={styles.tabsDivider} />
-        </View>
-      ) : null}
-    </View>
+  const groupedAssociations = useMemo<GroupedHomeAssociation[]>(
+    () => groupHomeAssociations(renderAssociations, debouncedHomeSearch),
+    [debouncedHomeSearch, renderAssociations]
   );
-
-  const groupedAssociations = useMemo(() => {
-    const needle = debouncedHomeSearch.trim().toLowerCase();
-    const filtered = needle
-      ? renderAssociations.filter((item) => {
-          const dishName = (item.dish_name ?? '').toLowerCase();
-          const restName = (item.restaurant_name ?? '').toLowerCase();
-          return dishName.includes(needle) || restName.includes(needle);
-        })
-      : renderAssociations;
-    const groups = new Map<string, DishAssociation[]>();
-    filtered.forEach((item) => {
-      const normalizedDish = (item.dish_name ?? '').trim().toLowerCase();
-      const normalizedRest = (item.restaurant_name ?? '').trim().toLowerCase();
-      const dishKey = normalizedDish
-        ? `dishName:${normalizedDish}`
-        : item.dish_id !== null
-          ? `dish:${item.dish_id}`
-          : 'dish:unknown';
-      const restKey = normalizedRest
-        ? `restName:${normalizedRest}`
-        : item.restaurant_id !== null
-          ? `rest:${item.restaurant_id}`
-          : 'rest:unknown';
-      const key = `${dishKey}|${restKey}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(item);
-    });
-      return Array.from(groups.entries()).map(([key, items]) => {
-      const sorted = [...items].sort((a, b) => {
-        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return bTime - aTime;
-      });
-      return {
-        key,
-        items: sorted,
-        dishName: items[0]?.dish_name ?? '',
-        restaurantName: items[0]?.restaurant_name ?? '',
-        dishId: items[0]?.dish_id ?? null,
-        restaurantId: items[0]?.restaurant_id ?? null,
-      };
-    });
-  }, [debouncedHomeSearch, renderAssociations]);
 
   const handleAvatarPress = useCallback((url: string | null, label: string | null) => {
     setAvatarPreviewUrl(url);
     setAvatarPreviewLabel(label);
     setAvatarPreviewOpen(true);
+  }, []);
+
+  const handlePreviewImage = useCallback((dish: DishAssociation) => {
+    setImagePreview({
+      imageUrl: dish.image_url ?? null,
+      title: dish.dish_name ?? null,
+      subtitle: dish.restaurant_name ?? null,
+    });
   }, []);
 
   const handleToggleFavorite = useCallback(
@@ -1211,6 +1036,52 @@ export default function HomeScreen() {
       });
     },
     [router]
+  );
+
+  const handleHomeSearchSubmit = useCallback(() => {
+    const normalizedNeedle = normalizeHomeSearchNeedle(homeSearch);
+    if (!normalizedNeedle) return;
+
+    const matchingDishGroups = groupedAssociations.filter((group) => {
+      const dishName = normalizeHomeSearchNeedle(group.dishName ?? '');
+      return dishName.includes(normalizedNeedle);
+    });
+
+    if (matchingDishGroups.length === 1 && matchingDishGroups[0].items.length > 0) {
+      handleOpenDish(matchingDishGroups[0].items[0]);
+      return;
+    }
+
+    const matchingRestaurants = renderAssociations.filter((dish) => {
+      const restaurantName = normalizeHomeSearchNeedle(dish.restaurant_name ?? '');
+      return restaurantName.includes(normalizedNeedle);
+    });
+
+    if (matchingRestaurants.length > 0 && shouldShowMainTabs) {
+      publishHomeTab('restaurants');
+      setActiveHomeTab('restaurants');
+    }
+  }, [groupedAssociations, handleOpenDish, homeSearch, renderAssociations, shouldShowMainTabs]);
+
+  const listHeader = (
+    <HomeFeedHeader
+      isRTL={isRTL}
+      t={t}
+      showRestaurantOnly={showRestaurantOnly}
+      showFavoritesOnly={showFavoritesOnly}
+      restaurantFilterName={restaurantFilterName}
+      loading={loading}
+      isRefreshing={isRefreshing}
+      error={error}
+      homeSearch={homeSearch}
+      shouldShowMainTabs={shouldShowMainTabs}
+      activeHomeTab={activeHomeTab}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+      onHomeSearchChange={setHomeSearch}
+      onHomeSearchSubmit={handleHomeSearchSubmit}
+      onHomeSearchClear={() => setHomeSearch('')}
+      onSetActiveHomeTab={setActiveHomeTab}
+    />
   );
 
   const handleOpenCamera = useCallback(
@@ -1267,13 +1138,7 @@ export default function HomeScreen() {
           onAvatarPress={handleAvatarPress}
           onToggleFavorite={handleToggleFavorite}
           onOpenPhoto={handleOpenDish}
-          onPreviewImage={(dish) =>
-            setImagePreview({
-              imageUrl: dish.image_url ?? null,
-              title: dish.dish_name ?? null,
-              subtitle: dish.restaurant_name ?? null,
-            })
-          }
+          onPreviewImage={handlePreviewImage}
           onOpenDish={handleOpenDish}
           onOpenRestaurant={handleOpenRestaurant}
           onDelete={deleteDishAssociation}
@@ -1293,6 +1158,7 @@ export default function HomeScreen() {
       handleOpenCamera,
       handleOpenDish,
       handleOpenRestaurant,
+      handlePreviewImage,
       handleToggleFavorite,
       handleOrder,
       userAvatars,
@@ -1314,242 +1180,48 @@ export default function HomeScreen() {
           </View>
         </View>
       ) : !isAuthenticated && !isGuestMode ? (
-        <KeyboardAvoidingView
-          style={styles.authKeyboardAvoiding}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-        >
-          <ScrollView
-            style={styles.authScroll}
-            contentContainerStyle={styles.authScrollContent}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            automaticallyAdjustKeyboardInsets
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-          >
-            <View style={styles.authScreen}>
-              <View style={[styles.authLanguageRow, !isRTL && styles.authLanguageRowLtr]}>
-                {([
-                  ['he', t('accountLanguageHebrew')],
-                  ['en', t('accountLanguageEnglish')],
-                ] as const).map(([value, label]) => (
-                  <Pressable
-                    key={value}
-                    style={[
-                      styles.authLanguageChip,
-                      locale === value && styles.authLanguageChipActive,
-                    ]}
-                    onPress={() => setLocale(value as 'he' | 'en')}
-                  >
-                    <Text
-                      style={[
-                        styles.authLanguageChipText,
-                        locale === value && styles.authLanguageChipTextActive,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.authHeaderWrap}>
-                <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
-              </View>
-              <View style={styles.authCard}>
-                <View style={styles.fieldGroup}>
-                  <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                    {t('authWorkEmail')}
-                  </Text>
-                  <View style={styles.inputRow}>
-                    <TextInput
-                      style={styles.inputField}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      value={email}
-                      onChangeText={setEmail}
-                      placeholder=""
-                      textAlign="left"
-                      selectionColor={theme.colors.accent}
-                      cursorColor={theme.colors.accent}
-                    />
-                  </View>
-                </View>
-                <View style={styles.fieldGroup}>
-                  <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                    {t('authPassword')}
-                  </Text>
-                  <View style={styles.inputRow}>
-                    <TextInput
-                      style={styles.inputFieldPassword}
-                      placeholder=""
-                      secureTextEntry={!showPass}
-                      value={pass}
-                      onChangeText={setPass}
-                      textAlign="left"
-                      selectionColor={theme.colors.accent}
-                      cursorColor={theme.colors.accent}
-                    />
-                    <Pressable style={styles.eyeButton} onPress={() => setShowPass((v) => !v)}>
-                      <Ionicons
-                        name={showPass ? 'eye-off' : 'eye'}
-                        size={18}
-                        color={theme.colors.textMuted}
-                      />
-                    </Pressable>
-                  </View>
-                </View>
-                {showSignup && (
-                  <View style={styles.fieldGroup}>
-                    <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                      {t('authPasswordConfirm')}
-                    </Text>
-                    <View style={styles.inputRow}>
-                      <TextInput
-                        style={styles.inputFieldPassword}
-                        placeholder=""
-                        secureTextEntry={!showConfirmPass}
-                        value={confirmPass}
-                        onChangeText={setConfirmPass}
-                        textAlign="left"
-                        selectionColor={theme.colors.accent}
-                        cursorColor={theme.colors.accent}
-                      />
-                      <Pressable
-                        style={styles.eyeButton}
-                        onPress={() => setShowConfirmPass((v) => !v)}
-                      >
-                        <Ionicons
-                          name={showConfirmPass ? 'eye-off' : 'eye'}
-                          size={18}
-                          color={theme.colors.textMuted}
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
-                )}
-                {showSignup ? (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.termsRow,
-                      !isRTL && styles.termsRowLtr,
-                      pressed && styles.termsRowPressed,
-                    ]}
-                    onPress={() => setAcceptedTerms((value) => !value)}
-                  >
-                    <Pressable
-                      onPress={() =>
-                        setLegalModal({
-                          title: t('legalTermsTitle'),
-                          url: getLegalUrl(locale, 'terms'),
-                        })
-                      }
-                      style={[styles.termsTextWrap, !isRTL && styles.termsTextWrapLtr]}
-                    >
-                      <Text style={[styles.termsText, !isRTL && styles.termsTextLtr]}>
-                        {t('authAcceptTerms')}
-                      </Text>
-                    </Pressable>
-                    <View style={[styles.termsCheckbox, acceptedTerms && styles.termsCheckboxChecked]}>
-                      {acceptedTerms ? (
-                        <Ionicons name="checkmark" size={16} color={theme.colors.white} />
-                      ) : null}
-                    </View>
-                  </Pressable>
-                ) : null}
-                {!showSignup && (
-                  <Pressable onPress={() => void sendPasswordReset()} disabled={authLoading}>
-                    <Text style={[styles.forgotPasswordText, !isRTL && styles.forgotPasswordTextLtr, authLoading && { opacity: 0.6 }]}>
-                      {t('authForgotPassword')}
-                    </Text>
-                  </Pressable>
-                )}
-                {authError && (
-                  <Text style={[styles.authErrorText, !isRTL && styles.authErrorTextLtr]}>
-                    {authError}
-                  </Text>
-                )}
-                {showSignup ? (
-                  <>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.loginButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={signUp}
-                      disabled={authLoading}
-                    >
-                      {authLoading ? (
-                        <ActivityIndicator color={theme.colors.white} />
-                      ) : (
-                        <Text style={styles.loginButtonText}>{t('authCreateAccount')}</Text>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.signupButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={() => {
-                        setShowSignup(false);
-                        setAcceptedTerms(false);
-                        setAuthError(null);
-                      }}
-                      disabled={authLoading}
-                    >
-                      <Text style={styles.signupButtonText}>{t('authBackToSignIn')}</Text>
-                    </Pressable>
-                  </>
-                ) : (
-                  <>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.loginButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={signIn}
-                      disabled={authLoading}
-                    >
-                      {authLoading ? (
-                        <ActivityIndicator color={theme.colors.white} />
-                      ) : (
-                        <Text style={styles.loginButtonText}>{t('authSignIn')}</Text>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.signupButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={() => {
-                        setShowSignup(true);
-                        setAuthError(null);
-                      }}
-                      disabled={authLoading}
-                    >
-                      <Text style={styles.signupButtonText}>{t('authCreateAccount')}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.guestButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={() => {
-                        void activateGuestMode();
-                      }}
-                      disabled={authLoading}
-                    >
-                      <Text style={styles.guestButtonText}>{t('authBrowseAsGuest')}</Text>
-                    </Pressable>
-                    <Text style={[styles.guestHintText, !isRTL && styles.guestHintTextLtr]}>
-                      {t('authBrowseAsGuestHint')}
-                    </Text>
-                  </>
-                )}
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        <HomeAuthView
+          isRTL={isRTL}
+          locale={locale}
+          t={t}
+          email={email}
+          pass={pass}
+          confirmPass={confirmPass}
+          showSignup={showSignup}
+          acceptedTerms={acceptedTerms}
+          showPass={showPass}
+          showConfirmPass={showConfirmPass}
+          authError={authError}
+          authLoading={authLoading}
+          onLocaleChange={setLocale}
+          onEmailChange={setEmail}
+          onPassChange={setPass}
+          onConfirmPassChange={setConfirmPass}
+          onToggleShowPass={() => setShowPass((v) => !v)}
+          onToggleShowConfirmPass={() => setShowConfirmPass((v) => !v)}
+          onToggleAcceptedTerms={() => setAcceptedTerms((value) => !value)}
+          onOpenTerms={() =>
+            setLegalModal({
+              title: t('legalTermsTitle'),
+              url: getLegalUrl(locale, 'terms'),
+            })
+          }
+          onForgotPassword={() => void sendPasswordReset()}
+          onSignIn={signIn}
+          onSignUp={signUp}
+          onShowSignup={() => {
+            setShowSignup(true);
+            setAuthError(null);
+          }}
+          onBackToSignIn={() => {
+            setShowSignup(false);
+            setAcceptedTerms(false);
+            setAuthError(null);
+          }}
+          onBrowseGuest={() => {
+            void activateGuestMode();
+          }}
+        />
       ) : (
         <View style={styles.tabScene}>
           <View
@@ -1563,11 +1235,13 @@ export default function HomeScreen() {
               ref={listRef}
               data={groupedAssociations}
               keyExtractor={(item) => item.key}
-              initialNumToRender={4}
-              maxToRenderPerBatch={4}
-              updateCellsBatchingPeriod={50}
-              windowSize={7}
+              initialNumToRender={3}
+              maxToRenderPerBatch={3}
+              updateCellsBatchingPeriod={40}
+              windowSize={5}
               removeClippedSubviews
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={[
                 styles.feedContent,
                 !hasHeaderContent && styles.feedContentNoHeader,
@@ -1584,7 +1258,7 @@ export default function HomeScreen() {
                 const y = event.nativeEvent.contentOffset.y;
                 scrollYRef.current = y;
               }}
-              scrollEventThrottle={16}
+              scrollEventThrottle={32}
               ListHeaderComponent={listHeader}
               ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
               ListEmptyComponent={
@@ -1860,7 +1534,7 @@ const styles = StyleSheet.create({
   authLanguageChipText: {
     fontSize: 12,
     color: theme.colors.textMuted,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
   },
   authLanguageChipTextActive: {
     color: theme.colors.accent,
@@ -1907,6 +1581,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     alignSelf: 'flex-end',
     paddingRight: 4,
+    fontFamily: theme.typography.semibold,
   },
   fieldLabelLtr: {
     textAlign: 'left',
@@ -2038,7 +1713,7 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
   },
   signupButton: {
     height: 44,
@@ -2051,7 +1726,7 @@ const styles = StyleSheet.create({
   signupButtonText: {
     color: theme.colors.accent,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
   },
   guestButton: {
     marginTop: 10,
@@ -2066,7 +1741,7 @@ const styles = StyleSheet.create({
   guestButtonText: {
     color: theme.colors.accent,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
   },
   guestHintText: {
     marginTop: 10,
@@ -2125,11 +1800,11 @@ const styles = StyleSheet.create({
   tabChipText: {
     fontSize: 16,
     color: theme.colors.textMuted,
-    fontWeight: '500',
+    fontFamily: theme.typography.semibold,
   },
   tabChipTextActive: {
     color: theme.colors.text,
-    fontWeight: '800',
+    fontFamily: theme.typography.bold,
   },
   tabUnderline: {
     width: '88%',
@@ -2241,7 +1916,7 @@ const styles = StyleSheet.create({
   },
   favoritesHeaderText: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
@@ -2316,6 +1991,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: theme.colors.textMuted,
     textAlign: 'center',
+    fontFamily: theme.typography.medium,
   },
   launchSpinner: {
     marginTop: 18,
@@ -2333,10 +2009,11 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1,
+    fontFamily: theme.typography.semibold,
   },
   domainValue: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
     color: theme.colors.text,
     marginBottom: 8,
   },
@@ -2350,18 +2027,20 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
     color: theme.colors.text,
   },
   cardSubtitle: {
     marginTop: 4,
     fontSize: 12,
     color: theme.colors.text,
+    fontFamily: theme.typography.medium,
   },
   cardSubtitleMuted: {
     marginTop: 4,
     fontSize: 12,
     color: theme.colors.textMuted,
+    fontFamily: theme.typography.medium,
   },
   editBadge: {
     position: 'absolute',

@@ -543,19 +543,20 @@ const styles = StyleSheet.create({
   sliderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 2,
-    justifyContent: 'flex-end',
+    gap: Platform.OS === 'ios' ? 16 : 2,
+    justifyContent: 'flex-start',
     width: '100%',
     paddingRight: Platform.OS === 'ios' ? 0 : 6,
   },
   sliderRowLtr: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
     paddingRight: 0,
     paddingLeft: 6,
   },
   starInputWrap: {
     flex: 0,
+    width: 230,
     alignItems: 'flex-end',
     marginRight: 0,
   },
@@ -566,7 +567,8 @@ const styles = StyleSheet.create({
   sliderLabelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    width: 64,
+    justifyContent: 'flex-start',
     marginLeft: Platform.OS === 'ios' ? 0 : 2,
     paddingRight: 0,
     height: 44,

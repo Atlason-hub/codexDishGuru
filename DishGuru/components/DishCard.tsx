@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Easing,
   Pressable,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -80,27 +79,28 @@ function DishCard({
   const { isRTL, t } = useLocale();
   const [imageWidth, setImageWidth] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const scrollRef = useRef<ScrollView | null>(null);
-  const ratingAnim = useRef(new Animated.Value(0)).current;
-  const dotAnim = useRef(new Animated.Value(0)).current;
-  const contentDirectionRef = useRef(1);
   const heartScale = useRef(new Animated.Value(1)).current;
   const cameraScale = useRef(new Animated.Value(1)).current;
   const editScale = useRef(new Animated.Value(1)).current;
   const trashScale = useRef(new Animated.Value(1)).current;
   const avatarScale = useRef(new Animated.Value(1)).current;
-  const orderScale = useRef(new Animated.Value(1)).current;
   const reportScale = useRef(new Animated.Value(1)).current;
-  const currentItem = items[currentIndex] ?? items[0];
-  const reviewValue = currentItem?.review_text?.trim();
+  const currentItem = useMemo(() => items[currentIndex] ?? items[0], [currentIndex, items]);
+  const reviewValue = useMemo(() => currentItem?.review_text?.trim() ?? '', [currentItem?.review_text]);
   const shouldShowReview = Boolean(reviewValue);
-  const resolvedAvatarUrl =
-    currentItem?.user_id && currentItem.user_id === currentUserId && avatarUrl
-      ? avatarUrl
-      : currentItem?.user_id
-        ? userAvatars[currentItem.user_id] ?? null
-        : null;
-  const avatarLabel = currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null;
+  const resolvedAvatarUrl = useMemo(
+    () =>
+      currentItem?.user_id && currentItem.user_id === currentUserId && avatarUrl
+        ? avatarUrl
+        : currentItem?.user_id
+          ? userAvatars[currentItem.user_id] ?? null
+          : null,
+    [avatarUrl, currentItem?.user_id, currentUserId, userAvatars]
+  );
+  const avatarLabel = useMemo(
+    () => (currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null),
+    [currentItem?.user_id, userLabels]
+  );
   const hasRestaurantTarget = Boolean(
     currentItem && (currentItem.restaurant_id || currentItem.restaurant_name)
   );
@@ -108,6 +108,10 @@ function DishCard({
     currentItem &&
       onReport &&
       (!currentItem.user_id || !currentUserId || currentItem.user_id !== currentUserId)
+  );
+  const formattedDate = useMemo(
+    () => (currentItem?.created_at ? new Date(currentItem.created_at).toLocaleDateString() : ''),
+    [currentItem?.created_at]
   );
 
   const bouncePress = (scale: Animated.Value) => {
@@ -130,34 +134,14 @@ function DishCard({
     ]).start();
   };
 
-  useEffect(() => {
-    ratingAnim.setValue(0);
-    Animated.timing(ratingAnim, {
-      toValue: 1,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [currentItem?.id, ratingAnim]);
-
-  useEffect(() => {
-    Animated.timing(dotAnim, {
-      toValue: currentIndex,
-      duration: 200,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [currentIndex, dotAnim]);
-
-  const handleCarouselMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const handleCarouselMomentumEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const width = imageWidth || event.nativeEvent.layoutMeasurement.width || 1;
     const rawIndex = event.nativeEvent.contentOffset.x / width;
     const nextIndex = Math.max(0, Math.min(items.length - 1, Math.round(rawIndex)));
     if (nextIndex !== currentIndex) {
-      contentDirectionRef.current = nextIndex > currentIndex ? 1 : -1;
       setCurrentIndex(nextIndex);
     }
-  };
+  }, [currentIndex, imageWidth, items.length]);
 
   return (
     <View style={styles.feedCardShadow}>
@@ -172,7 +156,6 @@ function DishCard({
       >
         {items.length > 1 ? (
           <ScrollView
-            ref={scrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
@@ -318,7 +301,7 @@ function DishCard({
               isRTL ? styles.imageDateTextRtl : styles.imageDateTextLtr,
             ]}
           >
-            {currentItem?.created_at ? new Date(currentItem.created_at).toLocaleDateString() : ''}
+            {formattedDate}
           </Text>
           <Animated.View
             style={[
@@ -414,22 +397,11 @@ function DishCard({
           {items.length > 1 ? (
             <View style={styles.carouselDots} pointerEvents="none">
               {items.map((_, idx) => (
-                <Animated.View
+                <View
                   key={`${items[0]?.id ?? 'item'}-dot-${idx}`}
                   style={[
                     styles.carouselDot,
                     idx === currentIndex && styles.carouselDotActive,
-                    {
-                      transform: [
-                        {
-                          scale: dotAnim.interpolate({
-                            inputRange: [idx - 1, idx, idx + 1],
-                            outputRange: [1, 1.15, 1],
-                            extrapolate: 'clamp',
-                          }),
-                        },
-                      ],
-                    },
                   ]}
                 />
               ))}
@@ -438,24 +410,15 @@ function DishCard({
         </View>
       </View>
       {shouldShowReview ? (
-        <Animated.View
-          style={[
-            styles.reviewCard,
-            {
-              opacity: ratingAnim,
-              transform: [
-                {
-                  translateX: ratingAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [contentDirectionRef.current * 26, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
+        <View style={styles.reviewCard}>
+          <View
+            style={[
+              styles.reviewTail,
+              isRTL ? styles.reviewTailRtl : styles.reviewTailLtr,
+            ]}
+          />
           <Text style={[styles.reviewText, !isRTL && styles.reviewTextLtr]}>{reviewValue}</Text>
-        </Animated.View>
+        </View>
       ) : null}
       <View
         style={[
@@ -464,48 +427,25 @@ function DishCard({
           !isRTL && styles.ratingRowLtr,
         ]}
       >
-        <Animated.View style={{ transform: [{ scale: orderScale }] }}>
-          <Pressable
-            style={[styles.orderButton, !isRTL && styles.orderButtonLtr]}
-            onPressIn={() =>
-              Animated.timing(orderScale, {
-                toValue: 0.96,
-                duration: 80,
-                useNativeDriver: true,
-              }).start()
+        <Pressable
+          style={({ pressed }) => [
+            styles.orderButton,
+            !isRTL && styles.orderButtonLtr,
+            pressed && styles.orderButtonPressed,
+          ]}
+          onPress={() => {
+            if (currentItem) {
+              onOrder?.(currentItem);
             }
-            onPressOut={() =>
-              Animated.timing(orderScale, {
-                toValue: 1,
-                duration: 120,
-                useNativeDriver: true,
-              }).start()
-            }
-            onPress={() => {
-              if (currentItem) {
-                onOrder?.(currentItem);
-              }
-            }}
-          >
-            <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
-            <Text style={styles.orderButtonText}>{t('orderAction')}</Text>
-          </Pressable>
-        </Animated.View>
-        <Animated.View
+          }}
+        >
+          <Ionicons name="cart-outline" size={18} color={theme.colors.white} />
+          <Text style={styles.orderButtonText}>{t('orderAction')}</Text>
+        </Pressable>
+        <View
           style={[
             styles.ratingGroup,
             !isRTL && styles.ratingGroupLtr,
-            {
-              opacity: ratingAnim,
-              transform: [
-                {
-                  translateX: ratingAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [contentDirectionRef.current * 26, 0],
-                  }),
-                },
-              ],
-            },
           ]}
         >
           <View style={[styles.ratingItem, !isRTL && styles.ratingItemLtr]}>
@@ -518,17 +458,6 @@ function DishCard({
               iconsWrapStyle={[
                 styles.ratingStarWrap,
                 !isRTL && styles.ratingStarWrapLtr,
-                {
-                  opacity: ratingAnim,
-                  transform: [
-                    {
-                      translateY: ratingAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [6, 0],
-                      }),
-                    },
-                  ],
-                },
               ]}
             />
           </View>
@@ -542,21 +471,10 @@ function DishCard({
               iconsWrapStyle={[
                 styles.ratingStarWrap,
                 !isRTL && styles.ratingStarWrapLtr,
-                {
-                  opacity: ratingAnim,
-                  transform: [
-                    {
-                      translateY: ratingAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [6, 0],
-                      }),
-                    },
-                  ],
-                },
               ]}
             />
           </View>
-        </Animated.View>
+        </View>
       </View>
       </View>
     </View>
@@ -810,7 +728,7 @@ const styles = StyleSheet.create({
     top: 10,
     fontSize: 9,
     color: theme.colors.text,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderWidth: 1,
     borderColor: theme.colors.accentSoft,
@@ -914,13 +832,14 @@ const styles = StyleSheet.create({
   imageDishText: {
     color: '#ffffff',
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     lineHeight: 26,
   },
   imageRestaurantText: {
     color: '#f7f0e8',
     fontSize: 12,
     marginTop: 2,
+    fontFamily: theme.typography.semibold,
   },
   restaurantLinkPressable: {
     paddingVertical: 2,
@@ -978,19 +897,41 @@ const styles = StyleSheet.create({
   orderButtonText: {
     color: theme.colors.white,
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
   },
   orderButtonLtr: {
     marginRight: 0,
     marginLeft: 24,
   },
+  orderButtonPressed: {
+    opacity: 0.9,
+  },
   reviewCard: {
     marginTop: 10,
-    marginHorizontal: 12,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#FFFDFB',
+    marginHorizontal: 8,
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(250, 244, 237, 0.84)',
+    shadowColor: theme.colors.ink,
+    shadowOpacity: 0.035,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 0,
+  },
+  reviewTail: {
+    position: 'absolute',
+    top: -5,
+    width: 12,
+    height: 12,
+    backgroundColor: 'rgba(250, 244, 237, 0.84)',
+    transform: [{ rotate: '45deg' }],
+  },
+  reviewTailRtl: {
+    right: 26,
+  },
+  reviewTailLtr: {
+    left: 26,
   },
   reviewLabel: {
     fontSize: 12,
@@ -1002,6 +943,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.text,
     textAlign: 'right',
+    fontFamily: theme.typography.regular,
+    lineHeight: 21,
   },
   reviewTextLtr: {
     textAlign: 'left',
@@ -1031,7 +974,7 @@ const styles = StyleSheet.create({
   ratingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 2,
+    gap: Platform.OS === 'ios' ? 16 : 2,
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
     paddingRight: Platform.OS === 'ios' ? 8 : 64,
@@ -1051,6 +994,7 @@ const styles = StyleSheet.create({
     minWidth: Platform.OS === 'ios' ? 44 : 60,
     textAlign: 'right',
     lineHeight: 30,
+    fontFamily: theme.typography.semibold,
   },
   ratingLabelInlineLtr: {
     alignSelf: 'center',

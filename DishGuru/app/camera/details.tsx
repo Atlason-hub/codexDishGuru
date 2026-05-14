@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  UIManager,
   View,
 } from 'react-native';
 import { Buffer } from 'buffer';
@@ -23,6 +22,11 @@ import { starsToScore } from '../../lib/ratings';
 import EmojiRatingInput from '../../components/EmojiRatingInput';
 import { showAppAlert } from '../../lib/appDialog';
 import { useLocale } from '../../lib/locale';
+import { fetchCompanyIdForUser } from '../../lib/appData';
+import {
+  useEnableAndroidLayoutAnimation,
+  useKeyboardInset,
+} from '../../lib/uiHooks';
 
 type Restaurant = {
   RestaurantId: number;
@@ -234,12 +238,13 @@ export default function CameraDetailsScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const scrollRef = useRef<ScrollView | null>(null);
+  const restaurantsRequestIdRef = useRef(0);
+  const menuRequestIdRef = useRef(0);
   const hasNudgedRestaurantSearchRef = useRef(false);
   const hasNudgedDishSearchRef = useRef(false);
   const restaurantSearchFocusedRef = useRef(false);
   const dishSearchFocusedRef = useRef(false);
   const keyboardVisibleRef = useRef(false);
-  const [keyboardInset, setKeyboardInset] = useState(0);
   const photoUri = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
   const photoBase64 = typeof params.photoBase64 === 'string' ? params.photoBase64 : '';
   const presetRestaurantId =
@@ -260,6 +265,7 @@ export default function CameraDetailsScreen() {
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [restaurantCategories, setRestaurantCategories] = useState<RestaurantCategory[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -282,51 +288,52 @@ export default function CameraDetailsScreen() {
   const [reviewText, setReviewText] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEnableAndroidLayoutAnimation();
+
   useEffect(() => {
-    if (Platform.OS === 'android') {
-      UIManager.setLayoutAnimationEnabledExperimental?.(true);
-    }
+    let mounted = true;
+    const syncAuthState = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setCurrentUserId(data.session?.user?.id ?? null);
+    };
+    syncAuthState();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setCurrentUserId(session?.user?.id ?? null);
+    });
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  useEffect(() => {
-    const scrollActiveSearchIntoView = () => {
-      if (restaurantSearchFocusedRef.current) {
-        scrollRef.current?.scrollTo({
-          y: Platform.OS === 'android' ? 760 : 260,
-          animated: true,
-        });
-        return;
-      }
-      if (dishSearchFocusedRef.current) {
-        scrollRef.current?.scrollTo({
-          y: Platform.OS === 'android' ? 760 : 260,
-          animated: true,
-        });
-      }
-    };
-
-    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+  const keyboardInset = useKeyboardInset({
+    onShow: () => {
       keyboardVisibleRef.current = true;
-      setKeyboardInset(Platform.OS === 'android' ? 320 : 24);
-      setTimeout(scrollActiveSearchIntoView, 80);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setTimeout(() => {
+        if (restaurantSearchFocusedRef.current || dishSearchFocusedRef.current) {
+          scrollRef.current?.scrollTo({
+            y: Platform.OS === 'android' ? 760 : 260,
+            animated: true,
+          });
+        }
+      }, 80);
+    },
+    onHide: () => {
       keyboardVisibleRef.current = false;
-      setKeyboardInset(0);
       restaurantSearchFocusedRef.current = false;
       dishSearchFocusedRef.current = false;
       hasNudgedRestaurantSearchRef.current = false;
       hasNudgedDishSearchRef.current = false;
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+    },
+  });
 
   useEffect(() => {
     if (!selectedRestaurantId) return;
+    const requestId = ++menuRequestIdRef.current;
     const fetchMenu = async () => {
       try {
         setMenuLoading(true);
@@ -340,11 +347,14 @@ export default function CameraDetailsScreen() {
         const text = await response.text();
         const data = JSON.parse(text);
         const curated = mapMenuToCategories(data);
+        if (menuRequestIdRef.current !== requestId) return;
         setDishCategories(curated);
         setCollapsedDishCategories(new Set());
       } catch {
       } finally {
-        setMenuLoading(false);
+        if (menuRequestIdRef.current === requestId) {
+          setMenuLoading(false);
+        }
       }
     };
     fetchMenu();
@@ -385,6 +395,7 @@ export default function CameraDetailsScreen() {
   }, [presetDishId, presetDishName, dishCategories]);
 
   const fetchRestaurants = useCallback(async (cityId?: number, streetId?: number) => {
+    const requestId = ++restaurantsRequestIdRef.current;
     try {
       setLoading(true);
       setRestaurants([]);
@@ -423,48 +434,46 @@ export default function CameraDetailsScreen() {
         }
         list = await loadRestaurantList(DEFAULT_CITY_ID, DEFAULT_STREET_ID);
       }
+      if (restaurantsRequestIdRef.current !== requestId) return;
 
       setRestaurants(list);
       const categories = mapRestaurantsToCategories(list, t('cameraRestaurantsGroup'));
       setRestaurantCategories(categories);
       setCollapsedRestaurantCategories(new Set(categories.map((cat) => cat.id)));
     } catch (err) {
+      if (restaurantsRequestIdRef.current !== requestId) return;
       setRestaurants([]);
       setRestaurantCategories([]);
       setCollapsedRestaurantCategories(new Set());
       showAppAlert(t('cameraNoRestaurantsFound'), t('cameraNoRestaurantsFound'));
     } finally {
-      setLoading(false);
+      if (restaurantsRequestIdRef.current === requestId) {
+        setLoading(false);
+      }
     }
   }, [t]);
 
   const fetchCompanyRestaurants = useCallback(async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData.session?.user?.id;
-    if (!userId) return;
-    const { data: profile } = await supabase
-      .from('AppUsers')
-      .select('company_id')
-      .eq('user_id', userId)
-      .limit(1)
-      .maybeSingle();
-    const companyId = profile?.company_id;
+    if (!currentUserId) return;
+    const companyId = await fetchCompanyIdForUser(currentUserId);
     if (!companyId) return;
     const { data: company } = await supabase
       .from('companies')
       .select('city_id, street_id')
       .eq('id', companyId)
       .maybeSingle();
-    fetchRestaurants(company?.city_id, company?.street_id);
-  }, [fetchRestaurants]);
+    await fetchRestaurants(company?.city_id, company?.street_id);
+  }, [currentUserId, fetchRestaurants]);
 
   useEffect(() => {
-    fetchCompanyRestaurants();
+    if (currentUserId) {
+      void fetchCompanyRestaurants();
+    }
     if (presetRestaurantId) {
       setSelectedRestaurantId(presetRestaurantId);
       setSelectedName(presetRestaurantName);
     }
-  }, [fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
+  }, [currentUserId, fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -482,9 +491,7 @@ export default function CameraDetailsScreen() {
     }
     try {
       setSaving(true);
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user?.id;
-      if (!userId) {
+      if (!currentUserId) {
         showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
         return;
       }
@@ -493,7 +500,7 @@ export default function CameraDetailsScreen() {
         return;
       }
       const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
-      const filePath = `${userId}/${Date.now()}.${ext}`;
+      const filePath = `${currentUserId}/${Date.now()}.${ext}`;
       const base64ToArrayBuffer = (b64: string) => {
         const binary = globalThis.atob ? globalThis.atob(b64) : Buffer.from(b64, 'base64').toString('binary');
         const len = binary.length;
@@ -511,7 +518,7 @@ export default function CameraDetailsScreen() {
       if (upload.error) throw upload.error;
       const { data: publicData } = supabase.storage.from('dish-images').getPublicUrl(filePath);
       const insert = await supabase.from('dish_associations').insert({
-        user_id: userId,
+        user_id: currentUserId,
         restaurant_id: selectedRestaurantId,
         restaurant_name: selectedName ?? null,
         cuisine: selectedRestaurantCuisine,
@@ -1247,7 +1254,7 @@ const styles = StyleSheet.create({
   sliderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 0,
+    gap: Platform.OS === 'ios' ? 16 : 0,
     marginBottom: 12,
     justifyContent: 'flex-end',
     width: '100%',

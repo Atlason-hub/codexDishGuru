@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
   Platform,
@@ -9,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  UIManager,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +19,11 @@ import { theme } from '../lib/theme';
 import { fetchCompanyIdForUser, fetchGlobalCompanyContext, fetchVisibleDishes } from '../lib/appData';
 import { showAppDialog } from '../lib/appDialog';
 import { useLocale } from '../lib/locale';
+import {
+  useDebouncedValue,
+  useEnableAndroidLayoutAnimation,
+  useKeyboardInset,
+} from '../lib/uiHooks';
 
 type DishAssociation = {
   id: string;
@@ -291,13 +294,14 @@ export default function SearchScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
   const scrollRef = useRef<ScrollView | null>(null);
+  const searchRequestIdRef = useRef(0);
+  const menuRequestIdRef = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [restaurantDropdownOpen, setRestaurantDropdownOpen] = useState(false);
   const [dishDropdownOpen, setDishDropdownOpen] = useState(false);
   const [restaurantQuery, setRestaurantQuery] = useState('');
   const [dishQuery, setDishQuery] = useState('');
-  const [debouncedRestaurant, setDebouncedRestaurant] = useState('');
-  const [debouncedDish, setDebouncedDish] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<DishAssociation[]>([]);
@@ -320,7 +324,12 @@ export default function SearchScreen() {
     () => new Set()
   );
   const [apiMenuLoading, setApiMenuLoading] = useState(false);
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const keyboardInset = useKeyboardInset({
+    onShow: () => {},
+    onHide: () => {},
+  });
+  const debouncedRestaurant = useDebouncedValue(restaurantQuery);
+  const debouncedDish = useDebouncedValue(dishQuery);
 
   const trimmedRestaurant = debouncedRestaurant.trim();
   const trimmedDish = debouncedDish.trim();
@@ -331,6 +340,7 @@ export default function SearchScreen() {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
       setIsAuthenticated(Boolean(data.session?.user));
+      setCurrentUserId(data.session?.user?.id ?? null);
     };
     syncAuthState();
     const {
@@ -338,6 +348,7 @@ export default function SearchScreen() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       setIsAuthenticated(Boolean(session?.user));
+      setCurrentUserId(session?.user?.id ?? null);
     });
     return () => {
       mounted = false;
@@ -345,38 +356,7 @@ export default function SearchScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      UIManager.setLayoutAnimationEnabledExperimental?.(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => {
-      setKeyboardInset(Platform.OS === 'android' ? 320 : 24);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardInset(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      setDebouncedRestaurant(restaurantQuery);
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [restaurantQuery]);
-
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      setDebouncedDish(dishQuery);
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [dishQuery]);
+  useEnableAndroidLayoutAnimation();
 
   const restaurantCategories = useMemo(
     () => mapRestaurantsToCategories(restaurantResults),
@@ -439,22 +419,14 @@ export default function SearchScreen() {
   useEffect(() => {
     let mounted = true;
     const loadCompanyAddress = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user?.id;
-      if (!userId) {
+      if (!currentUserId) {
         const globalContext = await fetchGlobalCompanyContext();
         if (!mounted) return;
         setCompanyCityId(globalContext?.cityId ?? null);
         setCompanyStreetId(globalContext?.streetId ?? null);
         return;
       }
-      const { data: profile } = await supabase
-        .from('AppUsers')
-        .select('company_id')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle();
-      const companyId = profile?.company_id;
+      const companyId = await fetchCompanyIdForUser(currentUserId);
       if (!companyId) return;
       const { data: company } = await supabase
         .from('companies')
@@ -469,7 +441,7 @@ export default function SearchScreen() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!trimmedRestaurant && !trimmedDish) {
@@ -485,19 +457,20 @@ export default function SearchScreen() {
       return;
     }
     let mounted = true;
+    const requestId = ++searchRequestIdRef.current;
+    const isCurrentRequest = () => searchRequestIdRef.current === requestId;
     const runDb = async () => {
       try {
         setLoading(true);
         setError(null);
-        const { data: sessionData } = await supabase.auth.getSession();
-        const userId = sessionData.session?.user?.id ?? null;
         let companyRows: DishAssociation[] = [];
-        if (userId) {
-          const companyId = await fetchCompanyIdForUser(userId);
+        if (currentUserId) {
+          const companyId = await fetchCompanyIdForUser(currentUserId);
           if (companyId) {
             companyRows = (await fetchVisibleDishes(companyId)) as DishAssociation[];
           }
         }
+        if (!mounted || !isCurrentRequest()) return;
 
         const restaurantNeedle = trimmedRestaurant.toLowerCase();
         const dishNeedle = trimmedDish.toLowerCase();
@@ -522,9 +495,9 @@ export default function SearchScreen() {
               });
             }
           });
-          if (mounted) setRestaurantResults(Array.from(unique.values()));
+          if (mounted && isCurrentRequest()) setRestaurantResults(Array.from(unique.values()));
         } else {
-          if (mounted) setRestaurantResults([]);
+          if (mounted && isCurrentRequest()) setRestaurantResults([]);
         }
 
         const filteredDishes = trimmedDish
@@ -537,7 +510,7 @@ export default function SearchScreen() {
               (row.restaurant_name ?? '').toLowerCase().includes(restaurantNeedle)
             )
           : filteredDishes;
-        if (mounted) {
+        if (mounted && isCurrentRequest()) {
           if (!trimmedDish && !trimmedRestaurant) {
             setResults([]);
           } else {
@@ -551,9 +524,9 @@ export default function SearchScreen() {
           }
         }
       } catch {
-        if (mounted) setError('אירעה שגיאה. נסה שוב.');
+        if (mounted && isCurrentRequest()) setError('אירעה שגיאה. נסה שוב.');
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted && isCurrentRequest()) setLoading(false);
       }
     };
 
@@ -593,6 +566,7 @@ export default function SearchScreen() {
           if (!shouldFallback) throw primaryError;
           list = await loadRestaurantList(DEFAULT_CITY_ID, DEFAULT_STREET_ID);
         }
+        if (!mounted || !isCurrentRequest()) return;
 
         const restaurantNeedle = trimmedRestaurant.toLowerCase();
         const filteredRestaurants = trimmedRestaurant
@@ -602,16 +576,16 @@ export default function SearchScreen() {
             })
           : list;
 
-        if (mounted) setRestaurantResults(filteredRestaurants);
+        if (mounted && isCurrentRequest()) setRestaurantResults(filteredRestaurants);
 
-        if (mounted) {
+        if (mounted && isCurrentRequest()) {
           setApiDishResults([]);
           setApiResults(filteredRestaurants);
         }
       } catch {
-        if (mounted) setError('אירעה שגיאה. נסה שוב.');
+        if (mounted && isCurrentRequest()) setError('אירעה שגיאה. נסה שוב.');
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted && isCurrentRequest()) setLoading(false);
       }
     };
 
@@ -624,7 +598,7 @@ export default function SearchScreen() {
     return () => {
       mounted = false;
     };
-  }, [trimmedRestaurant, trimmedDish, mode, companyCityId, companyStreetId]);
+  }, [trimmedRestaurant, trimmedDish, mode, companyCityId, companyStreetId, currentUserId]);
 
   useEffect(() => {
     if (mode !== 'api') {
@@ -639,6 +613,7 @@ export default function SearchScreen() {
       setCollapsedApiMenuCategories(new Set());
       return;
     }
+    const requestId = ++menuRequestIdRef.current;
     const fetchMenu = async () => {
       try {
         setApiMenuLoading(true);
@@ -650,12 +625,16 @@ export default function SearchScreen() {
         const text = await response.text();
         const data = JSON.parse(text);
         const categories = mapMenuToCategories(data);
+        if (menuRequestIdRef.current !== requestId) return;
         setApiMenuCategories(categories);
         setCollapsedApiMenuCategories(new Set());
       } catch {
+        if (menuRequestIdRef.current !== requestId) return;
         setApiMenuCategories([]);
       } finally {
-        setApiMenuLoading(false);
+        if (menuRequestIdRef.current === requestId) {
+          setApiMenuLoading(false);
+        }
       }
     };
     fetchMenu();
@@ -781,7 +760,6 @@ export default function SearchScreen() {
                   style={styles.inlineClearButton}
                   onPress={() => {
                     setRestaurantQuery('');
-                    setDebouncedRestaurant('');
                     setSelectedApiRestaurantId(null);
                     setSelectedApiRestaurantName(null);
                     setDishQuery('');
@@ -929,7 +907,6 @@ export default function SearchScreen() {
                   style={styles.inlineClearButton}
                   onPress={() => {
                     setDishQuery('');
-                    setDebouncedDish('');
                   }}
                   hitSlop={6}
                 >

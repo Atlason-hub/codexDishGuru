@@ -642,6 +642,7 @@ export default function DishScreen() {
                 iconSize={isRTL ? 30 : 28}
                 rowStyle={[styles.avgRatingInlineRow, !isRTL && styles.avgRatingInlineRowLtr]}
                 labelStyle={[styles.avgRatingLabelInline, !isRTL && styles.avgRatingLabelInlineLtr]}
+                iconsWrapStyle={styles.avgRatingIconsWrap}
               />
             </View>
             <View style={[styles.ratingItem, !isRTL && styles.ratingItemLtr]}>
@@ -651,6 +652,7 @@ export default function DishScreen() {
                 iconSize={isRTL ? 30 : 28}
                 rowStyle={[styles.avgRatingInlineRow, !isRTL && styles.avgRatingInlineRowLtr]}
                 labelStyle={[styles.avgRatingLabelInline, !isRTL && styles.avgRatingLabelInlineLtr]}
+                iconsWrapStyle={styles.avgRatingIconsWrap}
               />
             </View>
           </View>
@@ -848,7 +850,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',
   },
@@ -860,6 +862,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
+    fontFamily: theme.typography.semibold,
   },
   headerSubtitleLtr: {
     textAlign: 'left',
@@ -906,6 +909,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginBottom: 6,
     alignSelf: 'flex-end',
+    fontFamily: theme.typography.bold,
   },
   avgHeaderLtr: {
     textAlign: 'left',
@@ -945,7 +949,7 @@ const styles = StyleSheet.create({
   ratingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 4,
+    gap: Platform.OS === 'ios' ? 16 : 4,
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
     paddingRight: Platform.OS === 'ios' ? 0 : 20,
@@ -960,7 +964,7 @@ const styles = StyleSheet.create({
   avgRatingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 4,
+    gap: Platform.OS === 'ios' ? 16 : 4,
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
     paddingRight: Platform.OS === 'ios' ? 0 : 8,
@@ -972,6 +976,10 @@ const styles = StyleSheet.create({
     paddingRight: 0,
     paddingLeft: 8,
   },
+  avgRatingIconsWrap: {
+    width: 150,
+    alignItems: 'flex-end',
+  },
   ratingLabelInline: {
     fontSize: 12,
     color: theme.colors.textMuted,
@@ -981,6 +989,7 @@ const styles = StyleSheet.create({
     width: Platform.OS === 'ios' ? 34 : 52,
     lineHeight: 30,
     paddingRight: Platform.OS === 'ios' ? 0 : 8,
+    fontFamily: theme.typography.semibold,
   },
   ratingLabelInlineLtr: {
     textAlign: 'left',
@@ -995,8 +1004,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     lineHeight: 30,
     paddingRight: Platform.OS === 'ios' ? 0 : 2,
-    minWidth: Platform.OS === 'ios' ? 44 : 40,
-    width: Platform.OS === 'ios' ? 52 : 46,
+    minWidth: Platform.OS === 'ios' ? 44 : 48,
+    width: Platform.OS === 'ios' ? 52 : 56,
+    fontFamily: theme.typography.semibold,
   },
   avgRatingLabelInlineLtr: {
     textAlign: 'left',

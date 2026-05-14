@@ -46,6 +46,12 @@ let activePaletteName: keyof typeof palettes = 'citrusHeat';
 
 export const theme = {
   colors: palettes[activePaletteName] as Palette,
+  typography: {
+    regular: 'Heebo_400Regular',
+    medium: 'Heebo_500Medium',
+    semibold: 'Heebo_600SemiBold',
+    bold: 'Heebo_700Bold',
+  },
 };
 
 const listeners = new Set<() => void>();
