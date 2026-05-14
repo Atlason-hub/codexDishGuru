@@ -954,6 +954,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginRight: 0,
     alignSelf: 'flex-end',
+    width: Platform.OS === 'ios' ? 236 : undefined,
   },
   ratingItemLtr: {
     alignItems: 'flex-start',
@@ -965,6 +966,7 @@ const styles = StyleSheet.create({
   ratingStarWrap: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
+    width: Platform.OS === 'ios' ? 152 : undefined,
   },
   ratingStarWrapLtr: {
     flexDirection: 'row',
@@ -974,10 +976,11 @@ const styles = StyleSheet.create({
   ratingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: Platform.OS === 'ios' ? 16 : 2,
+    gap: Platform.OS === 'ios' ? 8 : 2,
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
     paddingRight: Platform.OS === 'ios' ? 8 : 64,
+    width: Platform.OS === 'ios' ? 236 : undefined,
   },
   ratingInlineRowLtr: {
     flexDirection: 'row',
@@ -991,7 +994,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     alignSelf: 'flex-end',
     paddingRight: Platform.OS === 'ios' ? 0 : 8,
-    minWidth: Platform.OS === 'ios' ? 44 : 60,
+    minWidth: Platform.OS === 'ios' ? 68 : 60,
+    width: Platform.OS === 'ios' ? 68 : undefined,
     textAlign: 'right',
     lineHeight: 30,
     fontFamily: theme.typography.semibold,

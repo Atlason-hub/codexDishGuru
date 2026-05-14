@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
 import CrossfadeView from '../components/CrossfadeView';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import { RestaurantScreenSkeleton } from '../components/LoadingSkeleton';
 import RatingValueRow from '../components/RatingValueRow';
 import StaggeredEntrance from '../components/StaggeredEntrance';
@@ -344,6 +345,11 @@ export default function RestaurantScreen() {
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dishSearch, setDishSearch] = useState('');
+  const [imagePreview, setImagePreview] = useState<{
+    imageUrl: string | null;
+    title: string | null;
+    subtitle: string | null;
+  } | null>(null);
   const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
@@ -724,7 +730,19 @@ export default function RestaurantScreen() {
                         </View>
                       </View>
                     </View>
-                    <View style={styles.imageWrap}>
+                    <Pressable
+                      style={styles.imageWrap}
+                      disabled={!item.dish.imageUrl}
+                      onLongPress={() => {
+                        if (!item.dish.imageUrl) return;
+                        setImagePreview({
+                          imageUrl: item.dish.imageUrl,
+                          title: item.dish.name,
+                          subtitle: restaurantName,
+                        });
+                      }}
+                      delayLongPress={180}
+                    >
                       {item.dish.imageUrl ? (
                         <CachedLogo uri={item.dish.imageUrl} style={styles.image} />
                       ) : (
@@ -740,7 +758,7 @@ export default function RestaurantScreen() {
                           </View>
                         </View>
                       )}
-                    </View>
+                    </Pressable>
                   </Pressable>
                 </StaggeredEntrance>
               )
@@ -748,6 +766,13 @@ export default function RestaurantScreen() {
           />
         </CrossfadeView>
       )}
+      <ImagePreviewModal
+        visible={Boolean(imagePreview?.imageUrl)}
+        imageUrl={imagePreview?.imageUrl ?? null}
+        title={imagePreview?.title ?? null}
+        subtitle={imagePreview?.subtitle ?? null}
+        onClose={() => setImagePreview(null)}
+      />
     </SafeAreaView>
   );
 }

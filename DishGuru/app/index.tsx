@@ -31,8 +31,8 @@ import RestaurantsTab from '../components/RestaurantsTab';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  fetchCompanyDishes,
   fetchCompanyIdForUser,
-  fetchCompanyUserIds,
   fetchFavoritesMap,
   fetchGlobalCompanyContext,
   fetchGlobalDishes,
@@ -53,6 +53,7 @@ import { publishHomeTab, subscribeHomeTab, type HomeTabKey } from '../lib/homeTa
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 const primaryActionColor = '#C75D2C';
+const HOME_FEED_FINAL_WAIT_MS = 2200;
 
 type DishAssociation = {
   id: string;
@@ -92,6 +93,7 @@ export default function HomeScreen() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +123,7 @@ export default function HomeScreen() {
   const [activeHomeTab, setActiveHomeTab] = useState<HomeTabKey>('dishes');
   const [hasVisitedRestaurantsTab, setHasVisitedRestaurantsTab] = useState(false);
   const appStateRef = useRef(AppState.currentState);
+  const dishAssociationsCountRef = useRef(0);
   const cacheHydratedRef = useRef(false);
   const lastRefreshRef = useRef(0);
   const guestActivationInFlightRef = useRef(false);
@@ -198,6 +201,7 @@ export default function HomeScreen() {
   }) => {
     const requestId = ++loadRequestIdRef.current;
     const isCurrentRequest = () => loadRequestIdRef.current === requestId;
+    let renderedCachedFeed = false;
 
     try {
       const shouldShowLoading = options?.showLoading ?? true;
@@ -206,11 +210,10 @@ export default function HomeScreen() {
       }
       if (shouldShowLoading || !hasLoaded) setLoading(true);
       setError(null);
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user?.id;
-      const userEmail = sessionData.session?.user?.email ?? null;
+      const userId = currentUserId;
+      const userEmail = currentUserEmail;
       const guestModeEnabled =
-        options?.guestModeOverride ?? (!userId ? await loadGuestMode() : false);
+        options?.guestModeOverride ?? (!userId ? isGuestMode || (await loadGuestMode()) : false);
       if (!userId && guestModeEnabled) {
         console.info('[guest-mode] loading home feed for guest');
         const [globalRows, globalContext] = await Promise.all([
@@ -244,20 +247,20 @@ export default function HomeScreen() {
         if (cachedRaw) {
           try {
             const cached = JSON.parse(cachedRaw);
-            if (Array.isArray(cached?.items)) {
+            if (Array.isArray(cached?.items) && cached.items.length > 0) {
               if (!isCurrentRequest()) return;
               setDishAssociations(cached.items as DishAssociation[]);
               loadUserAvatars(cached.items as DishAssociation[]);
               setHasLoaded(true);
               setLoading(false);
               cacheHydratedRef.current = true;
+              renderedCachedFeed = true;
             }
           } catch {
             await AsyncStorage.removeItem(getHomeCacheKey(userId));
           }
         }
       }
-      let allowedUserIds: string[] | null = null;
       if (userId) {
         let companyId = await fetchCompanyIdForUser(userId);
         if (!companyId && userEmail) {
@@ -278,103 +281,102 @@ export default function HomeScreen() {
         if (!isCurrentRequest()) return;
         if (companyId) {
           const rpcPromise = fetchVisibleDishes(companyId);
-          allowedUserIds = await fetchCompanyUserIds(companyId, userEmail ? getEmailDomain(userEmail) : null);
-          if (!isCurrentRequest()) return;
-          const directResult =
-            allowedUserIds.length > 0
-              ? await supabase
-                  .from('dish_associations')
-                  .select(
-                    'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
-                  )
-                  .in('user_id', allowedUserIds)
-              : { data: [], error: null };
-          if (!isCurrentRequest()) return;
-          const { data: directData, error: directError } = directResult;
-          const ownCompanyRows =
-            !directError && Array.isArray(directData) ? (directData as DishAssociation[]) : [];
+          const companyRowsPromise = fetchCompanyDishes(companyId);
 
+          const finalFeedPromise = (async () => {
+            const [rpcData, companyRows, globalContext, globalRows] = await Promise.all([
+              rpcPromise,
+              companyRowsPromise,
+              fetchGlobalCompanyContext(),
+              fetchGlobalDishes(),
+            ]);
+            if (!Array.isArray(rpcData)) {
+              return null;
+            }
+            const refinedSorted = mergeCompanyVisibleRows(
+              (rpcData as DishAssociation[]) ?? [],
+              (companyRows as DishAssociation[]) ?? [],
+              [],
+              globalContext?.userId ?? null
+            );
+            return {
+              rows: refinedSorted as DishAssociation[],
+              globalUserId: globalContext?.userId ?? null,
+              globalDishIds: globalRows.map((row: any) => String(row.id)).filter(Boolean),
+            };
+          })();
+
+          const applyResolvedFeed = async (resolvedFeed: {
+            rows: DishAssociation[];
+            globalUserId: string | null;
+            globalDishIds: string[];
+          }) => {
+            if (!isCurrentRequest()) return;
+            setResolvedGlobalUserId(resolvedFeed.globalUserId);
+            setResolvedGlobalDishIds(resolvedFeed.globalDishIds);
+            setDishAssociations(resolvedFeed.rows);
+            loadUserAvatars(resolvedFeed.rows);
+            setHasLoaded(true);
+            setLoading(false);
+            if (userId) {
+              await AsyncStorage.setItem(
+                getHomeCacheKey(userId),
+                JSON.stringify({ updatedAt: Date.now(), items: resolvedFeed.rows })
+              );
+            }
+          };
+
+          if (renderedCachedFeed) {
+            void (async () => {
+              try {
+                const resolvedFeed = await finalFeedPromise;
+                if (!resolvedFeed) return;
+                await applyResolvedFeed(resolvedFeed);
+              } catch {}
+            })();
+            return;
+          }
+
+          let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+          const resolvedFeed = await Promise.race([
+            finalFeedPromise,
+            new Promise<null>((resolve) => {
+              timeoutHandle = setTimeout(() => resolve(null), HOME_FEED_FINAL_WAIT_MS);
+            }),
+          ]);
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+
+          if (resolvedFeed) {
+            await applyResolvedFeed(resolvedFeed);
+            return;
+          }
+
+          const fallbackCompanyRows = (await companyRowsPromise) as DishAssociation[];
+          if (!isCurrentRequest()) return;
           setResolvedGlobalUserId(null);
           setResolvedGlobalDishIds([]);
-          setDishAssociations(ownCompanyRows);
-          loadUserAvatars(ownCompanyRows);
+          setDishAssociations(fallbackCompanyRows);
+          loadUserAvatars(fallbackCompanyRows);
           setHasLoaded(true);
           setLoading(false);
-
-          void (async () => {
-            try {
-              const rpcData = await rpcPromise;
-              if (!isCurrentRequest() || !Array.isArray(rpcData)) return;
-              const initialSorted = mergeCompanyVisibleRows(
-                (rpcData as DishAssociation[]) ?? [],
-                ownCompanyRows,
-                allowedUserIds ?? [],
-                null
-              );
-              if (!isCurrentRequest()) return;
-              setDishAssociations((initialSorted as DishAssociation[]) ?? []);
-              loadUserAvatars(initialSorted as DishAssociation[]);
-              if (userId) {
-                await AsyncStorage.setItem(
-                  getHomeCacheKey(userId),
-                  JSON.stringify({ updatedAt: Date.now(), items: initialSorted })
-                );
-              }
-              const [globalContext, globalRows] = await Promise.all([
-                fetchGlobalCompanyContext(),
-                fetchGlobalDishes(),
-              ]);
-              if (!isCurrentRequest()) return;
-              setResolvedGlobalUserId(globalContext?.userId ?? null);
-              setResolvedGlobalDishIds(globalRows.map((row: any) => String(row.id)).filter(Boolean));
-              const refinedSorted = mergeCompanyVisibleRows(
-                (rpcData as DishAssociation[]) ?? [],
-                ownCompanyRows,
-                allowedUserIds ?? [],
-                globalContext?.userId ?? null
-              );
-              setDishAssociations((refinedSorted as DishAssociation[]) ?? []);
-              loadUserAvatars(refinedSorted as DishAssociation[]);
-              if (userId) {
-                await AsyncStorage.setItem(
-                  getHomeCacheKey(userId),
-                  JSON.stringify({ updatedAt: Date.now(), items: refinedSorted })
-                );
-              }
-            } catch {}
-          })();
+          if (userId) {
+            await AsyncStorage.setItem(
+              getHomeCacheKey(userId),
+              JSON.stringify({ updatedAt: Date.now(), items: fallbackCompanyRows })
+            );
+          }
           return;
         }
       }
       if (!isCurrentRequest()) return;
-      const effectiveAllowedUserIds = allowedUserIds ?? [];
-      if (effectiveAllowedUserIds.length === 0) {
-        setDishAssociations([]);
-        setFavorites({});
-        setResolvedGlobalUserId(null);
-        setResolvedGlobalDishIds([]);
-        return;
-      }
-      const { data, error: fetchError } = await supabase
-        .from('dish_associations')
-        .select(
-          'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
-        )
-        .in('user_id', effectiveAllowedUserIds)
-        .order('created_at', { ascending: false });
-      if (fetchError) throw fetchError;
-      if (!isCurrentRequest()) return;
-      const rows = (data ?? []) as DishAssociation[];
-      setDishAssociations(rows);
-      loadUserAvatars(rows);
+      setDishAssociations([]);
+      loadUserAvatars([]);
+      setFavorites({});
       setResolvedGlobalUserId(null);
       setResolvedGlobalDishIds([]);
-      if (userId) {
-        await AsyncStorage.setItem(
-          getHomeCacheKey(userId),
-          JSON.stringify({ updatedAt: Date.now(), items: rows })
-        );
-      }
+      return;
     } catch (err) {
       if (!isCurrentRequest()) return;
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -384,7 +386,11 @@ export default function HomeScreen() {
         setHasLoaded(true);
       }
     }
-  }, []);
+  }, [currentUserEmail, currentUserId, hasLoaded, isGuestMode]);
+
+  useEffect(() => {
+    dishAssociationsCountRef.current = dishAssociations.length;
+  }, [dishAssociations.length]);
 
   const loadFavorites = useCallback(async (userId: string) => {
     try {
@@ -537,6 +543,7 @@ export default function HomeScreen() {
         setIsGuestMode(guestModeEnabled);
         setIsAuthenticated(Boolean(data.session));
         setCurrentUserId(data.session?.user?.id ?? null);
+        setCurrentUserEmail(data.session?.user?.email ?? null);
         setSessionChecked(true);
         void (async () => {
           const [cachedAvatar, cached] = await Promise.all([
@@ -575,6 +582,7 @@ export default function HomeScreen() {
       setSessionChecked(true);
       setIsAuthenticated(Boolean(session));
       setCurrentUserId(session?.user?.id ?? null);
+      setCurrentUserEmail(session?.user?.email ?? null);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
       if (metaAvatar) {
         setAvatarUrl(metaAvatar);
@@ -783,6 +791,7 @@ export default function HomeScreen() {
       setIsGuestMode(true);
       setIsAuthenticated(false);
       setCurrentUserId(null);
+      setCurrentUserEmail(null);
       setFavorites({});
       setDishAssociations([]);
       router.replace({
@@ -808,6 +817,7 @@ export default function HomeScreen() {
       setIsGuestMode(false);
       setIsAuthenticated(false);
       setCurrentUserId(null);
+      setCurrentUserEmail(null);
       setDishAssociations([]);
       setFavorites({});
       setHasLoaded(true);

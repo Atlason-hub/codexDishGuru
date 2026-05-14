@@ -102,7 +102,8 @@ export default function HomeFeedHeader({
       ) : null}
       {shouldShowMainTabs ? (
         <View style={styles.tabsSection}>
-          <View style={[styles.tabsRow, !isRTL && styles.tabsRowLtr]}>
+          <View style={[styles.tabsRail, !isRTL && styles.tabsRailLtr]}>
+            <View style={[styles.tabsRow, !isRTL && styles.tabsRowLtr]}>
             {([
               ['dishes', t('homeTabDishes')],
               ['restaurants', t('homeTabRestaurants')],
@@ -128,6 +129,7 @@ export default function HomeFeedHeader({
                 </Pressable>
               );
             })}
+            </View>
           </View>
           <View style={styles.tabsDivider} />
         </View>
@@ -223,41 +225,52 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.white,
   },
   tabsSection: {
-    marginTop: 12,
+    marginTop: 10,
+  },
+  tabsRail: {
+    marginHorizontal: -4,
+    paddingTop: 0,
+    paddingBottom: 5,
+    borderRadius: 18,
+    backgroundColor: 'rgba(199, 93, 44, 0.04)',
+  },
+  tabsRailLtr: {
+    alignItems: 'stretch',
   },
   tabsRow: {
     flexDirection: 'row-reverse',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
   },
   tabsRowLtr: {
     flexDirection: 'row',
   },
   tabChip: {
-    minWidth: 96,
+    minWidth: 112,
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
   tabChipInner: {
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 10,
+    gap: 2,
     paddingHorizontal: 12,
-    paddingTop: 4,
+    paddingTop: 0,
   },
   tabChipText: {
     fontSize: 16,
     color: theme.colors.textMuted,
-    fontFamily: theme.typography.semibold,
+    fontFamily: theme.typography.medium,
+    letterSpacing: 0.1,
   },
   tabChipTextActive: {
     color: theme.colors.text,
     fontFamily: theme.typography.bold,
   },
   tabUnderline: {
-    width: '88%',
-    height: 2,
+    width: 34,
+    height: 4,
     borderRadius: 999,
     backgroundColor: 'transparent',
   },
@@ -265,13 +278,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accent,
   },
   tabsDivider: {
-    marginTop: -1,
+    marginTop: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border,
     shadowColor: theme.colors.ink,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
     elevation: 1,
   },
 });

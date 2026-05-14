@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import CachedLogo from './CachedLogo';
+import ImagePreviewModal from './ImagePreviewModal';
 import { RestaurantScreenSkeleton } from './LoadingSkeleton';
 import RatingValueRow from './RatingValueRow';
 import {
@@ -329,10 +330,12 @@ function RestaurantAccordionItem({
   group,
   canAddDish,
   onRequireLogin,
+  onPreviewImage,
 }: {
   group: RestaurantGroup;
   canAddDish: boolean;
   onRequireLogin: () => void;
+  onPreviewImage: (imageUrl: string, title: string, subtitle: string) => void;
 }) {
   const router = useRouter();
   const { isRTL, t } = useLocale();
@@ -589,7 +592,15 @@ function RestaurantAccordionItem({
                         </View>
                       </View>
                     </View>
-                    <View style={styles.imageWrap}>
+                    <Pressable
+                      style={styles.imageWrap}
+                      disabled={!item.dish.imageUrl}
+                      onLongPress={() => {
+                        if (!item.dish.imageUrl) return;
+                        onPreviewImage(item.dish.imageUrl, item.dish.name, group.restaurantName);
+                      }}
+                      delayLongPress={180}
+                    >
                       {item.dish.imageUrl ? (
                         <CachedLogo uri={item.dish.imageUrl} style={styles.image} />
                       ) : (
@@ -610,7 +621,7 @@ function RestaurantAccordionItem({
                           </View>
                         </View>
                       )}
-                    </View>
+                    </Pressable>
                   </Pressable>
                 )
               )}
@@ -632,6 +643,11 @@ export default function RestaurantsTab({
   searchQuery,
 }: Props) {
   const { isRTL, t } = useLocale();
+  const [imagePreview, setImagePreview] = useState<{
+    imageUrl: string | null;
+    title: string | null;
+    subtitle: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -707,8 +723,18 @@ export default function RestaurantsTab({
           group={group}
           canAddDish={canAddDish}
           onRequireLogin={onRequireLogin}
+          onPreviewImage={(imageUrl, title, subtitle) =>
+            setImagePreview({ imageUrl, title, subtitle })
+          }
         />
       ))}
+      <ImagePreviewModal
+        visible={Boolean(imagePreview?.imageUrl)}
+        imageUrl={imagePreview?.imageUrl ?? null}
+        title={imagePreview?.title ?? null}
+        subtitle={imagePreview?.subtitle ?? null}
+        onClose={() => setImagePreview(null)}
+      />
     </View>
   );
 }

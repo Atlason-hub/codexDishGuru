@@ -941,6 +941,7 @@ const styles = StyleSheet.create({
   ratingItem: {
     alignSelf: 'flex-end',
     alignItems: 'flex-end',
+    width: Platform.OS === 'ios' ? 236 : undefined,
   },
   ratingItemLtr: {
     alignSelf: 'flex-start',
@@ -964,10 +965,11 @@ const styles = StyleSheet.create({
   avgRatingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: Platform.OS === 'ios' ? 16 : 4,
+    gap: Platform.OS === 'ios' ? 8 : 4,
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
     paddingRight: Platform.OS === 'ios' ? 0 : 8,
+    width: Platform.OS === 'ios' ? 236 : undefined,
   },
   avgRatingInlineRowLtr: {
     flexDirection: 'row',
@@ -977,7 +979,7 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   avgRatingIconsWrap: {
-    width: 150,
+    width: Platform.OS === 'ios' ? 152 : 150,
     alignItems: 'flex-end',
   },
   ratingLabelInline: {
@@ -1004,8 +1006,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     lineHeight: 30,
     paddingRight: Platform.OS === 'ios' ? 0 : 2,
-    minWidth: Platform.OS === 'ios' ? 44 : 48,
-    width: Platform.OS === 'ios' ? 52 : 56,
+    minWidth: Platform.OS === 'ios' ? 68 : 48,
+    width: Platform.OS === 'ios' ? 68 : 56,
     fontFamily: theme.typography.semibold,
   },
   avgRatingLabelInlineLtr: {
