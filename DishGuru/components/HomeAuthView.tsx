@@ -109,13 +109,17 @@ export default function HomeAuthView({
               </Text>
               <View style={styles.inputRow}>
                 <TextInput
-                  style={styles.inputField}
+                  style={[styles.inputField, styles.emailInputField]}
                   autoCapitalize="none"
                   keyboardType="email-address"
                   value={email}
                   onChangeText={onEmailChange}
                   placeholder=""
                   textAlign="left"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  textContentType="emailAddress"
+                  autoComplete="email"
                   selectionColor={theme.colors.accent}
                   cursorColor={theme.colors.accent}
                 />
@@ -395,6 +399,12 @@ const styles = StyleSheet.create({
     writingDirection: 'ltr',
     paddingLeft: 4,
     paddingRight: 4,
+  },
+  emailInputField: {
+    fontSize: 14,
+    letterSpacing: -0.1,
+    paddingLeft: 0,
+    paddingRight: 0,
   },
   inputFieldPassword: {
     flex: 1,

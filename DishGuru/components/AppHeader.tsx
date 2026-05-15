@@ -96,6 +96,7 @@ export default function AppHeader() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const lastPaletteLogoRef = useRef<string | null>(null);
 
   const applyResolvedLogo = (url: string | null) => {
@@ -120,6 +121,9 @@ export default function AppHeader() {
     const guestModeEnabled = !userId ? await loadGuestMode() : false;
     const sessionEmail = session?.user?.email ?? null;
 
+    if (userId || guestModeEnabled) {
+      setIsLoggingOut(false);
+    }
     setIsGuestMode(guestModeEnabled);
     setIsAuthenticated(Boolean(userId));
     setCurrentUserId(userId);
@@ -197,21 +201,42 @@ export default function AppHeader() {
   }, [guestModeParam, headerSyncParam, refreshParam, syncHeaderState]);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
     setMenuVisible(false);
-    setCompanyLogoUrl(null);
-    lastKnownCompanyLogoUrl = null;
+    setIsLoggingOut(true);
+    setIsAuthenticated(false);
+    setIsGuestMode(false);
+    setCurrentUserId(null);
     setAvatarUrl(null);
+    applyResolvedLogo(null);
+    await setGuestModeEnabled(false);
     await cacheAvatar(currentUserId, null);
     await clearCachedLogo();
-    router.replace('/');
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.replace({
+        pathname: '/',
+        params: {
+          headerSync: String(Date.now()),
+          guestMode: '0',
+          skipLaunch: '1',
+        },
+      });
+    }
   };
 
   const goToLogin = async () => {
     await setGuestModeEnabled(false);
     setIsGuestMode(false);
     setMenuVisible(false);
-    router.replace('/');
+    router.replace({
+      pathname: '/',
+      params: {
+        headerSync: String(Date.now()),
+        guestMode: '0',
+        skipLaunch: '1',
+      },
+    });
   };
 
   const goHome = () => {
@@ -259,7 +284,7 @@ export default function AppHeader() {
   const hasSignedInSession = isAuthenticated || Boolean(currentUserId);
   const isGuestHeader =
     !hasSignedInSession && (isGuestMode || guestModeParam === '1');
-  const shouldShowHeader = hasSignedInSession || isGuestHeader;
+  const shouldShowHeader = !isLoggingOut && (hasSignedInSession || isGuestHeader);
   const shouldShowAuthenticatedMenu = hasSignedInSession;
 
   if (!shouldShowHeader) {

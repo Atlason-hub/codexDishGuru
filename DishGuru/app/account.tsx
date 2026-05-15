@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   PanResponder,
@@ -21,6 +21,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { theme } from '../lib/theme';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { Locale, useLocale } from '../lib/locale';
+import { clearCachedLogo } from '../lib/logo';
+import { setGuestModeEnabled } from '../lib/guestMode';
 
 export default function AccountScreen() {
   const FRAME_SIZE = 180;
@@ -35,6 +37,7 @@ export default function AccountScreen() {
   const [tempAvatarUrl, setTempAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [redirectingOut, setRedirectingOut] = useState(false);
   const [pendingAsset, setPendingAsset] = useState<{
     uri: string;
     width: number;
@@ -74,6 +77,26 @@ export default function AccountScreen() {
     return t('commonUnexpectedError');
   };
 
+  const routeToLoggedOutHome = useCallback(() => {
+    setRedirectingOut(true);
+    router.replace({
+      pathname: '/',
+      params: {
+        headerSync: String(Date.now()),
+        guestMode: '0',
+        skipLaunch: '1',
+      },
+    });
+    void (async () => {
+      try {
+        await setGuestModeEnabled(false);
+        await clearCachedLogo();
+      } catch (error) {
+        console.warn('[account] post-logout cleanup failed', error);
+      }
+    })();
+  }, [router]);
+
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => Boolean(tempAvatarUrl),
     onMoveShouldSetPanResponder: () => Boolean(tempAvatarUrl),
@@ -104,6 +127,10 @@ export default function AccountScreen() {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
+      if (!data.session) {
+        routeToLoggedOutHome();
+        return;
+      }
       setEmail(data.session?.user?.email ?? null);
       const cached = await loadCachedAvatar(data.session?.user?.id ?? null);
       if (cached) setAvatarUrl(cached);
@@ -113,7 +140,15 @@ export default function AccountScreen() {
         await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
       }
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session) {
+        setEmail(null);
+        setAvatarUrl(null);
+        setTempAvatarUrl(null);
+        setPendingAsset(null);
+        routeToLoggedOutHome();
+        return;
+      }
       setEmail(session?.user?.email ?? null);
       const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
       if (metaAvatar) {
@@ -128,7 +163,11 @@ export default function AccountScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, []);
+  }, [routeToLoggedOutHome]);
+
+  if (redirectingOut) {
+    return <View style={styles.redirectPlaceholder} />;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -421,11 +460,11 @@ export default function AccountScreen() {
             if (saving || deletingAccount) return;
             showAppDialog({
               title: t('accountDeleteTitle'),
-              message: t('accountDeleteMessage'),
+              message: t('accountDeleteConfirmMessage'),
               actions: [
                 { text: t('commonCancel'), style: 'cancel' },
                 {
-                  text: t('accountDeleteAction'),
+                  text: t('accountDeleteConfirmAction'),
                   style: 'destructive',
                   onPress: async () => {
                     try {
@@ -441,11 +480,16 @@ export default function AccountScreen() {
                       if (error) throw error;
 
                       await cacheAvatar(userId, null);
+                      setEmail(null);
                       setAvatarUrl(null);
                       setTempAvatarUrl(null);
                       setPendingAsset(null);
-                      await supabase.auth.signOut({ scope: 'local' });
-                      router.replace('/');
+                      try {
+                        await supabase.auth.signOut({ scope: 'local' });
+                      } catch (signOutError) {
+                        console.warn('[account-delete] local sign out cleanup failed', signOutError);
+                      }
+                      routeToLoggedOutHome();
                     } catch (error) {
                       showAppAlert(
                         t('accountDeleteFailed'),
@@ -469,6 +513,10 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
+  redirectPlaceholder: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
   keyboardAvoiding: {
     flex: 1,
   },

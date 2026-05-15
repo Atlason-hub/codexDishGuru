@@ -78,6 +78,7 @@ export default function HomeScreen() {
   const refreshParam = typeof params.refresh === 'string' ? params.refresh : '';
   const scrollParam = typeof params.scrollY === 'string' ? params.scrollY : '';
   const emailConfirmedParam = typeof params.emailConfirmed === 'string' ? params.emailConfirmed : '';
+  const skipLaunchParam = typeof params.skipLaunch === 'string' ? params.skipLaunch : '';
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -173,6 +174,16 @@ export default function HomeScreen() {
     if (lower.includes('missing email domain')) return t('authEmailDomainMissing');
     return t('authGenericError');
   };
+
+  const resetAuthForm = useCallback(() => {
+    setPass('');
+    setConfirmPass('');
+    setShowPass(false);
+    setShowConfirmPass(false);
+    setAcceptedTerms(false);
+    setAuthError(null);
+    setAuthLoading(false);
+  }, []);
 
   const loadUserAvatars = async (items: DishAssociation[]) => {
     const ids = Array.from(
@@ -568,6 +579,7 @@ export default function HomeScreen() {
           void setGuestModeEnabled(false);
         } else if (guestModeEnabled) {
         } else {
+          resetAuthForm();
           setDishAssociations([]);
           setFavorites({});
         }
@@ -601,6 +613,7 @@ export default function HomeScreen() {
         if (guestModeEnabled) {
           setFavorites({});
         } else {
+          resetAuthForm();
           setDishAssociations([]);
           setCompanyLogoUrl(null);
           setOrderVendor(null);
@@ -613,7 +626,7 @@ export default function HomeScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [fetchCompanyLogoForUser, loadDishAssociations, loadFavorites]);
+  }, [fetchCompanyLogoForUser, loadDishAssociations, loadFavorites, resetAuthForm]);
 
   useEffect(() => {
     loadDishAssociationsRef.current = loadDishAssociations;
@@ -763,7 +776,7 @@ export default function HomeScreen() {
   const openLoginFromGuest = useCallback(async () => {
     await setGuestModeEnabled(false);
     setIsGuestMode(false);
-    setAuthError(null);
+    resetAuthForm();
     setIsRefreshing(false);
     setLoading(false);
     setHasLoaded(false);
@@ -776,7 +789,7 @@ export default function HomeScreen() {
         guestMode: '0',
       },
     });
-  }, [router]);
+  }, [resetAuthForm, router]);
 
   const activateGuestMode = useCallback(async () => {
     try {
@@ -792,6 +805,7 @@ export default function HomeScreen() {
       setIsAuthenticated(false);
       setCurrentUserId(null);
       setCurrentUserEmail(null);
+      resetAuthForm();
       setFavorites({});
       setDishAssociations([]);
       router.replace({
@@ -808,7 +822,6 @@ export default function HomeScreen() {
       }
       console.info('[guest-mode] activating guest mode');
       setShowSignup(false);
-      setAcceptedTerms(false);
       setSessionChecked(true);
       await loadDishAssociations({ showLoading: false, guestModeOverride: true });
     } catch (error) {
@@ -828,7 +841,7 @@ export default function HomeScreen() {
       guestActivationInFlightRef.current = false;
       setAuthLoading(false);
     }
-  }, [t, loadDishAssociations]);
+  }, [loadDishAssociations, resetAuthForm, t]);
 
   const showGuestLoginDialog = useCallback(() => {
     showAppDialog({
@@ -1234,7 +1247,7 @@ export default function HomeScreen() {
       style={[styles.container, !isAuthenticated && !isGuestMode && styles.containerAuth]}
       edges={['left', 'right', 'bottom']}
     >
-      {!sessionChecked ? (
+      {!sessionChecked && skipLaunchParam !== '1' ? (
         <View style={styles.launchScreen}>
           <View style={styles.launchCard}>
             <Text style={styles.launchTitle}>DishGuru</Text>
