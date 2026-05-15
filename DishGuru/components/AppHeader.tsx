@@ -81,6 +81,8 @@ export default function AppHeader() {
     typeof globalParams.headerSync === 'string' ? globalParams.headerSync : '';
   const guestModeParam =
     typeof globalParams.guestMode === 'string' ? globalParams.guestMode : '';
+  const skipLaunchParam =
+    typeof globalParams.skipLaunch === 'string' ? globalParams.skipLaunch : '';
   const favoritesParam =
     typeof globalParams.favorites === 'string' ? globalParams.favorites : '';
   const restaurantIdParam =
@@ -178,6 +180,18 @@ export default function AppHeader() {
   }, []);
 
   useEffect(() => {
+    if (pathname === '/' && skipLaunchParam === '1') {
+      setMenuVisible(false);
+      setIsLoggingOut(true);
+      setIsAuthenticated(false);
+      setIsGuestMode(false);
+      setCurrentUserId(null);
+      setAvatarUrl(null);
+      applyResolvedLogo(null);
+    }
+  }, [pathname, skipLaunchParam]);
+
+  useEffect(() => {
     let mounted = true;
     const runSync = async () => {
       await syncHeaderState(undefined, { useCachedAssets: true });
@@ -198,7 +212,7 @@ export default function AppHeader() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [guestModeParam, headerSyncParam, refreshParam, syncHeaderState]);
+  }, [guestModeParam, headerSyncParam, refreshParam, skipLaunchParam, syncHeaderState]);
 
   const signOut = async () => {
     setMenuVisible(false);
@@ -284,7 +298,10 @@ export default function AppHeader() {
   const hasSignedInSession = isAuthenticated || Boolean(currentUserId);
   const isGuestHeader =
     !hasSignedInSession && (isGuestMode || guestModeParam === '1');
-  const shouldShowHeader = !isLoggingOut && (hasSignedInSession || isGuestHeader);
+  const shouldShowHeader =
+    pathname !== '/' || skipLaunchParam !== '1'
+      ? !isLoggingOut && (hasSignedInSession || isGuestHeader)
+      : false;
   const shouldShowAuthenticatedMenu = hasSignedInSession;
 
   if (!shouldShowHeader) {
