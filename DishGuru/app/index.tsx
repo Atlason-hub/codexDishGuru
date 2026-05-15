@@ -898,16 +898,17 @@ export default function HomeScreen() {
       setAuthError(t('authPasswordsMismatch'));
       return;
     }
+    const trimmedEmail = email.trim().toLowerCase();
+    const domainPart = trimmedEmail.includes('@')
+      ? trimmedEmail.split('@').pop()?.trim().toLowerCase() ?? ''
+      : '';
+    if (!domainPart) {
+      setAuthError(t('authEmailDomainMissing'));
+      return;
+    }
     try {
       setAuthLoading(true);
       setAuthError(null);
-      const trimmedEmail = email.trim().toLowerCase();
-      const domainPart = trimmedEmail.includes('@')
-        ? trimmedEmail.split('@').pop()?.trim().toLowerCase() ?? ''
-        : '';
-      if (!domainPart) {
-        throw new Error('חסר דומיין אימייל');
-      }
       const { data: companyMatch, error: companyError } = await supabase
         .from('companies')
         .select('id')
@@ -918,7 +919,8 @@ export default function HomeScreen() {
         throw companyError;
       }
       if (!companyMatch?.id) {
-        throw new Error('לא נמצאה חברה לדומיין האימייל');
+        setAuthError(t('authEmailDomainUnknown'));
+        return;
       }
       const { data: existingProfile, error: existingProfileError } = await supabase
         .from('AppUsers')
