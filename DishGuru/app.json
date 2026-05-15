@@ -24,6 +24,7 @@
     "android": {
       "package": "com.dishguru.app",
       "versionCode": 5,
+      "icon": "./assets/images/play-store-icon.png",
       "adaptiveIcon": {
         "backgroundColor": "#F9EDE4",
         "foregroundImage": "./assets/images/android-adaptive-foreground.png"
