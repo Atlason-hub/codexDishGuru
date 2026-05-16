@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -14,6 +24,7 @@ import { getLegalUrl, useLocale } from '../lib/locale';
 import { fetchGlobalCompanyContext } from '../lib/appData';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 import { publishHomeTab } from '../lib/homeTabs';
+import { showAppAlert } from '../lib/appDialog';
 
 const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
 let lastKnownCompanyLogoUrl: string | null = null;
@@ -96,9 +107,13 @@ export default function AppHeader() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [legalModal, setLegalModal] = useState<{ title: string; url: string } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
   const lastPaletteLogoRef = useRef<string | null>(null);
 
   const applyResolvedLogo = (url: string | null) => {
@@ -129,6 +144,7 @@ export default function AppHeader() {
     setIsGuestMode(guestModeEnabled);
     setIsAuthenticated(Boolean(userId));
     setCurrentUserId(userId);
+    setCurrentUserEmail(sessionEmail);
 
     if (options?.useCachedAssets) {
       const [cached, cachedAvatar] = await Promise.all([
@@ -251,6 +267,42 @@ export default function AppHeader() {
         skipLaunch: '1',
       },
     });
+  };
+
+  const closeFeedback = () => {
+    setFeedbackVisible(false);
+    setFeedbackText('');
+  };
+
+  const sendFeedback = async () => {
+    const trimmed = feedbackText.trim();
+    if (!trimmed) {
+      showAppAlert(t('feedbackTitle'), t('feedbackEmptyMessage'));
+      return;
+    }
+    try {
+      setFeedbackSending(true);
+      const { error } = await supabase.functions.invoke('send-feedback', {
+        body: {
+          message: trimmed,
+          email: currentUserEmail,
+          locale,
+          platform: Platform.OS,
+          pathname,
+          isGuestMode,
+          userId: currentUserId,
+        },
+      });
+      if (error) {
+        throw error;
+      }
+      closeFeedback();
+      showAppAlert(t('feedbackTitle'), t('feedbackSuccessMessage'));
+    } catch {
+      showAppAlert(t('feedbackTitle'), t('feedbackSendFailedMessage'));
+    } finally {
+      setFeedbackSending(false);
+    }
   };
 
   const goHome = () => {
@@ -421,6 +473,14 @@ export default function AppHeader() {
               }
             )}
             {renderMenuItem(
+              t('headerMenuFeedback'),
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.colors.accent} />,
+              () => {
+                setMenuVisible(false);
+                setFeedbackVisible(true);
+              }
+            )}
+            {renderMenuItem(
               shouldShowAuthenticatedMenu ? t('headerMenuSignOut') : t('headerMenuSignIn'),
               <Ionicons name="log-out-outline" size={20} color={theme.colors.accent} />,
               shouldShowAuthenticatedMenu ? signOut : goToLogin
@@ -434,6 +494,62 @@ export default function AppHeader() {
         url={legalModal?.url ?? getLegalUrl(locale, 'terms')}
         onClose={() => setLegalModal(null)}
       />
+      <Modal
+        visible={feedbackVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeFeedback}
+      >
+        <View style={styles.feedbackBackdrop}>
+          <Pressable style={styles.feedbackOverlay} onPress={closeFeedback} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+            style={styles.feedbackKeyboard}
+          >
+            <View style={styles.feedbackCard}>
+              <Text style={[styles.feedbackTitle, !isRTL && styles.feedbackTitleLtr]}>
+                {t('feedbackTitle')}
+              </Text>
+              <Text style={[styles.feedbackSubtitle, !isRTL && styles.feedbackSubtitleLtr]}>
+                {t('feedbackSubtitle')}
+              </Text>
+              <TextInput
+                style={[styles.feedbackInput, !isRTL && styles.feedbackInputLtr]}
+                value={feedbackText}
+                onChangeText={setFeedbackText}
+                placeholder={t('feedbackPlaceholder')}
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+                textAlignVertical="top"
+                textAlign={isRTL ? 'right' : 'left'}
+                selectionColor={theme.colors.accent}
+                cursorColor={theme.colors.accent}
+              />
+              <View style={[styles.feedbackActions, !isRTL && styles.feedbackActionsLtr]}>
+                <Pressable
+                  style={styles.feedbackSecondaryButton}
+                  onPress={closeFeedback}
+                  disabled={feedbackSending}
+                >
+                  <Text style={styles.feedbackSecondaryButtonText}>{t('commonCancel')}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.feedbackPrimaryButton, feedbackSending && styles.feedbackPrimaryButtonDisabled]}
+                  onPress={() => void sendFeedback()}
+                  disabled={feedbackSending}
+                >
+                  {feedbackSending ? (
+                    <ActivityIndicator size="small" color={theme.colors.white} />
+                  ) : (
+                    <Text style={styles.feedbackPrimaryButtonText}>{t('feedbackSendAction')}</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -570,5 +686,111 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
+  },
+  feedbackBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(24, 15, 10, 0.42)',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+  },
+  feedbackOverlay: {
+    position: 'absolute',
+    inset: 0,
+  },
+  feedbackKeyboard: {
+    width: '100%',
+  },
+  feedbackCard: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    backgroundColor: theme.colors.card,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  feedbackTitle: {
+    fontSize: 21,
+    color: theme.colors.text,
+    fontFamily: theme.typography.bold,
+    textAlign: 'right',
+  },
+  feedbackTitleLtr: {
+    textAlign: 'left',
+  },
+  feedbackSubtitle: {
+    marginTop: 8,
+    marginBottom: 14,
+    fontSize: 15,
+    lineHeight: 22,
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.regular,
+    textAlign: 'right',
+  },
+  feedbackSubtitleLtr: {
+    textAlign: 'left',
+  },
+  feedbackInput: {
+    minHeight: 132,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: theme.colors.text,
+    fontSize: 16,
+    fontFamily: theme.typography.regular,
+    writingDirection: 'rtl',
+  },
+  feedbackInputLtr: {
+    writingDirection: 'ltr',
+  },
+  feedbackActions: {
+    marginTop: 16,
+    flexDirection: 'row-reverse',
+    gap: 10,
+  },
+  feedbackActionsLtr: {
+    flexDirection: 'row',
+  },
+  feedbackSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.card,
+  },
+  feedbackSecondaryButtonText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontFamily: theme.typography.semibold,
+  },
+  feedbackPrimaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.accent,
+  },
+  feedbackPrimaryButtonDisabled: {
+    opacity: 0.82,
+  },
+  feedbackPrimaryButtonText: {
+    color: theme.colors.white,
+    fontSize: 16,
+    fontFamily: theme.typography.bold,
   },
 });
