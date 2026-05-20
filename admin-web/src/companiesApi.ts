@@ -1,4 +1,20 @@
 import type { CityOption, Company, CompanyRow, StreetOption } from "./companiesTypes";
+import { SUPABASE_URL } from "./config";
+
+const BUCKET = "company-logos";
+
+function normalizeLogoUrl(rawUrl?: string | null): string | undefined {
+  if (!rawUrl) return undefined;
+  if (rawUrl.startsWith("/api/logo?path=")) return rawUrl;
+
+  const publicPrefix = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+  if (SUPABASE_URL && rawUrl.startsWith(publicPrefix)) {
+    const path = rawUrl.slice(publicPrefix.length);
+    return `/api/logo?path=${encodeURIComponent(path)}`;
+  }
+
+  return rawUrl;
+}
 
 
 export async function fetchCompanies(): Promise<Company[]> {
@@ -27,7 +43,7 @@ export async function fetchCompanies(): Promise<Company[]> {
       number: row.number,
       cityId: row.city_id,
       cityName: row.city_name,
-      logoUrl: row.logo_url ?? undefined
+      logoUrl: normalizeLogoUrl(row.logo_url)
     }))
     .sort((left, right) => {
       const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
@@ -119,11 +135,14 @@ export async function uploadCompanyLogo(companyId: string, file: File): Promise<
     const text = await response.text();
     throw new Error(text || "Logo upload failed.");
   }
-  const payload = (await response.json()) as { url?: string };
+  const payload = (await response.json()) as { url?: string; path?: string };
+  if (payload.path) {
+    return `/api/logo?path=${encodeURIComponent(payload.path)}`;
+  }
   if (!payload.url) {
     throw new Error("Logo upload failed.");
   }
-  return payload.url;
+  return normalizeLogoUrl(payload.url) ?? payload.url;
 }
 
 export async function searchCities(query: string): Promise<CityOption[]> {
