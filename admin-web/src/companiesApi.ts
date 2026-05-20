@@ -1,16 +1,26 @@
 import type { CityOption, Company, CompanyRow, StreetOption } from "./companiesTypes";
-import { SUPABASE_URL } from "./config";
-
-const BUCKET = "company-logos";
 
 function normalizeLogoUrl(rawUrl?: string | null): string | undefined {
   if (!rawUrl) return undefined;
   if (rawUrl.startsWith("/api/logo?path=")) return rawUrl;
 
-  const publicPrefix = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
-  if (SUPABASE_URL && rawUrl.startsWith(publicPrefix)) {
-    const path = rawUrl.slice(publicPrefix.length);
-    return `/api/logo?path=${encodeURIComponent(path)}`;
+  const publicMarker = "/storage/v1/object/public/";
+  const publicIndex = rawUrl.indexOf(publicMarker);
+  if (publicIndex !== -1) {
+    const tail = rawUrl.slice(publicIndex + publicMarker.length);
+    const segments = tail.split("/");
+    const bucket = segments[0];
+    const path = segments.slice(1).join("/");
+    if (bucket && path) {
+      return `/api/logo?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
+    }
+  }
+
+  if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://") && !rawUrl.startsWith("data:")) {
+    const normalizedPath = rawUrl.startsWith("/") ? rawUrl.slice(1) : rawUrl;
+    if (normalizedPath) {
+      return `/api/logo?path=${encodeURIComponent(normalizedPath)}`;
+    }
   }
 
   return rawUrl;
@@ -135,10 +145,7 @@ export async function uploadCompanyLogo(companyId: string, file: File): Promise<
     const text = await response.text();
     throw new Error(text || "Logo upload failed.");
   }
-  const payload = (await response.json()) as { url?: string; path?: string };
-  if (payload.path) {
-    return `/api/logo?path=${encodeURIComponent(payload.path)}`;
-  }
+  const payload = (await response.json()) as { url?: string; path?: string; bucket?: string };
   if (!payload.url) {
     throw new Error("Logo upload failed.");
   }

@@ -556,6 +556,7 @@ function CompaniesPage() {
   const [logoUrl, setLogoUrl] = React.useState<string | undefined>(undefined);
   const [logoFile, setLogoFile] = React.useState<File | null>(null);
   const [logoError, setLogoError] = React.useState<string | null>(null);
+  const [logoDebug, setLogoDebug] = React.useState<string | null>(null);
   const [apiError, setApiError] = React.useState<string | null>(null);
   const [cityOptions, setCityOptions] = React.useState<CityOption[]>([]);
   const [cityLoading, setCityLoading] = React.useState(false);
@@ -623,6 +624,7 @@ function CompaniesPage() {
     setLogoUrl(undefined);
     setLogoFile(null);
     setLogoError(null);
+    setLogoDebug(null);
     setEditingId(null);
     setShowForm(false);
     setSubmitAttempted(false);
@@ -735,20 +737,26 @@ function CompaniesPage() {
       setLogoUrl(undefined);
       setLogoFile(null);
       setLogoError(null);
+      setLogoDebug(null);
       return;
     }
     if (file.size > MAX_LOGO_BYTES) {
       setLogoUrl(undefined);
       setLogoFile(null);
       setLogoError("Logo must be under 200 KB.");
+      setLogoDebug(`Selected logo rejected: ${file.name} (${file.size} bytes)`);
       return;
     }
     setLogoError(null);
     setLogoFile(file);
+    setLogoDebug(`Selected logo: ${file.name} (${file.type || "unknown type"}, ${file.size} bytes)`);
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === "string") {
         setLogoUrl(reader.result);
+        setLogoDebug((current) =>
+          `${current ? `${current} | ` : ""}Preview generated`
+        );
       }
     };
     reader.readAsDataURL(file);
@@ -802,8 +810,14 @@ function CompaniesPage() {
           uploadCompanyLogo(newId, logoFile),
           "Logo upload"
         );
+        setLogoDebug(
+          `Logo uploaded successfully for company ${newId}. Saved URL: ${finalLogoUrl}`
+        );
       } catch (_err) {
         setApiError("Logo upload failed or timed out. Saving without logo.");
+        setLogoDebug(
+          `Logo upload failed for company ${newId}. File: ${logoFile.name}`
+        );
         // Fall back to saving without logo.
         finalLogoUrl = undefined;
       }
@@ -832,6 +846,9 @@ function CompaniesPage() {
         );
         setCompanies(next);
         setApiError(null);
+        setLogoDebug(
+          `Company updated. Stored logo URL: ${updatedCompany.logoUrl ?? "none"}`
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to update company.";
         setApiError(msg);
@@ -857,6 +874,9 @@ function CompaniesPage() {
         const next = await withTimeout(createCompany(newCompany), "Create company");
         setCompanies(next);
         setApiError(null);
+        setLogoDebug(
+          `Company created. Stored logo URL: ${newCompany.logoUrl ?? "none"}`
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to create company.";
         setApiError(msg);
@@ -945,6 +965,7 @@ function CompaniesPage() {
         Add and manage company profiles for accounts and partnerships.
       </p>
       {apiError && <div className="error">{apiError}</div>}
+      {logoDebug && <div className="muted">Logo debug: {logoDebug}</div>}
       {formError && <div className="error">{formError}</div>}
       {!showForm && (
         <button
@@ -1131,7 +1152,13 @@ function CompaniesPage() {
           <div className="company-form-footer">
             {logoUrl && (
               <div className="logo-preview" aria-label="Logo preview">
-                <img src={logoUrl} alt="Company logo preview" />
+                <img
+                  src={logoUrl}
+                  alt="Company logo preview"
+                  onError={() =>
+                    setLogoDebug(`Preview image failed to load from ${logoUrl}`)
+                  }
+                />
               </div>
             )}
             <div className="form-actions company-form-actions">
@@ -1180,6 +1207,11 @@ function CompaniesPage() {
                       className="logo-thumb"
                       src={company.logoUrl}
                       alt={`${company.name} logo`}
+                      onError={() =>
+                        setLogoDebug(
+                          `Saved logo failed to load for ${company.name}: ${company.logoUrl}`
+                        )
+                      }
                     />
                   ) : (
                     <div className="logo-thumb company-logo-fallback">Logo</div>

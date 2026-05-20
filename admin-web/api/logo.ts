@@ -2,7 +2,13 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const BUCKET = "company-logos";
+const DEFAULT_BUCKET = process.env.COMPANY_LOGOS_BUCKET || "company-logos";
+
+function getCandidateBuckets(requestedBucket?: string) {
+  return Array.from(
+    new Set([requestedBucket, DEFAULT_BUCKET, "companies", "company-logos"].filter(Boolean))
+  ) as string[];
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!SUPABASE_URL || !SERVICE_ROLE) {
@@ -10,24 +16,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method === "GET") {
     const path = typeof req.query.path === "string" ? req.query.path : "";
+    const requestedBucket = typeof req.query.bucket === "string" ? req.query.bucket : undefined;
     if (!path) {
       return res.status(400).json({ error: "Missing path" });
     }
-    const url = `${SUPABASE_URL}/storage/v1/object/authenticated/${BUCKET}/${path}`;
+
     try {
-      const response = await fetch(url, {
-        headers: {
-          apikey: SERVICE_ROLE,
-          Authorization: `Bearer ${SERVICE_ROLE}`
+      let lastErrorText = "";
+      let lastStatus = 404;
+
+      for (const bucket of getCandidateBuckets(requestedBucket)) {
+        const url = `${SUPABASE_URL}/storage/v1/object/authenticated/${bucket}/${path}`;
+        const response = await fetch(url, {
+          headers: {
+            apikey: SERVICE_ROLE,
+            Authorization: `Bearer ${SERVICE_ROLE}`
+          }
+        });
+        if (!response.ok) {
+          lastStatus = response.status;
+          lastErrorText = await response.text();
+          continue;
         }
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        return res.status(response.status).send(text);
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        res.setHeader(
+          "Content-Type",
+          response.headers.get("Content-Type") || "application/octet-stream"
+        );
+        return res.status(200).send(buffer);
       }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      res.setHeader("Content-Type", response.headers.get("Content-Type") || "application/octet-stream");
-      return res.status(200).send(buffer);
+
+      return res.status(lastStatus).send(lastErrorText || "Logo not found");
     } catch (err) {
       return res.status(500).json({ error: err instanceof Error ? err.message : "Fetch failed" });
     }
@@ -40,28 +60,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const path = `companies/${companyId}/${filename}`;
-    const url = `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`;
     const buffer = Buffer.from(dataBase64, "base64");
 
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          apikey: SERVICE_ROLE,
-          Authorization: `Bearer ${SERVICE_ROLE}`,
-          "Content-Type": contentType || "application/octet-stream",
-          "x-upsert": "true"
-        },
-        body: buffer
-      });
+      let lastErrorText = "";
+      let lastStatus = 500;
 
-      if (!response.ok) {
-        const text = await response.text();
-        return res.status(response.status).send(text);
+      for (const bucket of getCandidateBuckets()) {
+        const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            apikey: SERVICE_ROLE,
+            Authorization: `Bearer ${SERVICE_ROLE}`,
+            "Content-Type": contentType || "application/octet-stream",
+            "x-upsert": "true"
+          },
+          body: buffer
+        });
+
+        if (!response.ok) {
+          lastStatus = response.status;
+          lastErrorText = await response.text();
+          continue;
+        }
+
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+        return res.status(200).json({ url: publicUrl, path, bucket });
       }
 
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
-      return res.status(200).json({ url: publicUrl, path });
+      return res.status(lastStatus).send(lastErrorText || "Upload failed");
     } catch (err) {
       return res.status(500).json({ error: err instanceof Error ? err.message : "Upload failed" });
     }
