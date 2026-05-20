@@ -580,6 +580,10 @@ function CompaniesPage() {
   const [isLoadingCompanyUsers, setIsLoadingCompanyUsers] = React.useState(false);
   const [companyUsersError, setCompanyUsersError] = React.useState<string | null>(null);
 
+  const appendLogoDebug = React.useCallback((message: string) => {
+    setLogoDebug((current) => (current ? `${current} | ${message}` : message));
+  }, []);
+
   const withTimeout = async <T,>(promise: Promise<T>, label: string, ms = 12000) => {
     let timeoutId: number | undefined;
     const timeout = new Promise<T>((_resolve, reject) => {
@@ -753,9 +757,7 @@ function CompaniesPage() {
     reader.onloadend = () => {
       if (typeof reader.result === "string") {
         setLogoUrl(reader.result);
-        setLogoDebug((current) =>
-          `${current ? `${current} | ` : ""}Preview generated`
-        );
+        appendLogoDebug("Preview generated");
       }
     };
     reader.readAsDataURL(file);
@@ -809,13 +811,15 @@ function CompaniesPage() {
           uploadCompanyLogo(newId, logoFile),
           "Logo upload"
         );
-        setLogoDebug(
+        appendLogoDebug(
           `Logo uploaded successfully for company ${newId}. Saved URL: ${finalLogoUrl}`
         );
-      } catch (_err) {
-        setApiError("Logo upload failed or timed out. Saving without logo.");
-        setLogoDebug(
-          `Logo upload failed for company ${newId}. File: ${logoFile.name}`
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Unknown upload error";
+        setApiError(`Logo upload failed: ${message}. Saving without logo.`);
+        appendLogoDebug(
+          `Logo upload failed for company ${newId}. File: ${logoFile.name}. Error: ${message}`
         );
         // Fall back to saving without logo.
         finalLogoUrl = undefined;
@@ -845,9 +849,7 @@ function CompaniesPage() {
         );
         setCompanies(next);
         setApiError(null);
-        setLogoDebug(
-          `Company updated. Stored logo URL: ${updatedCompany.logoUrl ?? "none"}`
-        );
+        appendLogoDebug(`Company updated. Stored logo URL: ${updatedCompany.logoUrl ?? "none"}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to update company.";
         setApiError(msg);
@@ -873,9 +875,7 @@ function CompaniesPage() {
         const next = await withTimeout(createCompany(newCompany), "Create company");
         setCompanies(next);
         setApiError(null);
-        setLogoDebug(
-          `Company created. Stored logo URL: ${newCompany.logoUrl ?? "none"}`
-        );
+        appendLogoDebug(`Company created. Stored logo URL: ${newCompany.logoUrl ?? "none"}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to create company.";
         setApiError(msg);
