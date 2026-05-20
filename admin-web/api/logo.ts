@@ -13,7 +13,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!path) {
       return res.status(400).json({ error: "Missing path" });
     }
-    const url = `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`;
+    const url = `${SUPABASE_URL}/storage/v1/object/authenticated/${BUCKET}/${path}`;
     try {
       const response = await fetch(url, {
         headers: {
