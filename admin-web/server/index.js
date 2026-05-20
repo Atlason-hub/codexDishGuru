@@ -1,5 +1,6 @@
 import { createServer as createHttpServer } from "node:http";
 import { Buffer } from "node:buffer";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createServer as createViteServer } from "vite";
@@ -9,6 +10,29 @@ const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 const host = "127.0.0.1";
 const port = 5174;
+
+function loadEnvFile(filePath) {
+  if (!existsSync(filePath)) return;
+
+  const content = readFileSync(filePath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex === -1) continue;
+
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, "");
+
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFile(path.join(root, ".env"));
+loadEnvFile(path.join(root, ".env.local"));
 
 function collectBody(req) {
   return new Promise((resolve, reject) => {
