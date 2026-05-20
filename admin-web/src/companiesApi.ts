@@ -128,8 +128,23 @@ export async function uploadCompanyLogo(companyId: string, file: File): Promise<
   const fileExt = file.name.split(".").pop() || "png";
   const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const filename = `${unique}.${fileExt}`;
-  const buffer = await file.arrayBuffer();
-  const dataBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const dataBase64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read logo file."));
+    reader.onloadend = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Failed to encode logo file."));
+        return;
+      }
+      const parts = reader.result.split(",");
+      if (parts.length < 2 || !parts[1]) {
+        reject(new Error("Failed to parse logo file."));
+        return;
+      }
+      resolve(parts[1]);
+    };
+    reader.readAsDataURL(file);
+  });
 
   const response = await fetch(`/api/logo`, {
     method: "POST",
