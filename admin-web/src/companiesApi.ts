@@ -1,8 +1,39 @@
 import type { CityOption, Company, CompanyRow, StreetOption } from "./companiesTypes";
 
+function unwrapLogoReference(rawUrl: string): { bucket?: string; path: string } | null {
+  if (!rawUrl.startsWith("/api/logo?")) return null;
+
+  let current = rawUrl;
+
+  for (let i = 0; i < 5; i += 1) {
+    const query = current.split("?")[1];
+    if (!query) return null;
+    const params = new URLSearchParams(query);
+    const pathValue = params.get("path");
+    const bucketValue = params.get("bucket") ?? undefined;
+    if (!pathValue) return null;
+    if (!pathValue.startsWith("api/logo?")) {
+      return { bucket: bucketValue, path: pathValue };
+    }
+    current = `/${pathValue}`;
+  }
+
+  return null;
+}
+
 function normalizeLogoUrl(rawUrl?: string | null): string | undefined {
   if (!rawUrl) return undefined;
-  if (rawUrl.startsWith("/api/logo?path=")) return rawUrl;
+  if (rawUrl.startsWith("/api/logo?")) {
+    const unwrapped = unwrapLogoReference(rawUrl);
+    if (unwrapped) {
+      const params = new URLSearchParams({ path: unwrapped.path });
+      if (unwrapped.bucket) {
+        params.set("bucket", unwrapped.bucket);
+      }
+      return `/api/logo?${params.toString()}`;
+    }
+    return rawUrl;
+  }
 
   const publicMarker = "/storage/v1/object/public/";
   const publicIndex = rawUrl.indexOf(publicMarker);
@@ -21,6 +52,19 @@ function normalizeLogoUrl(rawUrl?: string | null): string | undefined {
     if (normalizedPath) {
       return `/api/logo?path=${encodeURIComponent(normalizedPath)}`;
     }
+  }
+
+  return rawUrl;
+}
+
+function serializeLogoUrl(rawUrl?: string): string | null {
+  if (!rawUrl) return null;
+  if (rawUrl.startsWith("data:")) return rawUrl;
+
+  const unwrapped = unwrapLogoReference(rawUrl);
+  if (unwrapped) {
+    const bucket = unwrapped.bucket ?? "company-logos";
+    return `/storage/v1/object/public/${bucket}/${unwrapped.path}`;
   }
 
   return rawUrl;
@@ -74,7 +118,7 @@ export async function createCompany(company: Company): Promise<Company[]> {
     number: company.number,
     city_id: company.cityId,
     city_name: company.cityName,
-    logo_url: company.logoUrl ?? null
+    logo_url: serializeLogoUrl(company.logoUrl)
   };
   const response = await fetch(`/api/companies`, {
     method: "POST",
@@ -99,7 +143,7 @@ export async function updateCompany(id: string, updates: Company): Promise<Compa
     number: updates.number,
     city_id: updates.cityId,
     city_name: updates.cityName,
-    logo_url: updates.logoUrl ?? null
+    logo_url: serializeLogoUrl(updates.logoUrl)
   };
   const response = await fetch(`/api/companies?id=${encodeURIComponent(id)}`, {
     method: "PUT",
@@ -164,7 +208,7 @@ export async function uploadCompanyLogo(companyId: string, file: File): Promise<
   if (!payload.url) {
     throw new Error("Logo upload failed.");
   }
-  return normalizeLogoUrl(payload.url) ?? payload.url;
+  return payload.url;
 }
 
 export async function searchCities(query: string): Promise<CityOption[]> {
