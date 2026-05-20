@@ -132,7 +132,16 @@ export default function EditDishScreen() {
 
   const handleSave = async () => {
     if (!dish || !associationId) return;
-    if (!currentUserId || dish.user_id !== currentUserId) {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const authenticatedUserId = authData.user?.id ?? null;
+    if (authError || !authenticatedUserId) {
+      showAppAlert('אין הרשאה', 'צריך להתחבר מחדש כדי לשמור שינויים.');
+      return;
+    }
+    if (authenticatedUserId !== currentUserId) {
+      setCurrentUserId(authenticatedUserId);
+    }
+    if (dish.user_id !== authenticatedUserId) {
       showAppAlert('אין הרשאה', 'אפשר לערוך רק מנות שהעלית.');
       return;
     }
@@ -142,11 +151,11 @@ export default function EditDishScreen() {
       let imagePath = dish.image_path;
       if (photoBase64 && photoUri) {
         const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
-        const filePath = `${currentUserId}/${Date.now()}.${ext}`;
+        const filePath = `${authenticatedUserId}/${Date.now()}.${ext}`;
         const base64ToArrayBuffer = (b64: string) => {
-          const binary = globalThis.atob
-            ? globalThis.atob(b64)
-            : Buffer.from(b64, 'base64').toString('binary');
+        const binary = globalThis.atob
+          ? globalThis.atob(b64)
+          : Buffer.from(b64, 'base64').toString('binary');
           const len = binary.length;
           const bytes = new Uint8Array(len);
           for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
@@ -172,7 +181,7 @@ export default function EditDishScreen() {
           image_path: imagePath,
         })
         .eq('id', associationId)
-        .eq('user_id', currentUserId)
+        .eq('user_id', authenticatedUserId)
         .select('id')
         .maybeSingle();
       if (error) throw error;
@@ -202,8 +211,8 @@ export default function EditDishScreen() {
       } else {
         router.replace({ pathname: '/', params: { refresh: refreshToken } });
       }
-    } catch {
-      showAppAlert('שמירה נכשלה', 'לא הצלחנו לשמור את השינויים.');
+    } catch (error) {
+      showAppAlert('שמירה נכשלה', error instanceof Error ? error.message : 'לא ניתן לשמור את השינויים.');
     } finally {
       setSaving(false);
     }

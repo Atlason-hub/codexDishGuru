@@ -491,16 +491,21 @@ export default function CameraDetailsScreen() {
     }
     try {
       setSaving(true);
-      if (!currentUserId) {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const authenticatedUserId = authData.user?.id ?? null;
+      if (authError || !authenticatedUserId) {
         showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
         return;
+      }
+      if (authenticatedUserId !== currentUserId) {
+        setCurrentUserId(authenticatedUserId);
       }
       if (!photoBase64) {
         showAppAlert(t('cameraMissingImageTitle'), t('cameraRetakePhotoPrompt'));
         return;
       }
       const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
-      const filePath = `${currentUserId}/${Date.now()}.${ext}`;
+      const filePath = `${authenticatedUserId}/${Date.now()}.${ext}`;
       const base64ToArrayBuffer = (b64: string) => {
         const binary = globalThis.atob ? globalThis.atob(b64) : Buffer.from(b64, 'base64').toString('binary');
         const len = binary.length;
@@ -514,11 +519,11 @@ export default function CameraDetailsScreen() {
         .upload(filePath, bytes, {
           contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
           upsert: true,
-        });
+      });
       if (upload.error) throw upload.error;
       const { data: publicData } = supabase.storage.from('dish-images').getPublicUrl(filePath);
       const insert = await supabase.from('dish_associations').insert({
-        user_id: currentUserId,
+        user_id: authenticatedUserId,
         restaurant_id: selectedRestaurantId,
         restaurant_name: selectedName ?? null,
         cuisine: selectedRestaurantCuisine,
@@ -534,8 +539,10 @@ export default function CameraDetailsScreen() {
       if (insert.error) throw insert.error;
       router.replace('/');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      showAppAlert(t('cameraSaveFailed'), message);
+      showAppAlert(
+        t('cameraSaveFailed'),
+        error instanceof Error ? error.message : t('cameraSaveFailed')
+      );
     } finally {
       setSaving(false);
     }

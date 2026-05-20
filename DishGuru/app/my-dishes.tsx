@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
-import { loadCachedAvatar } from '../lib/avatar';
+import { fetchAvatarFromAuth, fetchAvatarFromProfile, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
@@ -17,6 +17,7 @@ import { fetchFavoritesMap, fetchOrderVendorForUser } from '../lib/appData';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { useLocale } from '../lib/locale';
 import { loadGuestMode } from '../lib/guestMode';
+import { subscribeAvatarUpdates } from '../lib/avatarEvents';
 
 type DishAssociation = {
   id: string;
@@ -87,8 +88,8 @@ export default function MyDishesScreen() {
   }, []);
 
   const toggleFavorite = useCallback(async (dishAssociationId: string) => {
-    const { data } = await supabase.auth.getSession();
-    const userId = data.session?.user?.id;
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
     if (!userId) return;
     const isFav = Boolean(favorites[dishAssociationId]);
     setFavorites((prev) => ({ ...prev, [dishAssociationId]: !isFav }));
@@ -190,6 +191,25 @@ export default function MyDishesScreen() {
     setOrderVendor(await fetchOrderVendorForUser(userId));
   }, []);
 
+  const refreshAvatar = useCallback(async (userId: string | null) => {
+    if (!userId) {
+      setAvatarUrl(null);
+      return;
+    }
+    const cachedAvatar = await loadCachedAvatar(userId);
+    if (cachedAvatar) {
+      setAvatarUrl(cachedAvatar);
+    }
+    const resolvedAvatar = (await fetchAvatarFromAuth()) ?? (await fetchAvatarFromProfile(userId));
+    if (resolvedAvatar) {
+      setAvatarUrl(resolvedAvatar);
+      return;
+    }
+    if (!cachedAvatar) {
+      setAvatarUrl(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadMyDishesRef.current = loadMyDishes;
   }, [loadMyDishes]);
@@ -198,38 +218,48 @@ export default function MyDishesScreen() {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
-      const userId = data.session?.user?.id ?? null;
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!mounted) return;
+      const userId = userData.user?.id ?? data.session?.user?.id ?? null;
       const guestModeEnabled = !userId ? await loadGuestMode() : false;
+      if (userError && !userId) {
+        router.replace('/');
+        return;
+      }
       setCurrentUserId(userId);
       if (!userId || guestModeEnabled) {
         router.replace('/');
         return;
       }
-      const cachedAvatar = await loadCachedAvatar(userId);
-      if (cachedAvatar) setAvatarUrl(cachedAvatar);
+      await refreshAvatar(userId);
       await loadFavorites(userId);
       await loadOrderVendor(userId);
       await loadMyDishes(userId, { showLoading: dishAssociations.length === 0 });
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      const userId = session?.user?.id ?? null;
-      setCurrentUserId(userId);
-      if (userId) {
-        loadFavorites(userId);
-        loadOrderVendor(userId);
-        loadMyDishes(userId);
-      } else {
-        setFavorites({});
-        setDishAssociations([]);
-        setOrderVendor(null);
-        router.replace('/');
-      }
+      void (async () => {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData.user?.id ?? session?.user?.id ?? null;
+        setCurrentUserId(userId);
+        if (userId) {
+          await refreshAvatar(userId);
+          loadFavorites(userId);
+          loadOrderVendor(userId);
+          loadMyDishes(userId);
+        } else {
+          setAvatarUrl(null);
+          setFavorites({});
+          setDishAssociations([]);
+          setOrderVendor(null);
+          router.replace('/');
+        }
+      })();
     });
     return () => {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [dishAssociations.length, loadFavorites, loadMyDishes, loadOrderVendor]);
+  }, [dishAssociations.length, loadFavorites, loadMyDishes, loadOrderVendor, refreshAvatar, router]);
 
   const refreshContent = useCallback(async () => {
     if (!currentUserId) return;
@@ -245,20 +275,22 @@ export default function MyDishesScreen() {
     useCallback(() => {
       let active = true;
       (async () => {
-        const { data } = await supabase.auth.getSession();
-        const userId = data.session?.user?.id ?? null;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData.user?.id ?? sessionData.session?.user?.id ?? null;
         const guestModeEnabled = !userId ? await loadGuestMode() : false;
         if (active && (!userId || guestModeEnabled)) {
           router.replace({ pathname: '/', params: { refresh: String(Date.now()) } });
           return;
         }
+        await refreshAvatar(userId);
         refreshContent();
       })();
 
       return () => {
         active = false;
       };
-    }, [refreshContent, router])
+    }, [refreshAvatar, refreshContent, router])
   );
 
   useEffect(() => {
@@ -271,6 +303,13 @@ export default function MyDishesScreen() {
     });
     return () => subscription.remove();
   }, [refreshContent]);
+
+  useEffect(() => {
+    return subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
+      if (!currentUserId || userId !== currentUserId) return;
+      setAvatarUrl(nextAvatarUrl);
+    });
+  }, [currentUserId]);
 
   const handleAvatarPress = useCallback((url: string | null, label: string | null) => {
     setAvatarPreviewUrl(url);

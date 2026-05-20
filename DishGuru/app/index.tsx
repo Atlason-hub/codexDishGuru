@@ -22,7 +22,7 @@ import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
 import { openVendorDish } from '../lib/orderVendor';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { buildAuthRedirectUrl } from '../lib/authRedirect';
-import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
+import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar, resolveAvatarForUser } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import StaggeredEntrance from '../components/StaggeredEntrance';
 import LegalModal from '../components/LegalModal';
@@ -50,8 +50,9 @@ import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { getLegalUrl, useLocale } from '../lib/locale';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 import { publishHomeTab, subscribeHomeTab, type HomeTabKey } from '../lib/homeTabs';
+import { subscribeAvatarUpdates } from '../lib/avatarEvents';
 
-const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+const SUPABASE_URL = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
 const primaryActionColor = '#C75D2C';
 const HOME_FEED_FINAL_WAIT_MS = 2200;
 
@@ -141,16 +142,27 @@ export default function HomeScreen() {
 
   const resolveLogoUrl = (raw: string | null | undefined) => {
     if (!raw) return null;
+    if (raw.includes('/storage/v1/object/public/')) {
+      const parts = raw.split('/storage/v1/object/public/');
+      if (parts.length === 2) {
+        const tail = parts[1];
+        const segments = tail.split('/');
+        const bucket = segments[0];
+        const objectPath = segments.slice(1).join('/');
+        const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+        return data?.publicUrl ?? raw;
+      }
+    }
     if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
     if (raw.startsWith('//')) return `https:${raw}`;
-    if (raw.includes('/storage/v1/object/public/')) return raw;
 
     const trimmed = raw.replace(/^\/+/, '');
     const objectPath = trimmed.startsWith('companies/')
       ? trimmed.replace(/^companies\//, '')
       : trimmed;
-    const { data } = supabase.storage.from('companies').getPublicUrl(objectPath);
-    return data?.publicUrl ?? `${SUPABASE_URL}/storage/v1/object/public/companies/${objectPath}`;
+    const bucket = trimmed.startsWith('companies/') ? 'company-logos' : 'company-logos';
+    const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+    return data?.publicUrl ?? `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${objectPath}`;
   };
 
   const getEmailDomain = (value: string | null | undefined) => {
@@ -568,10 +580,14 @@ export default function HomeScreen() {
             setCompanyLogoUrl(resolved);
             setCompanyLogoPath(cached.logoPath);
           }
-          const metaAvatar = await fetchAvatarFromAuth();
-          if (!mounted || !metaAvatar) return;
-          setAvatarUrl(metaAvatar);
-          await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
+          const userId = data.session?.user?.id ?? null;
+          const resolvedAvatar = await resolveAvatarForUser(
+            userId,
+            (data.session?.user?.user_metadata as any)?.avatar_url ?? null
+          );
+          if (!mounted || !resolvedAvatar) return;
+          setAvatarUrl(resolvedAvatar);
+          await cacheAvatar(userId, resolvedAvatar);
         })();
         if (data.session?.user?.id) {
           const domain = getEmailDomain(data.session.user.email ?? null);
@@ -595,10 +611,13 @@ export default function HomeScreen() {
       setIsAuthenticated(Boolean(session));
       setCurrentUserId(session?.user?.id ?? null);
       setCurrentUserEmail(session?.user?.email ?? null);
-      const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
-      if (metaAvatar) {
-        setAvatarUrl(metaAvatar);
-        cacheAvatar(session?.user?.id ?? null, metaAvatar);
+      const resolvedAvatar = await resolveAvatarForUser(
+        session?.user?.id ?? null,
+        (session?.user?.user_metadata as any)?.avatar_url ?? null
+      );
+      if (resolvedAvatar) {
+        setAvatarUrl(resolvedAvatar);
+        cacheAvatar(session?.user?.id ?? null, resolvedAvatar);
       } else {
         setAvatarUrl(null);
         cacheAvatar(session?.user?.id ?? null, null);
@@ -679,6 +698,13 @@ export default function HomeScreen() {
       setFavorites({});
     }
   }, [currentUserId, loadFavorites]);
+
+  useEffect(() => {
+    return subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
+      if (!currentUserId || userId !== currentUserId) return;
+      setAvatarUrl(nextAvatarUrl);
+    });
+  }, [currentUserId]);
 
   useEffect(() => {
     const handle = setTimeout(() => {

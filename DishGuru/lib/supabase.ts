@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const supabaseUrl = 'https://snbreqnndprgbfgiiynd.supabase.co';
-const supabaseAnonKey = 'sb_publishable_MhAe1ld13gUdTherOMkjKQ_ySHA_TtZ';
+const supabaseUrl = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
+const supabaseAnonKey = 'sb_publishable_7JyR16-ZDFnkOPYMHZrczA_oE10ympy';
+const expectedJwtIssuer = `${supabaseUrl}/auth/v1`;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -16,6 +17,28 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 const isInvalidRefreshTokenError = (message: string | undefined) =>
   typeof message === 'string' && /invalid refresh token|refresh token not found/i.test(message);
+
+const decodeJwtPayload = (token: string | undefined | null) => {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const json =
+      globalThis.atob?.(padded) ??
+      Buffer.from(padded, 'base64').toString('utf8');
+    return JSON.parse(json) as { iss?: string };
+  } catch {
+    return null;
+  }
+};
+
+const sessionMatchesCurrentProject = (session: { access_token?: string } | null | undefined) => {
+  const payload = decodeJwtPayload(session?.access_token);
+  const issuer = payload?.iss?.replace(/\/+$/, '') ?? null;
+  return issuer === expectedJwtIssuer;
+};
 
 const rawGetSession = supabase.auth.getSession.bind(supabase.auth);
 const rawGetUser = supabase.auth.getUser.bind(supabase.auth);
@@ -56,6 +79,10 @@ supabase.auth.getSession = (async () => {
       await recoverInvalidStoredSession();
       return emptySessionResult;
     }
+    if (result.data.session && !sessionMatchesCurrentProject(result.data.session)) {
+      await recoverInvalidStoredSession();
+      return emptySessionResult;
+    }
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -71,6 +98,10 @@ supabase.auth.getUser = (async (jwt?: string) => {
   try {
     const result = await rawGetUser(jwt);
     if (isInvalidRefreshTokenError(result.error?.message)) {
+      await recoverInvalidStoredSession();
+      return emptyUserResult;
+    }
+    if (result.data.user && jwt && !sessionMatchesCurrentProject({ access_token: jwt })) {
       await recoverInvalidStoredSession();
       return emptyUserResult;
     }

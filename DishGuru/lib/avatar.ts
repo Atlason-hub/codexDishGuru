@@ -3,6 +3,22 @@ import { supabase } from './supabase';
 
 const AVATAR_CACHE_PREFIX = 'userAvatarUrl:';
 
+const normalizeAvatarUrl = (raw: string | null | undefined): string | null => {
+  if (!raw) return null;
+  if (raw.includes('/storage/v1/object/public/')) {
+    const parts = raw.split('/storage/v1/object/public/');
+    if (parts.length === 2) {
+      const tail = parts[1];
+      const segments = tail.split('/');
+      const bucket = segments[0];
+      const objectPath = segments.slice(1).join('/');
+      const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+      return data?.publicUrl ?? raw;
+    }
+  }
+  return raw;
+};
+
 const getAvatarCacheKey = (userId: string | null | undefined) => {
   if (!userId) return null;
   return `${AVATAR_CACHE_PREFIX}${userId}`;
@@ -13,7 +29,7 @@ export const loadCachedAvatar = async (userId: string | null | undefined): Promi
     const key = getAvatarCacheKey(userId);
     if (!key) return null;
     const raw = await AsyncStorage.getItem(key);
-    return raw ?? null;
+    return normalizeAvatarUrl(raw);
   } catch {
     return null;
   }
@@ -29,8 +45,34 @@ export const cacheAvatar = async (userId: string | null | undefined, url: string
   await AsyncStorage.setItem(key, url);
 };
 
+export const fetchAvatarFromProfile = async (userId: string | null | undefined): Promise<string | null> => {
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('AppUsers')
+    .select('avatar_url')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return null;
+  return normalizeAvatarUrl((data as { avatar_url?: string | null } | null)?.avatar_url ?? null);
+};
+
+export const resolveAvatarForUser = async (
+  userId: string | null | undefined,
+  authAvatarUrl?: string | null | undefined
+): Promise<string | null> => {
+  const profileAvatar = await fetchAvatarFromProfile(userId);
+  if (profileAvatar) return profileAvatar;
+  return normalizeAvatarUrl(authAvatarUrl ?? null);
+};
+
 export const fetchAvatarFromAuth = async (): Promise<string | null> => {
   const { data, error } = await supabase.auth.getUser();
+  const userId = data.user?.id ?? null;
+  const resolvedAvatar = await resolveAvatarForUser(
+    userId,
+    (data.user?.user_metadata as any)?.avatar_url ?? null
+  );
+  if (resolvedAvatar) return resolvedAvatar;
   if (error) return null;
-  return (data.user?.user_metadata as any)?.avatar_url ?? null;
+  return null;
 };

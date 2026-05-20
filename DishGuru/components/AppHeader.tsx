@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
-import { cacheAvatar, loadCachedAvatar } from '../lib/avatar';
+import { cacheAvatar, loadCachedAvatar, resolveAvatarForUser } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedLogo from './CachedLogo';
 import LegalModal from './LegalModal';
@@ -25,22 +25,34 @@ import { fetchGlobalCompanyContext } from '../lib/appData';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 import { publishHomeTab } from '../lib/homeTabs';
 import { showAppAlert } from '../lib/appDialog';
+import { subscribeAvatarUpdates } from '../lib/avatarEvents';
 
-const SUPABASE_URL = 'https://snbreqnndprgbfgiiynd.supabase.co';
+const SUPABASE_URL = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
 let lastKnownCompanyLogoUrl: string | null = null;
 
 const resolveLogoUrl = (raw: string | null | undefined) => {
   if (!raw) return null;
+  if (raw.includes('/storage/v1/object/public/')) {
+    const parts = raw.split('/storage/v1/object/public/');
+    if (parts.length === 2) {
+      const tail = parts[1];
+      const segments = tail.split('/');
+      const bucket = segments[0];
+      const objectPath = segments.slice(1).join('/');
+      const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+      return data?.publicUrl ?? raw;
+    }
+  }
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
   if (raw.startsWith('//')) return `https:${raw}`;
-  if (raw.includes('/storage/v1/object/public/')) return raw;
 
   const trimmed = raw.replace(/^\/+/, '');
   const objectPath = trimmed.startsWith('companies/')
     ? trimmed.replace(/^companies\//, '')
     : trimmed;
-  const { data } = supabase.storage.from('companies').getPublicUrl(objectPath);
-  return data?.publicUrl ?? `${SUPABASE_URL}/storage/v1/object/public/companies/${objectPath}`;
+  const bucket = trimmed.startsWith('companies/') ? 'company-logos' : 'company-logos';
+  const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+  return data?.publicUrl ?? `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${objectPath}`;
 };
 
 const getEmailDomain = (value: string | null | undefined) => {
@@ -161,12 +173,16 @@ export default function AppHeader() {
     }
 
     const metaAvatar = getSessionAvatarUrl(session);
-    if (metaAvatar) {
-      setAvatarUrl(metaAvatar);
-      await cacheAvatar(userId, metaAvatar);
+    const resolvedAvatar = await resolveAvatarForUser(userId, metaAvatar);
+    if (resolvedAvatar) {
+      setAvatarUrl(resolvedAvatar);
+      await cacheAvatar(userId, resolvedAvatar);
     } else if (!userId) {
       setAvatarUrl(null);
       await cacheAvatar(null, null);
+    } else {
+      setAvatarUrl(null);
+      await cacheAvatar(userId, null);
     }
 
     if (userId) {
@@ -229,6 +245,13 @@ export default function AppHeader() {
       subscription.subscription.unsubscribe();
     };
   }, [guestModeParam, headerSyncParam, refreshParam, skipLaunchParam, syncHeaderState]);
+
+  useEffect(() => {
+    return subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
+      if (!currentUserId || userId !== currentUserId) return;
+      setAvatarUrl(nextAvatarUrl);
+    });
+  }, [currentUserId]);
 
   const signOut = async () => {
     setMenuVisible(false);

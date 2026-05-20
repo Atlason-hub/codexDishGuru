@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LOGO_CACHE_KEY = 'companyLogoCache';
-const SUPABASE_BASE = 'https://snbreqnndprgbfgiiynd.supabase.co';
+const SUPABASE_BASE = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
 
 type LogoResult = {
   logoUrl: string | null;
@@ -18,6 +18,17 @@ const normalizeLogo = (raw: string | null | undefined): LogoResult => {
   if (!raw) return { logoUrl: null, logoPath: null };
   if (raw.startsWith('data:')) return { logoUrl: raw, logoPath: raw };
   if (raw.startsWith('//')) return { logoUrl: `https:${raw}`, logoPath: raw };
+  if (raw.includes('/storage/v1/object/public/')) {
+    const parts = raw.split('/storage/v1/object/public/');
+    if (parts.length === 2) {
+      const tail = parts[1];
+      const segments = tail.split('/');
+      const bucket = segments[0];
+      const objectPath = segments.slice(1).join('/');
+      const fallback = supabase.storage.from(bucket).getPublicUrl(objectPath);
+      return { logoUrl: fallback.data?.publicUrl ?? raw, logoPath: objectPath };
+    }
+  }
   if (raw.startsWith('http://') || raw.startsWith('https://')) return { logoUrl: raw, logoPath: raw };
   if (raw.startsWith('/')) return { logoUrl: `${SUPABASE_BASE}${raw}`, logoPath: raw };
   return { logoUrl: `${SUPABASE_BASE}/${raw}`, logoPath: raw };

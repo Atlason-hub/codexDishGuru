@@ -14,7 +14,7 @@ import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Buffer } from 'buffer';
 import { Image } from 'expo-image';
-import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar } from '../lib/avatar';
+import { cacheAvatar, fetchAvatarFromAuth, fetchAvatarFromProfile, loadCachedAvatar, resolveAvatarForUser } from '../lib/avatar';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -23,6 +23,7 @@ import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { Locale, useLocale } from '../lib/locale';
 import { clearCachedLogo } from '../lib/logo';
 import { setGuestModeEnabled } from '../lib/guestMode';
+import { publishAvatarUpdate } from '../lib/avatarEvents';
 
 export default function AccountScreen() {
   const FRAME_SIZE = 180;
@@ -76,6 +77,102 @@ export default function AccountScreen() {
     if (typeof error === 'string' && error.trim()) return error;
     return t('commonUnexpectedError');
   };
+
+  const ensureAvatarSavedToProfile = useCallback(
+    async (userId: string, emailAddress: string | null, avatarUrlToSave: string) => {
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('AppUsers')
+        .update({ avatar_url: avatarUrlToSave })
+        .eq('user_id', userId)
+        .select('user_id, avatar_url')
+        .maybeSingle();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      if (updatedProfile?.user_id) {
+        return avatarUrlToSave;
+      }
+
+      const normalizedEmail = emailAddress?.trim().toLowerCase() ?? '';
+      if (!normalizedEmail) {
+        throw new Error(t('accountReloginToDelete'));
+      }
+
+      const existingByEmail = await supabase
+        .from('AppUsers')
+        .select('user_id, avatar_url')
+        .ilike('email', normalizedEmail)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingByEmail.error) {
+        throw existingByEmail.error;
+      }
+
+      if (existingByEmail.data?.user_id) {
+        const { data: recoveredProfile, error: recoverError } = await supabase
+          .from('AppUsers')
+          .update({ user_id: userId, avatar_url: avatarUrlToSave })
+          .eq('email', normalizedEmail)
+          .select('user_id, avatar_url')
+          .maybeSingle();
+
+        if (recoverError) {
+          throw recoverError;
+        }
+
+        if (recoveredProfile?.user_id) {
+          return avatarUrlToSave;
+        }
+      }
+
+      const domain = normalizedEmail.includes('@')
+        ? normalizedEmail.split('@').pop()?.trim().toLowerCase() ?? ''
+        : '';
+      if (!domain) {
+        throw new Error(t('authEmailDomainMissing'));
+      }
+
+      const { data: companyMatch, error: companyError } = await supabase
+        .from('companies')
+        .select('id')
+        .ilike('domain', domain)
+        .limit(1)
+        .maybeSingle();
+
+      if (companyError) {
+        throw companyError;
+      }
+
+      if (!companyMatch?.id) {
+        throw new Error(t('authEmailDomainUnknown'));
+      }
+
+      const { data: insertedProfile, error: insertError } = await supabase
+        .from('AppUsers')
+        .insert({
+          user_id: userId,
+          email: normalizedEmail,
+          company_id: companyMatch.id,
+          avatar_url: avatarUrlToSave,
+        })
+        .select('user_id, avatar_url')
+        .maybeSingle();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      if (!insertedProfile?.user_id) {
+        throw new Error(t('accountSaveFailed'));
+      }
+
+      return avatarUrlToSave;
+    },
+    [t]
+  );
 
   const routeToLoggedOutHome = useCallback(() => {
     setRedirectingOut(true);
@@ -131,13 +228,23 @@ export default function AccountScreen() {
         routeToLoggedOutHome();
         return;
       }
-      setEmail(data.session?.user?.email ?? null);
-      const cached = await loadCachedAvatar(data.session?.user?.id ?? null);
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!mounted) return;
+      const authUser = userData.user ?? data.session.user ?? null;
+      if (userError || !authUser) {
+        routeToLoggedOutHome();
+        return;
+      }
+      setEmail(authUser.email ?? null);
+      const cached = await loadCachedAvatar(authUser.id);
       if (cached) setAvatarUrl(cached);
-      const metaAvatar = await fetchAvatarFromAuth();
-      if (metaAvatar) {
-        setAvatarUrl(metaAvatar);
-        await cacheAvatar(data.session?.user?.id ?? null, metaAvatar);
+      const resolvedAvatar = await resolveAvatarForUser(
+        authUser.id,
+        (authUser.user_metadata as any)?.avatar_url ?? null
+      );
+      if (resolvedAvatar) {
+        setAvatarUrl(resolvedAvatar);
+        await cacheAvatar(authUser.id, resolvedAvatar);
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -149,14 +256,19 @@ export default function AccountScreen() {
         routeToLoggedOutHome();
         return;
       }
-      setEmail(session?.user?.email ?? null);
-      const metaAvatar = (session?.user?.user_metadata as any)?.avatar_url ?? null;
-      if (metaAvatar) {
-        setAvatarUrl(metaAvatar);
-        cacheAvatar(session?.user?.id ?? null, metaAvatar);
+      const { data: userData } = await supabase.auth.getUser();
+      const authUser = userData.user ?? session.user ?? null;
+      setEmail(authUser?.email ?? null);
+      const resolvedAvatar = await resolveAvatarForUser(
+        authUser?.id ?? null,
+        (authUser?.user_metadata as any)?.avatar_url ?? null
+      );
+      if (resolvedAvatar) {
+        setAvatarUrl(resolvedAvatar);
+        cacheAvatar(authUser?.id ?? null, resolvedAvatar);
       } else {
         setAvatarUrl(null);
-        cacheAvatar(session?.user?.id ?? null, null);
+        cacheAvatar(authUser?.id ?? null, null);
       }
     });
     return () => {
@@ -370,8 +482,10 @@ export default function AccountScreen() {
                 if (!pendingAsset || saving) return;
                 try {
                   setSaving(true);
-                  const { data } = await supabase.auth.getSession();
-                  const userId = data.session?.user?.id;
+                  const { data: userData, error: userError } = await supabase.auth.getUser();
+                  const userId = userData.user?.id;
+                  const userEmail = userData.user?.email ?? email;
+                  if (userError) throw userError;
                   if (!userId) return;
                   const imageLeft = FRAME_SIZE / 2 - displayWidth / 2 + avatarOffset.x;
                   const imageTop = FRAME_SIZE / 2 - displayHeight / 2 + avatarOffset.y;
@@ -415,25 +529,15 @@ export default function AccountScreen() {
                   const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(filePath);
                   const url = publicData?.publicUrl ?? null;
                   if (url) {
-                    await supabase.auth.updateUser({ data: { avatar_url: url } });
-                    const { data: sessionData } = await supabase.auth.getSession();
-                    const currentUserId = sessionData.session?.user?.id ?? null;
-                    if (currentUserId) {
-                      const { error: profileError } = await supabase
-                        .from('AppUsers')
-                        .update({ avatar_url: url })
-                        .eq('user_id', currentUserId);
-                      if (profileError) {
-                        throw profileError;
-                      }
-                    }
-                    setAvatarUrl(url);
-                    await cacheAvatar(userId, url);
+                    const persistedAvatarUrl = await ensureAvatarSavedToProfile(userId, userEmail, url);
+                    setAvatarUrl(persistedAvatarUrl);
+                    await cacheAvatar(userId, persistedAvatarUrl);
+                    publishAvatarUpdate(userId, persistedAvatarUrl);
                     setPendingAsset(null);
                     setTempAvatarUrl(null);
                     setAvatarOffset({ x: 0, y: 0 });
                     setZoom(MIN_ZOOM);
-                    router.replace('/');
+                    showAppAlert(t('accountSaveSuccessTitle'), t('accountSaveSuccessMessage'));
                   }
                 } catch (error) {
                   showAppAlert(
