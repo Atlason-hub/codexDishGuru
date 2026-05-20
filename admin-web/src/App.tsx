@@ -624,7 +624,6 @@ function CompaniesPage() {
     setLogoUrl(undefined);
     setLogoFile(null);
     setLogoError(null);
-    setLogoDebug(null);
     setEditingId(null);
     setShowForm(false);
     setSubmitAttempted(false);
