@@ -23,6 +23,7 @@ import EmojiRatingInput from '../../components/EmojiRatingInput';
 import { showAppAlert } from '../../lib/appDialog';
 import { useLocale } from '../../lib/locale';
 import { fetchCompanyIdForUser } from '../../lib/appData';
+import { getImageContentType, loadImageBytesFromUri } from '../../lib/localImage';
 import {
   useEnableAndroidLayoutAnimation,
   useKeyboardInset,
@@ -510,24 +511,23 @@ export default function CameraDetailsScreen() {
       if (authenticatedUserId !== currentUserId) {
         setCurrentUserId(authenticatedUserId);
       }
-      if (!photoBase64) {
-        showAppAlert(t('cameraMissingImageTitle'), t('cameraRetakePhotoPrompt'));
-        return;
-      }
-      const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
+      const { ext, contentType } = getImageContentType(photoUri);
       const filePath = `${authenticatedUserId}/${draftSubmissionKeyRef.current}.${ext}`;
-      const base64ToArrayBuffer = (b64: string) => {
-        const binary = globalThis.atob ? globalThis.atob(b64) : Buffer.from(b64, 'base64').toString('binary');
-        const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
-        return bytes.buffer;
-      };
-      const bytes = base64ToArrayBuffer(photoBase64);
+      const bytes = photoBase64
+        ? (() => {
+            const binary = globalThis.atob
+              ? globalThis.atob(photoBase64)
+              : Buffer.from(photoBase64, 'base64').toString('binary');
+            const len = binary.length;
+            const rawBytes = new Uint8Array(len);
+            for (let i = 0; i < len; i += 1) rawBytes[i] = binary.charCodeAt(i);
+            return rawBytes.buffer;
+          })()
+        : await loadImageBytesFromUri(photoUri);
       const upload = await supabase.storage
         .from('dish-images')
         .upload(filePath, bytes, {
-          contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+          contentType,
           upsert: true,
       });
       if (upload.error) throw upload.error;
@@ -951,11 +951,11 @@ export default function CameraDetailsScreen() {
           style={({ pressed }) => [
             styles.saveButton,
             !isRTL && styles.saveButtonLtr,
-            pressed && !saving && photoUri && photoBase64 && styles.saveButtonPressed,
-            (saving || !photoUri || !photoBase64) && styles.saveButtonDisabled,
+            pressed && !saving && photoUri && styles.saveButtonPressed,
+            (saving || !photoUri) && styles.saveButtonDisabled,
           ]}
           onPress={handleSave}
-          disabled={saving || saveInFlightRef.current || !photoUri || !photoBase64}
+          disabled={saving || saveInFlightRef.current || !photoUri}
         >
           {saving ? (
             <ActivityIndicator color={theme.colors.accent} />

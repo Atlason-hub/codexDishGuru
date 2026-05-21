@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
+  Keyboard,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -1176,6 +1177,7 @@ export default function HomeScreen() {
 
 
   const signIn = async () => {
+    Keyboard.dismiss();
     setDebugStage('signin:start');
     if (!email.trim() || !pass.trim()) {
       setDebugStage('signin:validation-error');
@@ -1215,6 +1217,7 @@ export default function HomeScreen() {
   };
 
   const signUp = async () => {
+    Keyboard.dismiss();
     setDebugStage('signup:start');
     if (!email.trim() || !pass.trim() || !confirmPass.trim()) {
       setDebugStage('signup:validation-error');

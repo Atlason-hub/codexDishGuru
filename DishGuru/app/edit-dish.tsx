@@ -20,6 +20,7 @@ import { theme } from '../lib/theme';
 import { scoreToStars, starsToScore } from '../lib/ratings';
 import EmojiRatingInput from '../components/EmojiRatingInput';
 import { showAppAlert } from '../lib/appDialog';
+import { getImageContentType, loadImageBytesFromUri } from '../lib/localImage';
 import { useLocale } from '../lib/locale';
 
 type DishAssociation = {
@@ -150,20 +151,31 @@ export default function EditDishScreen() {
       let imageUrl = dish.image_url;
       let imagePath = dish.image_path;
       if (photoBase64 && photoUri) {
-        const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
+        const { ext, contentType } = getImageContentType(photoUri);
         const filePath = `${authenticatedUserId}/${Date.now()}.${ext}`;
-        const base64ToArrayBuffer = (b64: string) => {
-        const binary = globalThis.atob
-          ? globalThis.atob(b64)
-          : Buffer.from(b64, 'base64').toString('binary');
+        const bytes = (() => {
+          const binary = globalThis.atob
+            ? globalThis.atob(photoBase64)
+            : Buffer.from(photoBase64, 'base64').toString('binary');
           const len = binary.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
-          return bytes.buffer;
-        };
-        const bytes = base64ToArrayBuffer(photoBase64);
+          const rawBytes = new Uint8Array(len);
+          for (let i = 0; i < len; i += 1) rawBytes[i] = binary.charCodeAt(i);
+          return rawBytes.buffer;
+        })();
         const upload = await supabase.storage.from('dish-images').upload(filePath, bytes, {
-          contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+          contentType,
+          upsert: true,
+        });
+        if (upload.error) throw upload.error;
+        const { data: publicData } = supabase.storage.from('dish-images').getPublicUrl(filePath);
+        imageUrl = publicData?.publicUrl ?? imageUrl;
+        imagePath = filePath;
+      } else if (photoUri && photoUri.startsWith('file://')) {
+        const { ext, contentType } = getImageContentType(photoUri);
+        const filePath = `${authenticatedUserId}/${Date.now()}.${ext}`;
+        const bytes = await loadImageBytesFromUri(photoUri);
+        const upload = await supabase.storage.from('dish-images').upload(filePath, bytes, {
+          contentType,
           upsert: true,
         });
         if (upload.error) throw upload.error;

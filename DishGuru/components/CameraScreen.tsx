@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import React, { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useLocale } from '../lib/locale';
@@ -111,7 +111,7 @@ export default function CameraScreen() {
         },
         { resize: { width: 1200, height: 900 } },
       ],
-      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
 
     return result;
@@ -125,7 +125,7 @@ export default function CameraScreen() {
     try {
       setIsCapturing(true);
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
+        quality: 0.75,
         skipProcessing: false,
       });
       const cropped = await cropToViewfinder({
@@ -140,7 +140,6 @@ export default function CameraScreen() {
           params: {
             id: editId,
             photoUri: encodeURIComponent(cropped.uri),
-            photoBase64: cropped.base64 ?? '',
             returnTo,
             scrollY: returnScroll,
           },
@@ -150,7 +149,6 @@ export default function CameraScreen() {
           pathname: '/camera/details',
           params: {
             photoUri: encodeURIComponent(cropped.uri),
-            photoBase64: cropped.base64 ?? '',
             restaurantId,
             restaurantName,
             dishId,

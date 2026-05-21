@@ -68,7 +68,7 @@ export default function HomeAuthView({
       <ScrollView
         style={styles.authScroll}
         contentContainerStyle={styles.authScrollContent}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         keyboardDismissMode="interactive"
         automaticallyAdjustKeyboardInsets
         showsVerticalScrollIndicator={false}
@@ -136,6 +136,10 @@ export default function HomeAuthView({
                   secureTextEntry={!showPass}
                   value={pass}
                   onChangeText={onPassChange}
+                  returnKeyType={showSignup ? 'next' : 'go'}
+                  onSubmitEditing={() => {
+                    if (!showSignup) onSignIn();
+                  }}
                   textAlign="left"
                   selectionColor={theme.colors.accent}
                   cursorColor={theme.colors.accent}
@@ -161,6 +165,8 @@ export default function HomeAuthView({
                     secureTextEntry={!showConfirmPass}
                     value={confirmPass}
                     onChangeText={onConfirmPassChange}
+                    returnKeyType="go"
+                    onSubmitEditing={onSignUp}
                     textAlign="left"
                     selectionColor={theme.colors.accent}
                     cursorColor={theme.colors.accent}
