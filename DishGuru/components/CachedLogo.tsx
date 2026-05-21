@@ -8,6 +8,8 @@ type Props = {
   transition?: number | null;
   priority?: 'low' | 'normal' | 'high';
   allowDownscaling?: boolean;
+  cachePolicy?: 'none' | 'disk' | 'memory' | 'memory-disk' | null;
+  onError?: () => void;
 };
 
 export default function CachedLogo({
@@ -17,17 +19,20 @@ export default function CachedLogo({
   transition = 200,
   priority = 'normal',
   allowDownscaling = true,
+  cachePolicy = 'memory-disk',
+  onError,
 }: Props) {
   return (
     <Image
       source={{ uri }}
       style={style}
-      cachePolicy="memory-disk"
+      cachePolicy={cachePolicy ?? 'memory-disk'}
       contentFit={contentFit}
       placeholderContentFit={contentFit}
       transition={transition}
       priority={priority}
       allowDownscaling={allowDownscaling}
+      onError={onError}
     />
   );
 }

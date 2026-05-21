@@ -238,6 +238,7 @@ export default function CameraDetailsScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const scrollRef = useRef<ScrollView | null>(null);
+  const reviewInputYRef = useRef(0);
   const restaurantsRequestIdRef = useRef(0);
   const menuRequestIdRef = useRef(0);
   const hasNudgedRestaurantSearchRef = useRef(false);
@@ -245,6 +246,10 @@ export default function CameraDetailsScreen() {
   const restaurantSearchFocusedRef = useRef(false);
   const dishSearchFocusedRef = useRef(false);
   const keyboardVisibleRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const draftSubmissionKeyRef = useRef(
+    `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
   const photoUri = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
   const photoBase64 = typeof params.photoBase64 === 'string' ? params.photoBase64 : '';
   const presetRestaurantId =
@@ -289,6 +294,10 @@ export default function CameraDetailsScreen() {
   const [saving, setSaving] = useState(false);
 
   useEnableAndroidLayoutAnimation();
+
+  useEffect(() => {
+    draftSubmissionKeyRef.current = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }, [photoUri, photoBase64, selectedRestaurantId, selectedDish?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -476,7 +485,7 @@ export default function CameraDetailsScreen() {
   }, [currentUserId, fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
 
   const handleSave = async () => {
-    if (saving) return;
+    if (saving || saveInFlightRef.current) return;
     if (!photoUri) {
       showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
       return;
@@ -490,6 +499,7 @@ export default function CameraDetailsScreen() {
       return;
     }
     try {
+      saveInFlightRef.current = true;
       setSaving(true);
       const { data: authData, error: authError } = await supabase.auth.getUser();
       const authenticatedUserId = authData.user?.id ?? null;
@@ -505,7 +515,7 @@ export default function CameraDetailsScreen() {
         return;
       }
       const ext = photoUri.split('.').pop()?.split('?')[0] ?? 'jpg';
-      const filePath = `${authenticatedUserId}/${Date.now()}.${ext}`;
+      const filePath = `${authenticatedUserId}/${draftSubmissionKeyRef.current}.${ext}`;
       const base64ToArrayBuffer = (b64: string) => {
         const binary = globalThis.atob ? globalThis.atob(b64) : Buffer.from(b64, 'base64').toString('binary');
         const len = binary.length;
@@ -522,6 +532,25 @@ export default function CameraDetailsScreen() {
       });
       if (upload.error) throw upload.error;
       const { data: publicData } = supabase.storage.from('dish-images').getPublicUrl(filePath);
+      const { data: existingRows, error: existingRowsError } = await supabase
+        .from('dish_associations')
+        .select('id')
+        .eq('user_id', authenticatedUserId)
+        .eq('image_path', filePath)
+        .limit(1);
+      if (existingRowsError) throw existingRowsError;
+      if ((existingRows ?? []).length > 0) {
+        router.replace({
+          pathname: '/',
+          params: {
+            refresh: String(Date.now()),
+            headerSync: String(Date.now()),
+            homeTab: 'dishes',
+            scrollY: '0',
+          },
+        });
+        return;
+      }
       const insert = await supabase.from('dish_associations').insert({
         user_id: authenticatedUserId,
         restaurant_id: selectedRestaurantId,
@@ -537,13 +566,23 @@ export default function CameraDetailsScreen() {
         created_at: new Date().toISOString(),
       });
       if (insert.error) throw insert.error;
-      router.replace('/');
+      draftSubmissionKeyRef.current = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      router.replace({
+        pathname: '/',
+        params: {
+          refresh: String(Date.now()),
+          headerSync: String(Date.now()),
+          homeTab: 'dishes',
+          scrollY: '0',
+        },
+      });
     } catch (error) {
       showAppAlert(
         t('cameraSaveFailed'),
         error instanceof Error ? error.message : t('cameraSaveFailed')
       );
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
   };
@@ -622,7 +661,13 @@ export default function CameraDetailsScreen() {
           textAlign="right"
           value={reviewText}
           onChangeText={setReviewText}
-          onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          onLayout={(event) => {
+            reviewInputYRef.current = event.nativeEvent.layout.y;
+          }}
+          onFocus={() => {
+            const targetY = Math.max(0, reviewInputYRef.current - 96);
+            scrollRef.current?.scrollTo({ y: targetY, animated: true });
+          }}
         />
 
         <View style={styles.dropdownContainer}>
@@ -910,6 +955,7 @@ export default function CameraDetailsScreen() {
             (saving || !photoUri || !photoBase64) && styles.saveButtonDisabled,
           ]}
           onPress={handleSave}
+          disabled={saving || saveInFlightRef.current || !photoUri || !photoBase64}
         >
           {saving ? (
             <ActivityIndicator color={theme.colors.accent} />

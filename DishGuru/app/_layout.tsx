@@ -31,7 +31,7 @@ function AppShell() {
           animationMatchesGesture: false,
         }}
       >
-        <Stack.Screen name="index" />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="auth-callback" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="restaurant" options={{ animation: 'none' }} />

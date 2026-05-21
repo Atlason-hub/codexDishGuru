@@ -78,14 +78,34 @@ export const groupHomeAssociations = (
   associations: HomeDishAssociation[],
   searchQuery: string
 ): GroupedHomeAssociation[] => {
+  const dedupedAssociations = (() => {
+    const seen = new Set<string>();
+    return associations.filter((item) => {
+      const semanticKey = [
+        item.user_id ?? '',
+        item.dish_id ?? '',
+        item.restaurant_id ?? '',
+        item.image_path ?? item.image_url ?? '',
+      ].join('|');
+      if (!semanticKey.replace(/\|/g, '')) {
+        return true;
+      }
+      if (seen.has(semanticKey)) {
+        return false;
+      }
+      seen.add(semanticKey);
+      return true;
+    });
+  })();
+
   const needle = searchQuery.trim().toLowerCase();
   const filtered = needle
-    ? associations.filter((item) => {
+    ? dedupedAssociations.filter((item) => {
         const dishName = (item.dish_name ?? '').toLowerCase();
         const restName = (item.restaurant_name ?? '').toLowerCase();
         return dishName.includes(needle) || restName.includes(needle);
       })
-    : associations;
+    : dedupedAssociations;
 
   const groups = new Map<string, HomeDishAssociation[]>();
   filtered.forEach((item) => {

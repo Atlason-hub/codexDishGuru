@@ -37,6 +37,7 @@ const IMAGE_HEIGHT = 260;
 
 type DishCardProps = {
   items: DishCardItem[];
+  reviewStackCount?: number;
   favorites?: Record<string, boolean>;
   currentUserId?: string | null;
   avatarUrl?: string | null;
@@ -58,6 +59,7 @@ type DishCardProps = {
 
 function DishCard({
   items,
+  reviewStackCount,
   favorites = {},
   currentUserId,
   avatarUrl,
@@ -113,6 +115,8 @@ function DishCard({
     () => (currentItem?.created_at ? new Date(currentItem.created_at).toLocaleDateString() : ''),
     [currentItem?.created_at]
   );
+  const effectiveReviewStackCount = Math.max(reviewStackCount ?? 0, items.length);
+  const showMultiReviewMarker = effectiveReviewStackCount > 1;
 
   const bouncePress = (scale: Animated.Value) => {
     Animated.sequence([
@@ -168,19 +172,36 @@ function DishCard({
             onMomentumScrollEnd={handleCarouselMomentumEnd}
             style={styles.carouselScroll}
           >
-            {items.map((imageItem) => (
-              <View key={imageItem.id} style={[styles.imageSlide, { width: imageWidth || '100%' }]}>
+            {items.map((imageItem, index) => (
+              <View
+                key={`${imageItem.id ?? 'image'}-${index}`}
+                style={[styles.imageSlide, { width: imageWidth || '100%' }]}
+              >
                 <Pressable
                   style={styles.imagePressable}
                   onPress={() => onOpenPhoto?.(imageItem)}
                   onLongPress={() => onPreviewImage?.(imageItem)}
                   delayLongPress={180}
                 >
-                  {imageItem.image_url ? (
-                    <CachedLogo uri={imageItem.image_url} style={styles.feedImage} />
-                  ) : (
-                    <View style={styles.feedImagePlaceholder} />
-                  )}
+                  <View style={styles.imageStackWrap}>
+                    {showMultiReviewMarker ? (
+                      <>
+                        <View style={[styles.imageStackLayer, styles.imageStackLayerBack]} />
+                        <View style={[styles.imageStackLayer, styles.imageStackLayerMid]} />
+                      </>
+                    ) : null}
+                    {imageItem.image_url ? (
+                      <CachedLogo uri={imageItem.image_url} style={styles.feedImage} />
+                    ) : (
+                      <View style={styles.feedImagePlaceholder} />
+                    )}
+                    {showMultiReviewMarker ? (
+                      <View style={styles.multiReviewBadge}>
+                        <Ionicons name="copy-outline" size={10} color={theme.colors.white} />
+                        <Text style={styles.multiReviewBadgeText}>{effectiveReviewStackCount}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </Pressable>
               </View>
             ))}
@@ -193,11 +214,25 @@ function DishCard({
             onLongPress={() => currentItem && onPreviewImage?.(currentItem)}
             delayLongPress={180}
           >
-            {currentItem?.image_url ? (
-              <CachedLogo uri={currentItem.image_url} style={styles.feedImage} />
-            ) : (
-              <View style={styles.feedImagePlaceholder} />
-            )}
+            <View style={styles.imageStackWrap}>
+              {showMultiReviewMarker ? (
+                <>
+                  <View style={[styles.imageStackLayer, styles.imageStackLayerBack]} />
+                  <View style={[styles.imageStackLayer, styles.imageStackLayerMid]} />
+                </>
+              ) : null}
+              {currentItem?.image_url ? (
+                <CachedLogo uri={currentItem.image_url} style={styles.feedImage} />
+              ) : (
+                <View style={styles.feedImagePlaceholder} />
+              )}
+              {showMultiReviewMarker ? (
+                <View style={styles.multiReviewBadge}>
+                  <Ionicons name="copy-outline" size={10} color={theme.colors.white} />
+                  <Text style={styles.multiReviewBadgeText}>{effectiveReviewStackCount}</Text>
+                </View>
+              ) : null}
+            </View>
           </Pressable>
         )}
         <View
@@ -534,6 +569,7 @@ const mapsEqualForUsers = (
 
 export default React.memo(DishCard, (prev, next) => {
   if (!itemsEqual(prev.items, next.items)) return false;
+  if (prev.reviewStackCount !== next.reviewStackCount) return false;
   if (!favoritesEqual(prev.favorites, next.favorites, next.items)) return false;
   if (prev.currentUserId !== next.currentUserId) return false;
   if (prev.avatarUrl !== next.avatarUrl) return false;
@@ -602,10 +638,57 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
   },
+  imageStackWrap: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  imageStackLayer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.32)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.42)',
+  },
+  imageStackLayerBack: {
+    left: 16,
+    right: -16,
+    top: 12,
+    bottom: -12,
+    opacity: 0.28,
+  },
+  imageStackLayerMid: {
+    left: 8,
+    right: -8,
+    top: 6,
+    bottom: -6,
+    opacity: 0.42,
+  },
   feedImagePlaceholder: {
     width: '100%',
     height: '100%',
     backgroundColor: theme.colors.cardAlt,
+  },
+  multiReviewBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(50, 34, 20, 0.82)',
+    zIndex: 4,
+  },
+  multiReviewBadgeText: {
+    color: theme.colors.white,
+    fontSize: 11,
+    fontFamily: theme.typography.bold,
+    lineHeight: 14,
   },
   imagePressable: {
     position: 'absolute',

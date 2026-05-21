@@ -37,6 +37,15 @@ const orderVendorCache = new Map<string, TimedCacheEntry<string | null>>();
 const companyUserIdsCache = new Map<string, TimedCacheEntry<string[]>>();
 let globalCompanyContextCache: TimedCacheEntry<GuestCompanyContext | null> | null = null;
 
+export const primeCompanyIdForUser = (userId: string, companyId: string | null) => {
+  companyIdCache.set(userId, writeTimedCache(companyId));
+};
+
+export const clearUserScopedCaches = (userId: string) => {
+  companyIdCache.delete(userId);
+  orderVendorCache.delete(userId);
+};
+
 const readTimedCache = <T>(entry: TimedCacheEntry<T> | null | undefined) => {
   if (!entry) return { hit: false as const, value: null as T | null };
   if (Date.now() > entry.expiresAt) {
@@ -139,13 +148,47 @@ export const fetchCompanyIdForUser = async (userId: string) => {
   if (cached.hit) {
     return cached.value;
   }
-  const { data: profile, error: profileError } = await supabase
+  const { data: preferredProfile, error: preferredProfileError } = await supabase
     .from('AppUsers')
     .select('company_id')
     .eq('user_id', userId)
+    .not('company_id', 'is', null)
+    .order('updated_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
-  if (profileError) return null;
-  const companyId = profile?.company_id ?? null;
+  if (preferredProfileError) return null;
+  let companyId = preferredProfile?.company_id ?? null;
+  if (!companyId) {
+    const { data: profile, error: profileError } = await supabase
+      .from('AppUsers')
+      .select('company_id')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (profileError) return null;
+    companyId = profile?.company_id ?? null;
+  }
+  if (!companyId) {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const authUser = authData.user;
+      const authEmail =
+        authUser?.id === userId ? authUser.email?.trim().toLowerCase() ?? '' : '';
+      const domain = authEmail.includes('@') ? authEmail.split('@').pop()?.trim().toLowerCase() ?? '' : '';
+      if (domain) {
+        const { data: companyByDomain, error: companyByDomainError } = await supabase
+          .from('companies')
+          .select('id')
+          .ilike('domain', domain)
+          .limit(1)
+          .maybeSingle();
+        if (!companyByDomainError) {
+          companyId = companyByDomain?.id ?? null;
+        }
+      }
+    } catch {}
+  }
   companyIdCache.set(userId, writeTimedCache(companyId));
   return companyId;
 };
@@ -208,6 +251,8 @@ export const fetchGlobalCompanyContext = async () => {
     .from('AppUsers')
     .select('company_id')
     .eq('user_id', globalRow.user_id)
+    .order('updated_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (profileError) {
@@ -399,10 +444,6 @@ export const mergeCompanyVisibleRows = <
 
   if (globalUserId && nonGlobalRows.length >= 3) {
     return sortRowsByCreatedAtDesc(nonGlobalRows);
-  }
-
-  if (companyRows.length >= 3) {
-    return sortRowsByCreatedAtDesc(companyRows);
   }
 
   return sortRowsByCreatedAtDesc(mergedRows);

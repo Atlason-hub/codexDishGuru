@@ -107,7 +107,22 @@ export default function DishScreen() {
   );
 
   const sortedAssociations = useMemo(() => {
-    return [...dishAssociations].sort((a, b) => {
+    const uniqueById = new Map<string, DishAssociation>();
+    dishAssociations.forEach((row) => {
+      const key = String(row.id ?? '');
+      const existing = uniqueById.get(key);
+      if (!existing) {
+        uniqueById.set(key, row);
+        return;
+      }
+      const existingTime = existing.created_at ? new Date(existing.created_at).getTime() : 0;
+      const nextTime = row.created_at ? new Date(row.created_at).getTime() : 0;
+      if (nextTime >= existingTime) {
+        uniqueById.set(key, row);
+      }
+    });
+
+    return [...uniqueById.values()].sort((a, b) => {
       const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
       const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
       return bDate - aDate;
@@ -552,6 +567,7 @@ export default function DishScreen() {
     ({ item }: { item: DishAssociation }) => (
       <DishCard
         items={[item]}
+        reviewStackCount={sortedAssociations.length}
         favorites={favorites}
         currentUserId={currentUserId}
         avatarUrl={avatarUrl}
@@ -583,6 +599,7 @@ export default function DishScreen() {
       handleOpenRestaurant,
       handleOrder,
       handleToggleFavorite,
+      sortedAssociations.length,
       userAvatars,
       userLabels,
     ]
@@ -671,7 +688,9 @@ export default function DishScreen() {
         <CrossfadeView style={styles.feedListWrap}>
           <FlatList
             data={sortedAssociations}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) =>
+              `${item.id ?? 'association'}:${item.created_at ?? 'no-date'}:${index}`
+            }
             initialNumToRender={4}
             maxToRenderPerBatch={4}
             updateCellsBatchingPeriod={50}

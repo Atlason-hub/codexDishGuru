@@ -11,6 +11,8 @@ type Props = {
   showFavoritesOnly: boolean;
   restaurantFilterName: string | null;
   loading: boolean;
+  hasLoaded: boolean;
+  hasFeedItems: boolean;
   isRefreshing: boolean;
   error: string | null;
   homeSearch: string;
@@ -30,6 +32,8 @@ export default function HomeFeedHeader({
   showFavoritesOnly,
   restaurantFilterName,
   loading,
+  hasLoaded,
+  hasFeedItems,
   isRefreshing,
   error,
   homeSearch,
@@ -41,6 +45,8 @@ export default function HomeFeedHeader({
   onHomeSearchClear,
   onSetActiveHomeTab,
 }: Props) {
+  const shouldShowSkeleton = loading && !isRefreshing && !hasLoaded && !hasFeedItems;
+
   return (
     <View style={styles.listHeader}>
       {showRestaurantOnly ? (
@@ -71,7 +77,7 @@ export default function HomeFeedHeader({
           </Text>
         </View>
       ) : null}
-      {loading && !isRefreshing ? (
+      {shouldShowSkeleton ? (
         <View style={styles.results}>
           <HomeFeedSkeleton />
         </View>

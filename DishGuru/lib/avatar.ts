@@ -45,15 +45,23 @@ export const cacheAvatar = async (userId: string | null | undefined, url: string
   await AsyncStorage.setItem(key, url);
 };
 
+export const clearCachedAvatar = async (userId: string | null | undefined) => {
+  const key = getAvatarCacheKey(userId);
+  if (!key) return;
+  await AsyncStorage.removeItem(key);
+};
+
 export const fetchAvatarFromProfile = async (userId: string | null | undefined): Promise<string | null> => {
   if (!userId) return null;
   const { data, error } = await supabase
     .from('AppUsers')
     .select('avatar_url')
     .eq('user_id', userId)
-    .maybeSingle();
+    .order('updated_at', { ascending: false })
+    .limit(1);
   if (error) return null;
-  return normalizeAvatarUrl((data as { avatar_url?: string | null } | null)?.avatar_url ?? null);
+  const row = Array.isArray(data) ? data[0] : data;
+  return normalizeAvatarUrl((row as { avatar_url?: string | null } | null)?.avatar_url ?? null);
 };
 
 export const resolveAvatarForUser = async (
@@ -75,4 +83,20 @@ export const fetchAvatarFromAuth = async (): Promise<string | null> => {
   if (resolvedAvatar) return resolvedAvatar;
   if (error) return null;
   return null;
+};
+
+export const hydrateAvatarForUser = async (
+  userId: string | null | undefined,
+  authAvatarUrl?: string | null | undefined
+): Promise<string | null> => {
+  const cachedAvatar = await loadCachedAvatar(userId);
+  if (cachedAvatar) {
+    return cachedAvatar;
+  }
+
+  const resolvedAvatar = await resolveAvatarForUser(userId, authAvatarUrl);
+  if (resolvedAvatar) {
+    await cacheAvatar(userId, resolvedAvatar);
+  }
+  return resolvedAvatar;
 };

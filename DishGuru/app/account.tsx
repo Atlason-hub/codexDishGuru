@@ -14,7 +14,7 @@ import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Buffer } from 'buffer';
 import { Image } from 'expo-image';
-import { cacheAvatar, fetchAvatarFromAuth, fetchAvatarFromProfile, loadCachedAvatar, resolveAvatarForUser } from '../lib/avatar';
+import { cacheAvatar, hydrateAvatarForUser, loadCachedAvatar } from '../lib/avatar';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -23,7 +23,7 @@ import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { Locale, useLocale } from '../lib/locale';
 import { clearCachedLogo } from '../lib/logo';
 import { setGuestModeEnabled } from '../lib/guestMode';
-import { publishAvatarUpdate } from '../lib/avatarEvents';
+import { publishAvatarUpdate, subscribeAvatarUpdates } from '../lib/avatarEvents';
 
 export default function AccountScreen() {
   const FRAME_SIZE = 180;
@@ -48,6 +48,7 @@ export default function AccountScreen() {
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const dragStart = useRef({ x: 0, y: 0 });
   const zoomStart = useRef(MIN_ZOOM);
+  const authUserIdRef = useRef<string | null>(null);
   const scaleToCover = pendingAsset
     ? Math.max(FRAME_SIZE / pendingAsset.width, FRAME_SIZE / pendingAsset.height)
     : 1;
@@ -80,17 +81,17 @@ export default function AccountScreen() {
 
   const ensureAvatarSavedToProfile = useCallback(
     async (userId: string, emailAddress: string | null, avatarUrlToSave: string) => {
-      const { data: updatedProfile, error: updateError } = await supabase
+      const { data: updatedProfiles, error: updateError } = await supabase
         .from('AppUsers')
         .update({ avatar_url: avatarUrlToSave })
         .eq('user_id', userId)
-        .select('user_id, avatar_url')
-        .maybeSingle();
+        .select('user_id, avatar_url');
 
       if (updateError) {
         throw updateError;
       }
 
+      const updatedProfile = Array.isArray(updatedProfiles) ? updatedProfiles[0] : updatedProfiles;
       if (updatedProfile?.user_id) {
         return avatarUrlToSave;
       }
@@ -112,17 +113,17 @@ export default function AccountScreen() {
       }
 
       if (existingByEmail.data?.user_id) {
-        const { data: recoveredProfile, error: recoverError } = await supabase
+        const { data: recoveredProfiles, error: recoverError } = await supabase
           .from('AppUsers')
           .update({ user_id: userId, avatar_url: avatarUrlToSave })
           .eq('email', normalizedEmail)
-          .select('user_id, avatar_url')
-          .maybeSingle();
+          .select('user_id, avatar_url');
 
         if (recoverError) {
           throw recoverError;
         }
 
+        const recoveredProfile = Array.isArray(recoveredProfiles) ? recoveredProfiles[0] : recoveredProfiles;
         if (recoveredProfile?.user_id) {
           return avatarUrlToSave;
         }
@@ -236,15 +237,17 @@ export default function AccountScreen() {
         return;
       }
       setEmail(authUser.email ?? null);
+      authUserIdRef.current = authUser.id ?? null;
       const cached = await loadCachedAvatar(authUser.id);
       if (cached) setAvatarUrl(cached);
-      const resolvedAvatar = await resolveAvatarForUser(
+      const resolvedAvatar = await hydrateAvatarForUser(
         authUser.id,
         (authUser.user_metadata as any)?.avatar_url ?? null
       );
       if (resolvedAvatar) {
         setAvatarUrl(resolvedAvatar);
-        await cacheAvatar(authUser.id, resolvedAvatar);
+      } else {
+        setAvatarUrl(null);
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -259,23 +262,41 @@ export default function AccountScreen() {
       const { data: userData } = await supabase.auth.getUser();
       const authUser = userData.user ?? session.user ?? null;
       setEmail(authUser?.email ?? null);
-      const resolvedAvatar = await resolveAvatarForUser(
+      authUserIdRef.current = authUser?.id ?? null;
+      const cached = await loadCachedAvatar(authUser?.id ?? null);
+      if (cached) setAvatarUrl(cached);
+      const resolvedAvatar = await hydrateAvatarForUser(
         authUser?.id ?? null,
         (authUser?.user_metadata as any)?.avatar_url ?? null
       );
       if (resolvedAvatar) {
         setAvatarUrl(resolvedAvatar);
-        cacheAvatar(authUser?.id ?? null, resolvedAvatar);
       } else {
         setAvatarUrl(null);
-        cacheAvatar(authUser?.id ?? null, null);
       }
+    });
+    const unsubscribeAvatarUpdates = subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
+      if (!userId || userId !== authUserIdRef.current) return;
+      setAvatarUrl(nextAvatarUrl);
     });
     return () => {
       mounted = false;
       subscription.subscription.unsubscribe();
+      unsubscribeAvatarUpdates();
     };
   }, [routeToLoggedOutHome]);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => {
+      authUserIdRef.current = data.user?.id ?? null;
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      authUserIdRef.current = session?.user?.id ?? null;
+    });
+    return () => {
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
 
   if (redirectingOut) {
     return <View style={styles.redirectPlaceholder} />;

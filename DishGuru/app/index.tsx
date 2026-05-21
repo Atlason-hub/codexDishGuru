@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
+import AppHeader from '../components/AppHeader';
 import HomeAuthView from '../components/HomeAuthView';
 import HomeFeedHeader from '../components/HomeFeedHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +19,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { cacheLogo, clearCachedLogo, loadCachedLogo } from '../lib/logo';
+import {
+  cacheScopedLogo,
+  getEmailDomain,
+  getLogoCacheScope,
+  loadSessionCompanyLogo,
+  loadCachedLogo,
+  resolveLogoUrl,
+} from '../lib/logo';
 import { openVendorDish } from '../lib/orderVendor';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { buildAuthRedirectUrl } from '../lib/authRedirect';
@@ -31,12 +39,14 @@ import RestaurantsTab from '../components/RestaurantsTab';
 import { theme } from '../lib/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  clearUserScopedCaches,
   fetchCompanyDishes,
   fetchCompanyIdForUser,
   fetchFavoritesMap,
   fetchGlobalCompanyContext,
   fetchGlobalDishes,
   mergeCompanyVisibleRows,
+  primeCompanyIdForUser,
   fetchUserAvatarMaps,
   fetchVisibleDishes,
 } from '../lib/appData';
@@ -51,8 +61,9 @@ import { getLegalUrl, useLocale } from '../lib/locale';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 import { publishHomeTab, subscribeHomeTab, type HomeTabKey } from '../lib/homeTabs';
 import { subscribeAvatarUpdates } from '../lib/avatarEvents';
+import { getPendingLocalLogout, setPendingLocalLogout, subscribePendingLocalLogout } from '../lib/logoutGate';
+import { clearUserSessionArtifacts } from '../lib/sessionCleanup';
 
-const SUPABASE_URL = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
 const primaryActionColor = '#C75D2C';
 const HOME_FEED_FINAL_WAIT_MS = 2200;
 
@@ -70,6 +81,11 @@ type DishAssociation = {
   created_at: string | null;
   review_text?: string | null;
 };
+
+let rememberedHomeFeed: {
+  userId: string | null;
+  items: DishAssociation[];
+} | null = null;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -90,6 +106,9 @@ export default function HomeScreen() {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [forceLoggedOut, setForceLoggedOut] = useState(false);
+  const [pendingLocalLogout, setPendingLocalLogoutState] = useState(getPendingLocalLogout());
+  const [debugStage, setDebugStage] = useState('init');
   const [homeSearch, setHomeSearch] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -97,9 +116,11 @@ export default function HomeScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(Boolean(rememberedHomeFeed?.items?.length));
   const [error, setError] = useState<string | null>(null);
-  const [dishAssociations, setDishAssociations] = useState<DishAssociation[]>([]);
+  const [dishAssociations, setDishAssociations] = useState<DishAssociation[]>(
+    rememberedHomeFeed?.items ?? []
+  );
   const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
   const [userLabels, setUserLabels] = useState<Record<string, string>>({});
   const avatarIdsKeyRef = useRef<string>('');
@@ -131,6 +152,7 @@ export default function HomeScreen() {
   const guestActivationInFlightRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const bootstrapRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingLocalLogoutRef = useRef(pendingLocalLogout);
   const loadDishAssociationsRef = useRef<
     ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
   >(null);
@@ -139,39 +161,6 @@ export default function HomeScreen() {
   const handledEmailConfirmedRef = useRef(false);
 
   const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v2:${userId ?? 'guest'}`;
-
-  const resolveLogoUrl = (raw: string | null | undefined) => {
-    if (!raw) return null;
-    if (raw.includes('/storage/v1/object/public/')) {
-      const parts = raw.split('/storage/v1/object/public/');
-      if (parts.length === 2) {
-        const tail = parts[1];
-        const segments = tail.split('/');
-        const bucket = segments[0];
-        const objectPath = segments.slice(1).join('/');
-        const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
-        return data?.publicUrl ?? raw;
-      }
-    }
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-    if (raw.startsWith('//')) return `https:${raw}`;
-
-    const trimmed = raw.replace(/^\/+/, '');
-    const objectPath = trimmed.startsWith('companies/')
-      ? trimmed.replace(/^companies\//, '')
-      : trimmed;
-    const bucket = trimmed.startsWith('companies/') ? 'company-logos' : 'company-logos';
-    const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
-    return data?.publicUrl ?? `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${objectPath}`;
-  };
-
-  const getEmailDomain = (value: string | null | undefined) => {
-    if (!value) return null;
-    const atIndex = value.lastIndexOf('@');
-    if (atIndex === -1) return null;
-    const domain = value.slice(atIndex + 1).trim().toLowerCase();
-    return domain.length > 0 ? domain : null;
-  };
 
   const toLocalizedAuthError = (message: string) => {
     const lower = message.toLowerCase();
@@ -188,6 +177,7 @@ export default function HomeScreen() {
   };
 
   const resetAuthForm = useCallback(() => {
+    setEmail('');
     setPass('');
     setConfirmPass('');
     setShowPass(false);
@@ -259,10 +249,10 @@ export default function HomeScreen() {
         setOrderVendor(globalContext?.orderVendor ?? null);
         setResolvedGlobalUserId(globalContext?.userId ?? null);
         setResolvedGlobalDishIds(globalRows.map((row: any) => String(row.id)).filter(Boolean));
-        await cacheLogo({
+        await cacheScopedLogo({
           logoUrl: resolvedGlobalLogoUrl,
           logoPath: globalContext?.logoUrl ?? null,
-        });
+        }, 'guest');
         return;
       }
       if (options?.useCache && userId && !cacheHydratedRef.current) {
@@ -415,6 +405,68 @@ export default function HomeScreen() {
     dishAssociationsCountRef.current = dishAssociations.length;
   }, [dishAssociations.length]);
 
+  useEffect(() => {
+    if (isAuthenticated && currentUserId && dishAssociations.length > 0) {
+      rememberedHomeFeed = {
+        userId: currentUserId,
+        items: dishAssociations,
+      };
+      return;
+    }
+
+    if (!isAuthenticated && !isGuestMode) {
+      rememberedHomeFeed = null;
+    }
+  }, [currentUserId, dishAssociations, isAuthenticated, isGuestMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentUserId || dishAssociations.length > 0 || hasLoaded) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const hydrateRememberedFeed = async () => {
+      if (rememberedHomeFeed?.userId === currentUserId && rememberedHomeFeed.items.length > 0) {
+        if (!cancelled) {
+          setDishAssociations(rememberedHomeFeed.items);
+          setHasLoaded(true);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const cachedRaw = await AsyncStorage.getItem(getHomeCacheKey(currentUserId));
+      if (!cachedRaw || cancelled) {
+        return;
+      }
+
+      try {
+        const cached = JSON.parse(cachedRaw);
+        if (Array.isArray(cached?.items) && cached.items.length > 0 && !cancelled) {
+          setDishAssociations(cached.items as DishAssociation[]);
+          setHasLoaded(true);
+          setLoading(false);
+          rememberedHomeFeed = {
+            userId: currentUserId,
+            items: cached.items as DishAssociation[],
+          };
+          void loadUserAvatars(cached.items as DishAssociation[]);
+        }
+      } catch {
+        // Ignore malformed cache and let the live fetch path recover.
+      }
+    };
+
+    void hydrateRememberedFeed();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, dishAssociations.length, hasLoaded]);
+
   const loadFavorites = useCallback(async (userId: string) => {
     try {
       setFavorites(await fetchFavoritesMap(userId));
@@ -494,59 +546,106 @@ export default function HomeScreen() {
     });
   }, [currentUserId, t]);
 
-  const fetchCompanyLogoForUser = useCallback(async (userId: string, fallbackDomain?: string | null) => {
-    try {
-      const { data: profile, error: profileError } = await supabase
-        .from('AppUsers')
-        .select('company_id')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle();
-      if (profileError) {
-        setCompanyLogoUrl(null);
-        return;
-      }
-      let companyIdValue: string | null = profile?.company_id ?? null;
+  const ensureAppUserProfile = useCallback(async (userId: string, emailAddress: string | null | undefined) => {
+    const normalizedEmail = emailAddress?.trim().toLowerCase() ?? '';
+    if (!userId || !normalizedEmail) return;
 
-      // Fallback: if no company_id on AppUsers, try matching companies by email domain
-      if (!companyIdValue && fallbackDomain) {
-        const { data: companyFromDomain } = await supabase
-          .from('companies')
-          .select('id')
-          .ilike('domain', fallbackDomain)
-          .limit(1)
-          .maybeSingle();
-        companyIdValue = companyFromDomain?.id ?? null;
-      }
+    const { data: existingProfile, error: existingProfileError } = await supabase
+      .from('AppUsers')
+      .select('user_id, email, company_id')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-      if (!companyIdValue) {
-        setCompanyLogoUrl(null);
-        setOrderVendor(null);
-        return;
-      }
-      const { data: company, error: companyError } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('id', companyIdValue)
-        .maybeSingle();
-      if (companyError || !company) {
-        setCompanyLogoUrl(null);
-        setOrderVendor(null);
-        return;
-      }
-      const rawLogo = company.logo_url ?? company.logo ?? null;
-      const absoluteLogo = resolveLogoUrl(rawLogo);
-      setCompanyLogoUrl(absoluteLogo);
-      setCompanyLogoPath(rawLogo);
-      setOrderVendor(company.order_vendor ?? null);
-    } catch {
-      setCompanyLogoUrl(null);
-      setOrderVendor(null);
+    if (existingProfileError) {
+      throw existingProfileError;
     }
+
+    if (existingProfile?.user_id && existingProfile.company_id) {
+      primeCompanyIdForUser(userId, existingProfile.company_id ?? null);
+      return;
+    }
+
+    const domain = getEmailDomain(normalizedEmail);
+    if (!domain) {
+      throw new Error('missing email domain');
+    }
+
+    const { data: companyMatch, error: companyError } = await supabase
+      .from('companies')
+      .select('id')
+      .ilike('domain', domain)
+      .limit(1)
+      .maybeSingle();
+
+    if (companyError) {
+      throw companyError;
+    }
+
+    if (!companyMatch?.id) {
+      throw new Error('no company matches email domain');
+    }
+
+    const { data: existingByEmail, error: existingByEmailError } = await supabase
+      .from('AppUsers')
+      .select('user_id, email')
+      .ilike('email', normalizedEmail)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingByEmailError) {
+      throw existingByEmailError;
+    }
+
+    if (existingByEmail?.email) {
+      const { error: recoverError } = await supabase
+        .from('AppUsers')
+        .update({
+          user_id: userId,
+          company_id: companyMatch.id,
+          email: normalizedEmail,
+        })
+        .ilike('email', normalizedEmail);
+      if (recoverError) {
+        throw recoverError;
+      }
+      clearUserScopedCaches(userId);
+      primeCompanyIdForUser(userId, companyMatch.id);
+      return;
+    }
+
+    if (existingProfile?.user_id) {
+      const { error: repairExistingProfileError } = await supabase
+        .from('AppUsers')
+        .update({
+          company_id: companyMatch.id,
+          email: normalizedEmail,
+        })
+        .eq('user_id', userId);
+      if (repairExistingProfileError) {
+        throw repairExistingProfileError;
+      }
+      clearUserScopedCaches(userId);
+      primeCompanyIdForUser(userId, companyMatch.id);
+      return;
+    }
+
+    const { error: insertError } = await supabase.from('AppUsers').insert({
+      user_id: userId,
+      email: normalizedEmail,
+      company_id: companyMatch.id,
+    });
+    if (insertError) {
+      throw insertError;
+    }
+    clearUserScopedCaches(userId);
+    primeCompanyIdForUser(userId, companyMatch.id);
   }, []);
 
   useEffect(() => {
     if (emailConfirmedParam !== '1' || handledEmailConfirmedRef.current) return;
+    setDebugStage('effect:email-confirmed');
     handledEmailConfirmedRef.current = true;
     setShowSignup(false);
     setAuthError(null);
@@ -558,20 +657,108 @@ export default function HomeScreen() {
   }, [emailConfirmedParam, router, t]);
 
   useEffect(() => {
+    return subscribePendingLocalLogout((pending) => {
+      setPendingLocalLogoutState(pending);
+      if (pending) {
+        setDebugStage('logout-gate:pending');
+        resetAuthForm();
+      }
+    });
+  }, [resetAuthForm]);
+
+  useEffect(() => {
+    if (skipLaunchParam !== '1') return;
+    setDebugStage('effect:skiplaunch-force-logged-out');
+    setForceLoggedOut(true);
+    setIsAuthenticated(false);
+    setIsGuestMode(false);
+    setCurrentUserId(null);
+    setCurrentUserEmail(null);
+    setIsRefreshing(false);
+    setLoading(false);
+    setHasLoaded(false);
+    setDishAssociations([]);
+    setFavorites({});
+    setCompanyLogoUrl(null);
+    setCompanyLogoPath(null);
+    setOrderVendor(null);
+    setResolvedGlobalUserId(null);
+    setResolvedGlobalDishIds([]);
+    rememberedHomeFeed = null;
+    resetAuthForm();
+    setSessionChecked(true);
+    setPendingLocalLogoutState(true);
+  }, [resetAuthForm, skipLaunchParam]);
+
+  useEffect(() => {
+    if (skipLaunchParam === '1') return;
+    if ((currentUserId || isAuthenticated || isGuestMode) && !pendingLocalLogout) {
+      setDebugStage('effect:clear-force-logged-out');
+      setForceLoggedOut(false);
+    }
+  }, [currentUserId, isAuthenticated, isGuestMode, pendingLocalLogout, skipLaunchParam]);
+
+  useEffect(() => {
+    if (skipLaunchParam !== '1') return;
+    if (!(currentUserId || isAuthenticated)) return;
+    if (pendingLocalLogout) return;
+    setDebugStage('effect:repair-stale-skiplaunch');
+    router.replace({
+      pathname: '/',
+      params: {
+        headerSync: String(Date.now()),
+        guestMode: '0',
+        skipLaunch: '0',
+      },
+    });
+  }, [currentUserId, isAuthenticated, pendingLocalLogout, router, skipLaunchParam]);
+
+  useEffect(() => {
+    pendingLocalLogoutRef.current = pendingLocalLogout;
+  }, [pendingLocalLogout]);
+
+  useEffect(() => {
     let mounted = true;
+    setDebugStage('session:getSession:start');
     supabase.auth.getSession().then(async ({ data }) => {
       try {
         if (!mounted) return;
         const guestModeEnabled = !data.session ? await loadGuestMode() : false;
+        const logoCacheScope = getLogoCacheScope(
+          data.session?.user?.id ?? null,
+          data.session?.user?.email ?? null,
+          guestModeEnabled
+        );
         setIsGuestMode(guestModeEnabled);
         setIsAuthenticated(Boolean(data.session));
         setCurrentUserId(data.session?.user?.id ?? null);
         setCurrentUserEmail(data.session?.user?.email ?? null);
+        if (!data.session && !guestModeEnabled && skipLaunchParam === '1') {
+          setDebugStage('session:getSession:no-session-skiplaunch');
+          setForceLoggedOut(true);
+          setPendingLocalLogoutState(true);
+        } else {
+          setDebugStage(
+            data.session?.user?.id
+              ? 'session:getSession:has-session'
+              : guestModeEnabled
+                ? 'session:getSession:guest'
+                : 'session:getSession:logged-out'
+          );
+          if (!pendingLocalLogoutRef.current || data.session?.user?.id || guestModeEnabled) {
+            setForceLoggedOut(false);
+          }
+        }
+        if (data.session?.user?.id || guestModeEnabled) {
+          setPendingLocalLogout(false);
+          setPendingLocalLogoutState(false);
+        }
+        setIsRefreshing(false);
         setSessionChecked(true);
         void (async () => {
           const [cachedAvatar, cached] = await Promise.all([
             loadCachedAvatar(data.session?.user?.id ?? null),
-            loadCachedLogo(),
+            loadCachedLogo(logoCacheScope),
           ]);
           if (!mounted) return;
           if (cachedAvatar) setAvatarUrl(cachedAvatar);
@@ -590,16 +777,29 @@ export default function HomeScreen() {
           await cacheAvatar(userId, resolvedAvatar);
         })();
         if (data.session?.user?.id) {
-          const domain = getEmailDomain(data.session.user.email ?? null);
-          void fetchCompanyLogoForUser(data.session.user.id, domain);
+          if (skipLaunchParam === '1') {
+            setDebugStage('session:getSession:clear-skiplaunch');
+            router.replace({
+              pathname: '/',
+              params: {
+                headerSync: String(Date.now()),
+                guestMode: '0',
+                skipLaunch: '0',
+              },
+            });
+          }
           void setGuestModeEnabled(false);
         } else if (guestModeEnabled) {
+          setDebugStage('session:getSession:guest-ready');
         } else {
+          setDebugStage('session:getSession:logged-out-ready');
           resetAuthForm();
           setDishAssociations([]);
           setFavorites({});
+          rememberedHomeFeed = null;
         }
       } catch (error) {
+        setDebugStage('session:getSession:error');
         console.warn('[guest-mode] initial session bootstrap failed', error);
         setDishAssociations([]);
         setFavorites({});
@@ -607,10 +807,21 @@ export default function HomeScreen() {
       } finally {}
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setDebugStage(`auth-change:${session?.user?.id ? 'signed-in' : 'signed-out'}`);
       setSessionChecked(true);
       setIsAuthenticated(Boolean(session));
       setCurrentUserId(session?.user?.id ?? null);
       setCurrentUserEmail(session?.user?.email ?? null);
+      if (!session && skipLaunchParam === '1') {
+        setDebugStage('auth-change:signed-out-skiplaunch');
+        setForceLoggedOut(true);
+        setPendingLocalLogoutState(true);
+      } else {
+        if (!pendingLocalLogoutRef.current || session?.user?.id) {
+          setForceLoggedOut(false);
+        }
+      }
+      setIsRefreshing(false);
       const resolvedAvatar = await resolveAvatarForUser(
         session?.user?.id ?? null,
         (session?.user?.user_metadata as any)?.avatar_url ?? null
@@ -623,21 +834,37 @@ export default function HomeScreen() {
         cacheAvatar(session?.user?.id ?? null, null);
       }
       if (session?.user?.id) {
+        setPendingLocalLogout(false);
+        setPendingLocalLogoutState(false);
+        if (skipLaunchParam === '1') {
+          setDebugStage('auth-change:clear-skiplaunch');
+          router.replace({
+            pathname: '/',
+            params: {
+              headerSync: String(Date.now()),
+              guestMode: '0',
+              skipLaunch: '0',
+            },
+          });
+        }
         setIsGuestMode(false);
         await setGuestModeEnabled(false);
-        void fetchCompanyLogoForUser(session.user.id, getEmailDomain(session?.user?.email ?? null));
+        await ensureAppUserProfile(session.user.id, session.user.email ?? null);
+        setDebugStage('auth-change:signed-in-ready');
       } else {
         const guestModeEnabled = await loadGuestMode();
         setIsGuestMode(guestModeEnabled);
         if (guestModeEnabled) {
+          setDebugStage('auth-change:guest-ready');
           setFavorites({});
         } else {
+          setDebugStage('auth-change:signed-out-ready');
           resetAuthForm();
           setDishAssociations([]);
           setCompanyLogoUrl(null);
           setOrderVendor(null);
           setFavorites({});
-          clearCachedLogo();
+          rememberedHomeFeed = null;
         }
       }
     });
@@ -645,7 +872,58 @@ export default function HomeScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [fetchCompanyLogoForUser, loadDishAssociations, loadFavorites, resetAuthForm]);
+  }, [ensureAppUserProfile, resetAuthForm, router, skipLaunchParam]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateBranding = async () => {
+      if (currentUserId) {
+        try {
+          const resolvedLogo = await loadSessionCompanyLogo(currentUserId, currentUserEmail ?? null, {
+            forceRefresh: true,
+          });
+          if (cancelled) return;
+          setCompanyLogoUrl(resolvedLogo.logoUrl);
+          setCompanyLogoPath(resolvedLogo.logoPath);
+          setOrderVendor(resolvedLogo.orderVendor);
+        } catch {
+          if (cancelled) return;
+          setCompanyLogoUrl(null);
+          setCompanyLogoPath(null);
+          setOrderVendor(null);
+        }
+        return;
+      }
+
+      if (isGuestMode) {
+        const globalContext = await fetchGlobalCompanyContext();
+        if (cancelled) return;
+        const resolvedGlobalLogoUrl = resolveLogoUrl(globalContext?.logoUrl ?? null);
+        setCompanyLogoPath(globalContext?.logoUrl ?? null);
+        setCompanyLogoUrl(resolvedGlobalLogoUrl);
+        setOrderVendor(globalContext?.orderVendor ?? null);
+        await cacheScopedLogo(
+          {
+            logoUrl: resolvedGlobalLogoUrl,
+            logoPath: globalContext?.logoUrl ?? null,
+          },
+          'guest'
+        );
+        return;
+      }
+
+      setCompanyLogoUrl(null);
+      setCompanyLogoPath(null);
+      setOrderVendor(null);
+    };
+
+    void hydrateBranding();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserEmail, currentUserId, isGuestMode]);
 
   useEffect(() => {
     loadDishAssociationsRef.current = loadDishAssociations;
@@ -653,9 +931,10 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (companyLogoUrl) {
-      cacheLogo({ logoUrl: companyLogoUrl, logoPath: companyLogoPath });
+      const logoCacheScope = getLogoCacheScope(currentUserId, currentUserEmail, isGuestMode);
+      cacheScopedLogo({ logoUrl: companyLogoUrl, logoPath: companyLogoPath }, logoCacheScope);
     }
-  }, [companyLogoUrl, companyLogoPath]);
+  }, [companyLogoUrl, companyLogoPath, currentUserEmail, currentUserId, isGuestMode]);
 
   useEffect(() => {
     if (currentUserId) {
@@ -734,15 +1013,17 @@ export default function HomeScreen() {
   }, [fabPulse, isAuthenticated, isGuestMode]);
 
   const refreshContent = useCallback(
-    async (force = false) => {
+    async (options?: { force?: boolean; showSpinner?: boolean }) => {
       if (!currentUserId && !isGuestMode) return;
+      const force = options?.force ?? false;
+      const showSpinner = options?.showSpinner ?? false;
       const now = Date.now();
       if (!force && now - lastRefreshRef.current < 60000) {
         return;
       }
       lastRefreshRef.current = now;
       const shouldShowRefreshSpinner = Boolean(
-        currentUserId && hasLoaded && (dishAssociations.length > 0 || error)
+        showSpinner && currentUserId && hasLoaded && (dishAssociations.length > 0 || error)
       );
       try {
         if (currentUserId) {
@@ -757,7 +1038,7 @@ export default function HomeScreen() {
           await loadDishAssociations({ showLoading: false });
         }
       } finally {
-        if (currentUserId && shouldShowRefreshSpinner) {
+        if (shouldShowRefreshSpinner) {
           setIsRefreshing(false);
         }
       }
@@ -800,6 +1081,7 @@ export default function HomeScreen() {
   }, [scrollParam]);
 
   const openLoginFromGuest = useCallback(async () => {
+    setDebugStage('guest:open-login');
     await setGuestModeEnabled(false);
     setIsGuestMode(false);
     resetAuthForm();
@@ -808,6 +1090,7 @@ export default function HomeScreen() {
     setHasLoaded(false);
     setDishAssociations([]);
     setFavorites({});
+    rememberedHomeFeed = null;
     router.replace({
       pathname: '/',
       params: {
@@ -819,6 +1102,7 @@ export default function HomeScreen() {
 
   const activateGuestMode = useCallback(async () => {
     try {
+      setDebugStage('guest:activate-start');
       guestActivationInFlightRef.current = true;
       setAuthLoading(true);
       setAuthError(null);
@@ -834,6 +1118,7 @@ export default function HomeScreen() {
       resetAuthForm();
       setFavorites({});
       setDishAssociations([]);
+      rememberedHomeFeed = null;
       router.replace({
         pathname: '/',
         params: {
@@ -844,13 +1129,17 @@ export default function HomeScreen() {
       });
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session?.user?.id) {
+        setDebugStage('guest:signout-existing-session');
+        await clearUserSessionArtifacts(sessionData.session.user.id, sessionData.session.user.email ?? null);
         await supabase.auth.signOut({ scope: 'local' });
       }
       console.info('[guest-mode] activating guest mode');
       setShowSignup(false);
       setSessionChecked(true);
+      setDebugStage('guest:load-dishes');
       await loadDishAssociations({ showLoading: false, guestModeOverride: true });
     } catch (error) {
+      setDebugStage('guest:activate-error');
       console.warn('[guest-mode] activation failed', error);
       await setGuestModeEnabled(false);
       setIsGuestMode(false);
@@ -887,7 +1176,9 @@ export default function HomeScreen() {
 
 
   const signIn = async () => {
+    setDebugStage('signin:start');
     if (!email.trim() || !pass.trim()) {
+      setDebugStage('signin:validation-error');
       setAuthError(t('authEnterEmailPassword'));
       return;
     }
@@ -901,9 +1192,21 @@ export default function HomeScreen() {
       if (error) {
         throw error;
       }
+      setDebugStage('signin:success');
       await setGuestModeEnabled(false);
       setIsGuestMode(false);
+      setPendingLocalLogout(false);
+      setPendingLocalLogoutState(false);
+      router.replace({
+        pathname: '/',
+        params: {
+          headerSync: String(Date.now()),
+          guestMode: '0',
+          skipLaunch: '0',
+        },
+      });
     } catch (err) {
+      setDebugStage('signin:error');
       const message = err instanceof Error ? err.message : t('authLoginFailed');
       setAuthError(toLocalizedAuthError(message));
     } finally {
@@ -912,7 +1215,9 @@ export default function HomeScreen() {
   };
 
   const signUp = async () => {
+    setDebugStage('signup:start');
     if (!email.trim() || !pass.trim() || !confirmPass.trim()) {
+      setDebugStage('signup:validation-error');
       setAuthError(t('authEnterEmailPasswordConfirm'));
       return;
     }
@@ -948,18 +1253,6 @@ export default function HomeScreen() {
         setAuthError(t('authEmailDomainUnknown'));
         return;
       }
-      const { data: existingProfile, error: existingProfileError } = await supabase
-        .from('AppUsers')
-        .select('user_id')
-        .ilike('email', trimmedEmail)
-        .limit(1)
-        .maybeSingle();
-      if (existingProfileError) {
-        throw existingProfileError;
-      }
-      if (existingProfile?.user_id) {
-        throw new Error('User already registered');
-      }
       const redirectTo = buildAuthRedirectUrl(locale);
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -972,22 +1265,14 @@ export default function HomeScreen() {
       if (error) {
         throw error;
       }
+      setDebugStage('signup:success');
       const supabaseUserId = data.user?.id;
-      const createdNewAuthUser = Array.isArray(data.user?.identities) && data.user.identities.length > 0;
-      if (!createdNewAuthUser) {
-        throw new Error('User already registered');
+      if (!data.user) {
+        throw new Error(t('authSignupFailed'));
       }
-      if (supabaseUserId) {
-      const { error: profileError } = await supabase.from('AppUsers').insert({
-        user_id: supabaseUserId,
-        email: trimmedEmail,
-        company_id: companyMatch.id,
-      });
-      if (profileError) {
-        throw profileError;
+      if (supabaseUserId && data.session) {
+        await ensureAppUserProfile(supabaseUserId, trimmedEmail);
       }
-      await fetchCompanyLogoForUser(supabaseUserId);
-    }
       if (!data.session && data.user) {
         showAppDialog({
           title: t('authVerifyEmailSentTitle'),
@@ -996,11 +1281,14 @@ export default function HomeScreen() {
       }
       await setGuestModeEnabled(false);
       setIsGuestMode(false);
+      setPendingLocalLogout(false);
+      setPendingLocalLogoutState(false);
       setShowSignup(false);
       setPass('');
       setConfirmPass('');
       setAcceptedTerms(false);
     } catch (err) {
+      setDebugStage('signup:error');
       const authApiError =
         err && typeof err === 'object' && 'name' in err ? (err as { [k: string]: any }) : null;
       const message = authApiError?.message ?? (err instanceof Error ? err.message : t('authSignupFailed'));
@@ -1175,6 +1463,8 @@ export default function HomeScreen() {
       showFavoritesOnly={showFavoritesOnly}
       restaurantFilterName={restaurantFilterName}
       loading={loading}
+      hasLoaded={hasLoaded}
+      hasFeedItems={dishAssociations.length > 0}
       isRefreshing={isRefreshing}
       error={error}
       homeSearch={homeSearch}
@@ -1275,7 +1565,16 @@ export default function HomeScreen() {
       style={[styles.container, !isAuthenticated && !isGuestMode && styles.containerAuth]}
       edges={['left', 'right', 'bottom']}
     >
-      {!sessionChecked && skipLaunchParam !== '1' ? (
+      <AppHeader
+        companyLogoUrlOverride={companyLogoUrl}
+        companyLogoPathOverride={companyLogoPath}
+        debugStageOverride={debugStage}
+        isAuthenticatedOverride={isAuthenticated}
+        isGuestModeOverride={isGuestMode}
+        currentUserIdOverride={currentUserId}
+        currentUserEmailOverride={currentUserEmail}
+      />
+      {!sessionChecked && skipLaunchParam !== '1' && !forceLoggedOut ? (
         <View style={styles.launchScreen}>
           <View style={styles.launchCard}>
             <Text style={styles.launchTitle}>DishGuru</Text>
@@ -1283,7 +1582,7 @@ export default function HomeScreen() {
             <ActivityIndicator size="small" color={theme.colors.accent} style={styles.launchSpinner} />
           </View>
         </View>
-      ) : !isAuthenticated && !isGuestMode ? (
+      ) : (forceLoggedOut || pendingLocalLogout || (!isAuthenticated && !isGuestMode)) && !isAuthenticated ? (
         <HomeAuthView
           isRTL={isRTL}
           locale={locale}
@@ -1353,7 +1652,7 @@ export default function HomeScreen() {
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
-                  onRefresh={() => refreshContent(true)}
+                  onRefresh={() => refreshContent({ force: true, showSpinner: true })}
                   tintColor={theme.colors.accent}
                   colors={[theme.colors.accent]}
                 />
@@ -1390,7 +1689,7 @@ export default function HomeScreen() {
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
-                  onRefresh={() => refreshContent(true)}
+                  onRefresh={() => refreshContent({ force: true, showSpinner: true })}
                   tintColor={theme.colors.accent}
                   colors={[theme.colors.accent]}
                 />
