@@ -15,7 +15,7 @@ import AvatarPreviewModal from '../components/AvatarPreviewModal';
 import AppHeader from '../components/AppHeader';
 import HomeAuthView from '../components/HomeAuthView';
 import HomeFeedHeader from '../components/HomeFeedHeader';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -67,6 +67,10 @@ import { clearUserSessionArtifacts } from '../lib/sessionCleanup';
 
 const primaryActionColor = '#C75D2C';
 const HOME_FEED_FINAL_WAIT_MS = 2200;
+const HOME_FEED_RPC_TIMEOUT_MS = 4000;
+const HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS = 1500;
+const BOOTSTRAP_SUPABASE_URL = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
+const BOOTSTRAP_SUPABASE_ANON_KEY = 'sb_publishable_7JyR16-ZDFnkOPYMHZrczA_oE10ympy';
 
 type DishAssociation = {
   id: string;
@@ -88,8 +92,142 @@ let rememberedHomeFeed: {
   items: DishAssociation[];
 } | null = null;
 
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+};
+
+const buildBootstrapHeaders = (accessToken?: string | null) => ({
+  apikey: BOOTSTRAP_SUPABASE_ANON_KEY,
+  Authorization: `Bearer ${accessToken || BOOTSTRAP_SUPABASE_ANON_KEY}`,
+  'Content-Type': 'application/json',
+});
+
+const fetchBootstrapCompanyIdByDomain = async (domain: string, accessToken?: string | null) => {
+  const url =
+    `${BOOTSTRAP_SUPABASE_URL}/rest/v1/companies?` +
+    new URLSearchParams({
+      select: 'id',
+      domain: `ilike.${domain}`,
+      limit: '1',
+    }).toString();
+  const response = await fetch(url, { headers: buildBootstrapHeaders(accessToken) });
+  if (!response.ok) return null;
+  const rows = (await response.json()) as Array<{ id?: string | null }>;
+  return rows[0]?.id ?? null;
+};
+
+const fetchBootstrapCompanyByDomain = async (domain: string, accessToken?: string | null) => {
+  const url =
+    `${BOOTSTRAP_SUPABASE_URL}/rest/v1/companies?` +
+    new URLSearchParams({
+      select: 'id,logo_url,order_vendor',
+      domain: `ilike.${domain}`,
+      limit: '1',
+    }).toString();
+  const response = await fetch(url, { headers: buildBootstrapHeaders(accessToken) });
+  if (!response.ok) return null;
+  const rows = (await response.json()) as Array<{
+    id?: string | null;
+    logo_url?: string | null;
+    order_vendor?: string | null;
+  }>;
+  return rows[0] ?? null;
+};
+
+const fetchBootstrapCompanyById = async (companyId: string, accessToken?: string | null) => {
+  const url =
+    `${BOOTSTRAP_SUPABASE_URL}/rest/v1/companies?` +
+    new URLSearchParams({
+      select: 'id,logo_url,order_vendor',
+      id: `eq.${companyId}`,
+      limit: '1',
+    }).toString();
+  const response = await fetch(url, { headers: buildBootstrapHeaders(accessToken) });
+  if (!response.ok) return null;
+  const rows = (await response.json()) as Array<{
+    id?: string | null;
+    logo_url?: string | null;
+    order_vendor?: string | null;
+  }>;
+  return rows[0] ?? null;
+};
+
+const fetchBootstrapVisibleRows = async (companyId: string, accessToken?: string | null) => {
+  const response = await fetch(`${BOOTSTRAP_SUPABASE_URL}/rest/v1/rpc/get_visible_dishes`, {
+    method: 'POST',
+    headers: buildBootstrapHeaders(accessToken),
+    body: JSON.stringify({ p_company_id: companyId }),
+  });
+  if (!response.ok) return [];
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : [];
+};
+
+const fetchBootstrapCompanyRows = async (companyId: string, accessToken?: string | null) => {
+  const response = await fetch(`${BOOTSTRAP_SUPABASE_URL}/rest/v1/rpc/get_company_dishes`, {
+    method: 'POST',
+    headers: buildBootstrapHeaders(accessToken),
+    body: JSON.stringify({ company_id: companyId }),
+  });
+  if (!response.ok) return [];
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : [];
+};
+
+const fetchBootstrapUserAvatarMaps = async (userIds: string[], accessToken?: string | null) => {
+  if (userIds.length === 0) {
+    return {
+      avatars: {} as Record<string, string>,
+      labels: {} as Record<string, string>,
+    };
+  }
+
+  const response = await fetch(`${BOOTSTRAP_SUPABASE_URL}/rest/v1/rpc/get_user_profiles`, {
+    method: 'POST',
+    headers: buildBootstrapHeaders(accessToken),
+    body: JSON.stringify({ user_ids: userIds }),
+  });
+
+  if (!response.ok) {
+    return {
+      avatars: {} as Record<string, string>,
+      labels: {} as Record<string, string>,
+    };
+  }
+
+  const rows = await response.json();
+  const avatars: Record<string, string> = {};
+  const labels: Record<string, string> = {};
+
+  if (Array.isArray(rows)) {
+    rows.forEach((row: any) => {
+      if (row?.user_id && row?.avatar_url) {
+        avatars[String(row.user_id)] = String(row.avatar_url);
+      }
+      if (row?.user_id && row?.email_prefix) {
+        labels[String(row.user_id)] = String(row.email_prefix);
+      }
+    });
+  }
+
+  return { avatars, labels };
+};
+
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { isRTL, locale, setLocale, t } = useLocale();
   const params = useLocalSearchParams();
   const homeTabParam = typeof params.homeTab === 'string' ? params.homeTab : '';
@@ -110,9 +248,13 @@ export default function HomeScreen() {
   const [forceLoggedOut, setForceLoggedOut] = useState(false);
   const [pendingLocalLogout, setPendingLocalLogoutState] = useState(getPendingLocalLogout());
   const [debugStage, setDebugStage] = useState('init');
+  const [startupDebugLines, setStartupDebugLines] = useState<string[]>([]);
+  const [homeHeaderMenuOpenKey, setHomeHeaderMenuOpenKey] = useState(0);
+  const [homeHeaderMenuVisible, setHomeHeaderMenuVisible] = useState(false);
   const [homeSearch, setHomeSearch] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authHydrating, setAuthHydrating] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -148,18 +290,38 @@ export default function HomeScreen() {
   const [hasVisitedRestaurantsTab, setHasVisitedRestaurantsTab] = useState(false);
   const appStateRef = useRef(AppState.currentState);
   const dishAssociationsCountRef = useRef(0);
+  const dishAssociationsRef = useRef<DishAssociation[]>(rememberedHomeFeed?.items ?? []);
   const cacheHydratedRef = useRef(false);
   const lastRefreshRef = useRef(0);
   const guestActivationInFlightRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const bootstrapRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingLocalLogoutRef = useRef(pendingLocalLogout);
+  const authBootstrapUserIdRef = useRef<string | null>(null);
+  const skipNextSignedInAutoLoadUserRef = useRef<string | null>(null);
+  const sessionAccessTokenRef = useRef<string | null>(null);
+  const startupRecoveryTriedRef = useRef(false);
   const loadDishAssociationsRef = useRef<
     ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
   >(null);
   const fabPulse = useRef(new Animated.Value(1)).current;
   const hasPulsedFabRef = useRef(false);
   const handledEmailConfirmedRef = useRef(false);
+
+  const upsertStartupDebugLine = useCallback((prefix: string, value: string) => {
+    setStartupDebugLines((prev) => {
+      const next = prev.filter((line) => !line.startsWith(`${prefix}=`));
+      next.push(`${prefix}=${value}`);
+      return next;
+    });
+  }, []);
+
+  const setBootStep = useCallback((step: string, value?: string | null) => {
+    upsertStartupDebugLine('boot.step', step);
+    if (value != null) {
+      upsertStartupDebugLine(`boot.${step}`, value);
+    }
+  }, [upsertStartupDebugLine]);
 
   const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v2:${userId ?? 'guest'}`;
 
@@ -193,7 +355,11 @@ export default function HomeScreen() {
       new Set(items.map((item) => item.user_id).filter(Boolean) as string[])
     );
     const avatarKey = [...ids].sort().join(',');
-    if (avatarKey && avatarKey === avatarIdsKeyRef.current) {
+    if (
+      avatarKey &&
+      avatarKey === avatarIdsKeyRef.current &&
+      Object.keys(userAvatars).length > 0
+    ) {
       return;
     }
     avatarIdsKeyRef.current = avatarKey;
@@ -203,32 +369,49 @@ export default function HomeScreen() {
       return;
     }
     const { avatars, labels } = await fetchUserAvatarMaps(ids);
+    if (ids.length > 0 && Object.keys(avatars).length === 0 && Object.keys(userAvatars).length > 0) {
+      return;
+    }
     setUserAvatars(avatars);
     setUserLabels(labels);
   };
+
+  useEffect(() => {
+    avatarIdsKeyRef.current = '';
+    setUserAvatars({});
+    setUserLabels({});
+  }, [currentUserId]);
 
 
   const loadDishAssociations = useCallback(async (options?: {
     useCache?: boolean;
     showLoading?: boolean;
     guestModeOverride?: boolean;
+    userIdOverride?: string | null;
+    userEmailOverride?: string | null;
+    companyIdOverride?: string | null;
   }) => {
     const requestId = ++loadRequestIdRef.current;
     const isCurrentRequest = () => loadRequestIdRef.current === requestId;
     let renderedCachedFeed = false;
 
     try {
+      upsertStartupDebugLine('load.start', String(Date.now()));
       const shouldShowLoading = options?.showLoading ?? true;
       if (shouldShowLoading) {
         setHasLoaded(false);
       }
       if (shouldShowLoading || !hasLoaded) setLoading(true);
       setError(null);
-      const userId = currentUserId;
-      const userEmail = currentUserEmail;
+      const userId = options?.userIdOverride ?? currentUserId;
+      const userEmail = options?.userEmailOverride ?? currentUserEmail;
+      upsertStartupDebugLine('load.userId', userId ?? '-');
+      upsertStartupDebugLine('load.email', userEmail ?? '-');
       const guestModeEnabled =
         options?.guestModeOverride ?? (!userId ? isGuestMode || (await loadGuestMode()) : false);
+      upsertStartupDebugLine('load.guest', guestModeEnabled ? '1' : '0');
       if (!userId && guestModeEnabled) {
+        upsertStartupDebugLine('load.path', 'guest');
         console.info('[guest-mode] loading home feed for guest');
         const [globalRows, globalContext] = await Promise.all([
           fetchGlobalDishes(),
@@ -257,7 +440,12 @@ export default function HomeScreen() {
         return;
       }
       if (options?.useCache && userId && !cacheHydratedRef.current) {
-        const cachedRaw = await AsyncStorage.getItem(getHomeCacheKey(userId));
+        upsertStartupDebugLine('load.cacheAttempt', '1');
+        const cachedRaw = await withTimeout(
+          AsyncStorage.getItem(getHomeCacheKey(userId)),
+          500,
+          null
+        );
         if (cachedRaw) {
           try {
             const cached = JSON.parse(cachedRaw);
@@ -269,6 +457,7 @@ export default function HomeScreen() {
               setLoading(false);
               cacheHydratedRef.current = true;
               renderedCachedFeed = true;
+              upsertStartupDebugLine('load.cacheHit', String(cached.items.length));
             }
           } catch {
             await AsyncStorage.removeItem(getHomeCacheKey(userId));
@@ -276,26 +465,62 @@ export default function HomeScreen() {
         }
       }
       if (userId) {
-        let companyId = await fetchCompanyIdForUser(userId);
-        if (!companyId && userEmail) {
+        let companyId: string | null = options?.companyIdOverride ?? null;
+        if (companyId) {
+          upsertStartupDebugLine('load.companyIdOverride', companyId);
+          primeCompanyIdForUser(userId, companyId);
+        }
+        if (userEmail) {
+          if (companyId) {
+            upsertStartupDebugLine('load.companyIdDomain', companyId);
+          } else {
           const domain = userEmail.includes('@')
             ? userEmail.split('@').pop()?.trim().toLowerCase()
             : null;
           if (domain) {
-            const { data: companyFromDomain, error: companyDomainError } = await supabase
-              .from('companies')
-              .select('id')
-              .ilike('domain', domain)
-              .limit(1)
-              .maybeSingle();
+            const domainLookup = await withTimeout(
+              (async () =>
+                await supabase
+                  .from('companies')
+                  .select('id')
+                  .ilike('domain', domain)
+                  .limit(1)
+                  .maybeSingle())(),
+              HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
+              { data: null, error: null } as any
+            );
+            const companyFromDomain = domainLookup.data;
+            const companyDomainError = domainLookup.error;
             if (companyDomainError) throw companyDomainError;
             companyId = companyFromDomain?.id ?? null;
+            upsertStartupDebugLine('load.companyIdDomain', companyId ?? '-');
+            if (companyId) {
+              primeCompanyIdForUser(userId, companyId);
+            }
+          }
           }
         }
+        if (!companyId) {
+          companyId = await withTimeout(
+            fetchCompanyIdForUser(userId).catch(() => null),
+            HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
+            null
+          );
+        }
+        upsertStartupDebugLine('load.companyId', companyId ?? '-');
         if (!isCurrentRequest()) return;
         if (companyId) {
-          const rpcPromise = fetchVisibleDishes(companyId);
-          const companyRowsPromise = fetchCompanyDishes(companyId);
+          upsertStartupDebugLine('load.path', 'signed-in-company');
+          const rpcPromise = withTimeout(
+            fetchVisibleDishes(companyId).catch(() => [] as DishAssociation[]),
+            HOME_FEED_RPC_TIMEOUT_MS,
+            [] as DishAssociation[]
+          );
+          const companyRowsPromise = withTimeout(
+            fetchCompanyDishes(companyId).catch(() => [] as DishAssociation[]),
+            HOME_FEED_RPC_TIMEOUT_MS,
+            [] as DishAssociation[]
+          );
 
           const finalFeedPromise = (async () => {
             const [rpcData, companyRows, globalContext, globalRows] = await Promise.all([
@@ -304,6 +529,9 @@ export default function HomeScreen() {
               fetchGlobalCompanyContext(),
               fetchGlobalDishes(),
             ]);
+            upsertStartupDebugLine('load.rpcVisibleCount', String(Array.isArray(rpcData) ? rpcData.length : -1));
+            upsertStartupDebugLine('load.rpcCompanyCount', String(Array.isArray(companyRows) ? companyRows.length : -1));
+            upsertStartupDebugLine('load.globalCount', String(globalRows.length));
             if (!Array.isArray(rpcData)) {
               return null;
             }
@@ -332,6 +560,7 @@ export default function HomeScreen() {
             loadUserAvatars(resolvedFeed.rows);
             setHasLoaded(true);
             setLoading(false);
+            upsertStartupDebugLine('load.appliedRows', String(resolvedFeed.rows.length));
             if (userId) {
               await AsyncStorage.setItem(
                 getHomeCacheKey(userId),
@@ -351,16 +580,7 @@ export default function HomeScreen() {
             return;
           }
 
-          let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-          const resolvedFeed = await Promise.race([
-            finalFeedPromise,
-            new Promise<null>((resolve) => {
-              timeoutHandle = setTimeout(() => resolve(null), HOME_FEED_FINAL_WAIT_MS);
-            }),
-          ]);
-          if (timeoutHandle) {
-            clearTimeout(timeoutHandle);
-          }
+          const resolvedFeed = await withTimeout(finalFeedPromise, HOME_FEED_FINAL_WAIT_MS, null);
 
           if (resolvedFeed) {
             await applyResolvedFeed(resolvedFeed);
@@ -368,7 +588,15 @@ export default function HomeScreen() {
           }
 
           const fallbackCompanyRows = (await companyRowsPromise) as DishAssociation[];
+          upsertStartupDebugLine('load.fallbackRows', String(fallbackCompanyRows.length));
           if (!isCurrentRequest()) return;
+          if (fallbackCompanyRows.length === 0 && dishAssociationsRef.current.length > 0) {
+            upsertStartupDebugLine('load.preserveExisting', 'fallback-empty');
+            setDishAssociations(dishAssociationsRef.current);
+            setHasLoaded(true);
+            setLoading(false);
+            return;
+          }
           setResolvedGlobalUserId(null);
           setResolvedGlobalDishIds([]);
           setDishAssociations(fallbackCompanyRows);
@@ -385,25 +613,36 @@ export default function HomeScreen() {
         }
       }
       if (!isCurrentRequest()) return;
+      if (userId && dishAssociationsRef.current.length > 0) {
+        upsertStartupDebugLine('load.preserveExisting', 'no-company');
+        setDishAssociations(dishAssociationsRef.current);
+        setHasLoaded(true);
+        setLoading(false);
+        return;
+      }
       setDishAssociations([]);
       loadUserAvatars([]);
       setFavorites({});
       setResolvedGlobalUserId(null);
       setResolvedGlobalDishIds([]);
+      upsertStartupDebugLine('load.empty', '1');
       return;
     } catch (err) {
       if (!isCurrentRequest()) return;
       setError(err instanceof Error ? err.message : 'Unknown error');
+      upsertStartupDebugLine('load.error', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       if (isCurrentRequest()) {
         setLoading(false);
         setHasLoaded(true);
+        upsertStartupDebugLine('load.final', `loading=0 hasLoaded=1 dishes=${dishAssociationsCountRef.current}`);
       }
     }
-  }, [currentUserEmail, currentUserId, hasLoaded, isGuestMode]);
+  }, [currentUserEmail, currentUserId, hasLoaded, isGuestMode, upsertStartupDebugLine]);
 
   useEffect(() => {
     dishAssociationsCountRef.current = dishAssociations.length;
+    dishAssociationsRef.current = dishAssociations;
   }, [dishAssociations.length]);
 
   useEffect(() => {
@@ -472,6 +711,17 @@ export default function HomeScreen() {
     try {
       setFavorites(await fetchFavoritesMap(userId));
     } catch {}
+  }, []);
+
+  const waitForStableSessionUser = useCallback(async (expectedUserId: string) => {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user?.id === expectedUserId) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return false;
   }, []);
 
   const toggleFavorite = useCallback(async (dishAssociationId: string) => {
@@ -644,6 +894,144 @@ export default function HomeScreen() {
     primeCompanyIdForUser(userId, companyMatch.id);
   }, []);
 
+  const hydrateSignedInHome = useCallback(
+    async (userId: string, emailAddress: string | null | undefined, accessToken?: string | null) => {
+      setAuthHydrating(true);
+      try {
+        setBootStep('start', userId.slice(0, 8));
+        let companyIdFromDomain: string | null = null;
+        let bootstrapCompanyLogoPath: string | null = null;
+        let bootstrapOrderVendor: string | null = null;
+        const domain = getEmailDomain(emailAddress ?? null);
+        if (domain) {
+          setBootStep('domain', domain);
+          const bootstrapCompany = await withTimeout(
+            fetchBootstrapCompanyByDomain(domain, accessToken),
+            HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
+            null
+          );
+          companyIdFromDomain = bootstrapCompany?.id ?? null;
+          bootstrapCompanyLogoPath = bootstrapCompany?.logo_url ?? null;
+          bootstrapOrderVendor = bootstrapCompany?.order_vendor ?? null;
+          upsertStartupDebugLine('boot.companyIdDomain', companyIdFromDomain ?? '-');
+          if (companyIdFromDomain) {
+            primeCompanyIdForUser(userId, companyIdFromDomain);
+            setCompanyLogoPath(bootstrapCompanyLogoPath);
+            setCompanyLogoUrl(resolveLogoUrl(bootstrapCompanyLogoPath));
+            setOrderVendor(bootstrapOrderVendor);
+          }
+        }
+        if (!companyIdFromDomain) {
+          const appUserLookup = await withTimeout(
+            (async () =>
+              await supabase
+                .from('AppUsers')
+                .select('company_id')
+                .or(`user_id.eq.${userId},email.ilike.${(emailAddress ?? '').trim().toLowerCase()}`)
+                .not('company_id', 'is', null)
+                .order('updated_at', { ascending: false })
+                .limit(1)
+                .maybeSingle())(),
+            2000,
+            { data: null, error: null } as any
+          );
+          const appUserCompanyId = appUserLookup.data?.company_id ?? null;
+          upsertStartupDebugLine('boot.appUserCompanyId', appUserCompanyId ?? '-');
+          if (appUserCompanyId) {
+            companyIdFromDomain = appUserCompanyId;
+            primeCompanyIdForUser(userId, appUserCompanyId);
+            const bootstrapCompany = await withTimeout(
+              fetchBootstrapCompanyById(appUserCompanyId, accessToken),
+              HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
+              null
+            );
+            bootstrapCompanyLogoPath = bootstrapCompany?.logo_url ?? null;
+            bootstrapOrderVendor = bootstrapCompany?.order_vendor ?? null;
+            setCompanyLogoPath(bootstrapCompanyLogoPath);
+            setCompanyLogoUrl(resolveLogoUrl(bootstrapCompanyLogoPath));
+            setOrderVendor(bootstrapOrderVendor);
+          }
+        }
+        setBootStep('profile-repair', 'bg');
+        void withTimeout(
+          ensureAppUserProfile(userId, emailAddress ?? null),
+          4000,
+          null
+        ).catch(() => null);
+
+        setBootStep('feed', companyIdFromDomain ?? '-');
+        await Promise.all([
+          withTimeout(loadFavorites(userId), 1500, null),
+          (async () => {
+            if (companyIdFromDomain && accessToken) {
+              const visibleRows = await withTimeout(
+                fetchBootstrapVisibleRows(companyIdFromDomain, accessToken),
+                5000,
+                [] as DishAssociation[]
+              );
+              const companyRows = await withTimeout(
+                fetchBootstrapCompanyRows(companyIdFromDomain, accessToken),
+                5000,
+                [] as DishAssociation[]
+              );
+              const bootstrapRows = mergeCompanyVisibleRows(
+                visibleRows as DishAssociation[],
+                companyRows as DishAssociation[],
+                [],
+                null
+              );
+              const bootstrapAvatarIds = Array.from(
+                new Set(
+                  bootstrapRows
+                    .map((row) => row.user_id)
+                    .filter(Boolean) as string[]
+                )
+              );
+              const bootstrapAvatarMaps = await fetchBootstrapUserAvatarMaps(
+                bootstrapAvatarIds,
+                accessToken
+              );
+              setDishAssociations(bootstrapRows);
+              setUserAvatars(bootstrapAvatarMaps.avatars);
+              setUserLabels(bootstrapAvatarMaps.labels);
+              avatarIdsKeyRef.current = [...bootstrapAvatarIds].sort().join(',');
+              if (!avatarUrl && bootstrapAvatarMaps.avatars[userId]) {
+                setAvatarUrl(bootstrapAvatarMaps.avatars[userId]);
+                await cacheAvatar(userId, bootstrapAvatarMaps.avatars[userId]);
+              }
+              setResolvedGlobalUserId(null);
+              setResolvedGlobalDishIds([]);
+              setHasLoaded(true);
+              setLoading(false);
+              skipNextSignedInAutoLoadUserRef.current = userId;
+              await AsyncStorage.setItem(
+                getHomeCacheKey(userId),
+                JSON.stringify({ updatedAt: Date.now(), items: bootstrapRows })
+              );
+              upsertStartupDebugLine('boot.feedRows', String(bootstrapRows.length));
+              return;
+            }
+            await withTimeout(
+              loadDishAssociations({
+                useCache: true,
+                showLoading: false,
+                userIdOverride: userId,
+                userEmailOverride: emailAddress ?? null,
+                companyIdOverride: companyIdFromDomain,
+              }),
+              7000,
+              null
+            );
+          })(),
+        ]);
+        setBootStep('done', String(dishAssociationsCountRef.current));
+      } finally {
+        setAuthHydrating(false);
+      }
+    },
+    [dishAssociationsCountRef, ensureAppUserProfile, loadDishAssociations, loadFavorites, setBootStep, upsertStartupDebugLine]
+  );
+
   useEffect(() => {
     if (emailConfirmedParam !== '1' || handledEmailConfirmedRef.current) return;
     setDebugStage('effect:email-confirmed');
@@ -692,6 +1080,22 @@ export default function HomeScreen() {
   }, [resetAuthForm, skipLaunchParam]);
 
   useEffect(() => {
+    if (!sessionChecked) return;
+    if (!isAuthenticated || !currentUserId) return;
+    if (pendingLocalLogout || skipLaunchParam === '1') return;
+
+    setHomeSearch('');
+    publishHomeTab('dishes');
+    setActiveHomeTab('dishes');
+    const id = setTimeout(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      scrollYRef.current = 0;
+    }, 0);
+
+    return () => clearTimeout(id);
+  }, [currentUserId, isAuthenticated, pendingLocalLogout, sessionChecked, skipLaunchParam]);
+
+  useEffect(() => {
     if (skipLaunchParam === '1') return;
     if ((currentUserId || isAuthenticated || isGuestMode) && !pendingLocalLogout) {
       setDebugStage('effect:clear-force-logged-out');
@@ -700,23 +1104,45 @@ export default function HomeScreen() {
   }, [currentUserId, isAuthenticated, isGuestMode, pendingLocalLogout, skipLaunchParam]);
 
   useEffect(() => {
-    if (skipLaunchParam !== '1') return;
-    if (!(currentUserId || isAuthenticated)) return;
-    if (pendingLocalLogout) return;
-    setDebugStage('effect:repair-stale-skiplaunch');
-    router.replace({
-      pathname: '/',
-      params: {
-        headerSync: String(Date.now()),
-        guestMode: '0',
-        skipLaunch: '0',
-      },
-    });
-  }, [currentUserId, isAuthenticated, pendingLocalLogout, router, skipLaunchParam]);
-
-  useEffect(() => {
     pendingLocalLogoutRef.current = pendingLocalLogout;
   }, [pendingLocalLogout]);
+
+  useEffect(() => {
+    if (!currentUserId || !isAuthenticated || !pendingLocalLogout) return;
+    setPendingLocalLogout(false);
+    setPendingLocalLogoutState(false);
+  }, [currentUserId, isAuthenticated, pendingLocalLogout]);
+
+  useEffect(() => {
+    upsertStartupDebugLine('render.stage', debugStage);
+    upsertStartupDebugLine('render.sessionChecked', sessionChecked ? '1' : '0');
+    upsertStartupDebugLine('render.auth', isAuthenticated ? '1' : '0');
+    upsertStartupDebugLine('render.authHydrating', authHydrating ? '1' : '0');
+    upsertStartupDebugLine('render.guest', isGuestMode ? '1' : '0');
+    upsertStartupDebugLine('render.uid', currentUserId ? currentUserId.slice(0, 8) : '-');
+    upsertStartupDebugLine('render.loading', loading ? '1' : '0');
+    upsertStartupDebugLine('render.hasLoaded', hasLoaded ? '1' : '0');
+    upsertStartupDebugLine('render.dishes', String(dishAssociations.length));
+    upsertStartupDebugLine('render.logo', companyLogoUrl ? '1' : '0');
+    upsertStartupDebugLine('render.avatar', avatarUrl ? '1' : '0');
+    upsertStartupDebugLine('render.pendingLogout', pendingLocalLogout ? '1' : '0');
+    upsertStartupDebugLine('render.error', error ?? '-');
+  }, [
+    authHydrating,
+    avatarUrl,
+    companyLogoUrl,
+    currentUserId,
+    debugStage,
+    dishAssociations.length,
+    error,
+    hasLoaded,
+    isAuthenticated,
+    isGuestMode,
+    loading,
+    pendingLocalLogout,
+    sessionChecked,
+    upsertStartupDebugLine,
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -724,6 +1150,12 @@ export default function HomeScreen() {
     supabase.auth.getSession().then(async ({ data }) => {
       try {
         if (!mounted) return;
+        setAuthHydrating(Boolean(data.session?.user?.id));
+        sessionAccessTokenRef.current = data.session?.access_token ?? null;
+        if (data.session?.user?.id) {
+          setPendingLocalLogout(false);
+          setPendingLocalLogoutState(false);
+        }
         const guestModeEnabled = !data.session ? await loadGuestMode() : false;
         const logoCacheScope = getLogoCacheScope(
           data.session?.user?.id ?? null,
@@ -769,30 +1201,38 @@ export default function HomeScreen() {
             setCompanyLogoPath(cached.logoPath);
           }
           const userId = data.session?.user?.id ?? null;
-          const resolvedAvatar = await resolveAvatarForUser(
-            userId,
-            (data.session?.user?.user_metadata as any)?.avatar_url ?? null
+          const resolvedAvatar = await withTimeout(
+            resolveAvatarForUser(
+              userId,
+              (data.session?.user?.user_metadata as any)?.avatar_url ?? null
+            ),
+            1200,
+            null
           );
           if (!mounted || !resolvedAvatar) return;
           setAvatarUrl(resolvedAvatar);
           await cacheAvatar(userId, resolvedAvatar);
         })();
         if (data.session?.user?.id) {
-          if (skipLaunchParam === '1') {
-            setDebugStage('session:getSession:clear-skiplaunch');
-            router.replace({
-              pathname: '/',
-              params: {
-                headerSync: String(Date.now()),
-                guestMode: '0',
-                skipLaunch: '0',
-              },
-            });
-          }
           void setGuestModeEnabled(false);
+          try {
+            setDebugStage('session:getSession:hydrate-signed-in');
+            await hydrateSignedInHome(
+              data.session.user.id,
+              data.session.user.email ?? null,
+              data.session.access_token ?? null
+            );
+            if (!mounted) return;
+            setDebugStage('session:getSession:signed-in-ready');
+          } catch (hydrateError) {
+            if (!mounted) return;
+            console.warn('[home] cold-start signed-in hydration failed', hydrateError);
+          }
         } else if (guestModeEnabled) {
+          setAuthHydrating(false);
           setDebugStage('session:getSession:guest-ready');
         } else {
+          setAuthHydrating(false);
           setDebugStage('session:getSession:logged-out-ready');
           resetAuthForm();
           setDishAssociations([]);
@@ -805,14 +1245,24 @@ export default function HomeScreen() {
         setDishAssociations([]);
         setFavorites({});
         setError(error instanceof Error ? error.message : 'Unknown error');
-      } finally {}
+      } finally {
+        if (mounted) {
+          setAuthHydrating(false);
+        }
+      }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setDebugStage(`auth-change:${session?.user?.id ? 'signed-in' : 'signed-out'}`);
+      setAuthHydrating(Boolean(session?.user?.id));
       setSessionChecked(true);
       setIsAuthenticated(Boolean(session));
       setCurrentUserId(session?.user?.id ?? null);
       setCurrentUserEmail(session?.user?.email ?? null);
+      sessionAccessTokenRef.current = session?.access_token ?? null;
+      if (session?.user?.id) {
+        setPendingLocalLogout(false);
+        setPendingLocalLogoutState(false);
+      }
       if (!session && skipLaunchParam === '1') {
         setDebugStage('auth-change:signed-out-skiplaunch');
         setForceLoggedOut(true);
@@ -823,9 +1273,13 @@ export default function HomeScreen() {
         }
       }
       setIsRefreshing(false);
-      const resolvedAvatar = await resolveAvatarForUser(
-        session?.user?.id ?? null,
-        (session?.user?.user_metadata as any)?.avatar_url ?? null
+      const resolvedAvatar = await withTimeout(
+        resolveAvatarForUser(
+          session?.user?.id ?? null,
+          (session?.user?.user_metadata as any)?.avatar_url ?? null
+        ),
+        1200,
+        null
       );
       if (resolvedAvatar) {
         setAvatarUrl(resolvedAvatar);
@@ -837,22 +1291,24 @@ export default function HomeScreen() {
       if (session?.user?.id) {
         setPendingLocalLogout(false);
         setPendingLocalLogoutState(false);
-        if (skipLaunchParam === '1') {
-          setDebugStage('auth-change:clear-skiplaunch');
-          router.replace({
-            pathname: '/',
-            params: {
-              headerSync: String(Date.now()),
-              guestMode: '0',
-              skipLaunch: '0',
-            },
-          });
-        }
         setIsGuestMode(false);
         await setGuestModeEnabled(false);
-        await ensureAppUserProfile(session.user.id, session.user.email ?? null);
-        setDebugStage('auth-change:signed-in-ready');
+        if (authBootstrapUserIdRef.current === session.user.id) {
+          setDebugStage('auth-change:signed-in-deferred');
+          return;
+        }
+        try {
+          await hydrateSignedInHome(
+            session.user.id,
+            session.user.email ?? null,
+            session.access_token ?? null
+          );
+          setDebugStage('auth-change:signed-in-ready');
+        } finally {
+          setAuthHydrating(false);
+        }
       } else {
+        setAuthHydrating(false);
         const guestModeEnabled = await loadGuestMode();
         setIsGuestMode(guestModeEnabled);
         if (guestModeEnabled) {
@@ -938,19 +1394,26 @@ export default function HomeScreen() {
   }, [companyLogoUrl, companyLogoPath, currentUserEmail, currentUserId, isGuestMode]);
 
   useEffect(() => {
+    if (authHydrating) {
+      return;
+    }
     if (currentUserId) {
+      if (skipNextSignedInAutoLoadUserRef.current === currentUserId) {
+        skipNextSignedInAutoLoadUserRef.current = null;
+        return;
+      }
       loadDishAssociations({ useCache: true, showLoading: false });
     } else if (isGuestMode) {
       loadDishAssociations({ showLoading: false });
     }
-  }, [currentUserId, isGuestMode, loadDishAssociations, refreshParam]);
+  }, [authHydrating, currentUserId, isGuestMode, loadDishAssociations, refreshParam]);
 
   useEffect(() => {
     if (bootstrapRetryTimeoutRef.current) {
       clearTimeout(bootstrapRetryTimeoutRef.current);
       bootstrapRetryTimeoutRef.current = null;
     }
-    if (!sessionChecked || loading || hasLoaded || error || (!currentUserId && !isGuestMode)) {
+    if (authHydrating || !sessionChecked || loading || hasLoaded || error || (!currentUserId && !isGuestMode)) {
       return;
     }
     bootstrapRetryTimeoutRef.current = setTimeout(() => {
@@ -965,10 +1428,11 @@ export default function HomeScreen() {
         bootstrapRetryTimeoutRef.current = null;
       }
     };
-  }, [currentUserId, error, hasLoaded, isGuestMode, loadDishAssociations, loading, sessionChecked]);
+  }, [authHydrating, currentUserId, error, hasLoaded, isGuestMode, loadDishAssociations, loading, sessionChecked]);
 
   useEffect(() => {
     cacheHydratedRef.current = false;
+    startupRecoveryTriedRef.current = false;
   }, [currentUserId]);
 
   useEffect(() => {
@@ -978,6 +1442,97 @@ export default function HomeScreen() {
       setFavorites({});
     }
   }, [currentUserId, loadFavorites]);
+
+  useEffect(() => {
+    if (!currentUserId || dishAssociations.length === 0) return;
+    if (Object.keys(userAvatars).length > 0) return;
+
+    void loadUserAvatars(dishAssociations);
+  }, [currentUserId, dishAssociations, userAvatars]);
+
+  useEffect(() => {
+    if (!currentUserId || dishAssociations.length === 0) return;
+    if (Object.keys(userAvatars).length > 0) return;
+    if (!sessionAccessTokenRef.current) return;
+
+    void (async () => {
+      const ids = Array.from(
+        new Set(dishAssociations.map((item) => item.user_id).filter(Boolean) as string[])
+      );
+      const directMaps = await fetchBootstrapUserAvatarMaps(ids, sessionAccessTokenRef.current);
+      if (Object.keys(directMaps.avatars).length === 0) return;
+      setUserAvatars(directMaps.avatars);
+      setUserLabels(directMaps.labels);
+      avatarIdsKeyRef.current = [...ids].sort().join(',');
+      if (!avatarUrl && directMaps.avatars[currentUserId]) {
+        setAvatarUrl(directMaps.avatars[currentUserId]);
+        await cacheAvatar(currentUserId, directMaps.avatars[currentUserId]);
+      }
+    })();
+  }, [avatarUrl, currentUserId, dishAssociations, userAvatars]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUserId || !currentUserEmail) return;
+    if (loading || authHydrating || !hasLoaded || error) return;
+    if (dishAssociations.length > 0 || startupRecoveryTriedRef.current) return;
+
+    startupRecoveryTriedRef.current = true;
+    void (async () => {
+      try {
+        setDebugStage('startup-recovery:start');
+        upsertStartupDebugLine('boot.recovery', 'start');
+        const domain = getEmailDomain(currentUserEmail);
+        if (!domain) {
+          upsertStartupDebugLine('boot.recovery', 'no-domain');
+          return;
+        }
+        const domainLookup = await withTimeout(
+          (async () =>
+            await supabase
+              .from('companies')
+              .select('id')
+              .ilike('domain', domain)
+              .limit(1)
+              .maybeSingle())(),
+          HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
+          { data: null, error: null } as any
+        );
+        const companyId = domainLookup.data?.id ?? null;
+        upsertStartupDebugLine('boot.recoveryCompanyId', companyId ?? '-');
+        if (!companyId) {
+          setDebugStage('startup-recovery:no-company');
+          return;
+        }
+        primeCompanyIdForUser(currentUserId, companyId);
+        await loadDishAssociations({
+          useCache: false,
+          showLoading: false,
+          userIdOverride: currentUserId,
+          userEmailOverride: currentUserEmail,
+          companyIdOverride: companyId,
+        });
+        upsertStartupDebugLine('boot.recovery', 'done');
+        setDebugStage('startup-recovery:done');
+      } catch (recoveryError) {
+        upsertStartupDebugLine(
+          'boot.recoveryError',
+          recoveryError instanceof Error ? recoveryError.message : 'unknown'
+        );
+        setDebugStage('startup-recovery:error');
+      }
+    })();
+  }, [
+    authHydrating,
+    currentUserEmail,
+    currentUserId,
+    dishAssociations.length,
+    error,
+    hasLoaded,
+    isAuthenticated,
+    loadDishAssociations,
+    loading,
+    upsertStartupDebugLine,
+  ]);
 
   useEffect(() => {
     return subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
@@ -1187,31 +1742,49 @@ export default function HomeScreen() {
     try {
       setAuthLoading(true);
       setAuthError(null);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: pass,
       });
       if (error) {
         throw error;
       }
+      const sessionUser = data.session?.user ?? data.user ?? null;
       setDebugStage('signin:success');
       await setGuestModeEnabled(false);
+      authBootstrapUserIdRef.current = sessionUser?.id ?? null;
+      setAuthHydrating(Boolean(sessionUser));
+      setSessionChecked(true);
+      setForceLoggedOut(false);
       setIsGuestMode(false);
+      setIsAuthenticated(Boolean(sessionUser));
+      setCurrentUserId(sessionUser?.id ?? null);
+      setCurrentUserEmail(sessionUser?.email ?? null);
       setPendingLocalLogout(false);
       setPendingLocalLogoutState(false);
-      router.replace({
-        pathname: '/',
-        params: {
-          headerSync: String(Date.now()),
-          guestMode: '0',
-          skipLaunch: '0',
-        },
-      });
+      setError(null);
+      setHasLoaded(false);
+      setLoading(false);
+      setIsRefreshing(false);
+      setDishAssociations([]);
+      setFavorites({});
+      rememberedHomeFeed = null;
+      setShowSignup(false);
+      if (sessionUser?.id) {
+        await waitForStableSessionUser(sessionUser.id);
+        await hydrateSignedInHome(
+          sessionUser.id,
+          sessionUser.email ?? null,
+          data.session?.access_token ?? null
+        );
+      }
     } catch (err) {
+      setAuthHydrating(false);
       setDebugStage('signin:error');
       const message = err instanceof Error ? err.message : t('authLoginFailed');
       setAuthError(toLocalizedAuthError(message));
     } finally {
+      authBootstrapUserIdRef.current = null;
       setAuthLoading(false);
     }
   };
@@ -1563,6 +2136,44 @@ export default function HomeScreen() {
     ]
   );
 
+  const compactStartupDebugLines = useMemo(
+    () =>
+      startupDebugLines.filter((line) => {
+        return (
+          line.startsWith('boot.step=') ||
+          line.startsWith('boot.start=') ||
+          line.startsWith('boot.domain=') ||
+          line.startsWith('boot.companyIdDomain=') ||
+          line.startsWith('boot.feed=') ||
+          line.startsWith('boot.done=') ||
+          line.startsWith('boot.recovery=') ||
+          line.startsWith('boot.recoveryCompanyId=') ||
+          line.startsWith('boot.recoveryError=') ||
+          line.startsWith('render.auth=') ||
+          line.startsWith('render.authHydrating=') ||
+          line.startsWith('render.loading=') ||
+          line.startsWith('render.hasLoaded=') ||
+          line.startsWith('render.dishes=') ||
+          line.startsWith('render.error=')
+        );
+      }),
+    [startupDebugLines]
+  );
+
+  const openHomeHeaderMenu = useCallback(() => {
+    setHomeHeaderMenuOpenKey((value) => value + 1);
+    setHomeHeaderMenuVisible(true);
+  }, []);
+
+  const goHomeFromHeader = useCallback(() => {
+    publishHomeTab('dishes');
+    setActiveHomeTab('dishes');
+    setHomeSearch('');
+    setDebouncedHomeSearch('');
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    scrollYRef.current = 0;
+  }, []);
+
   return (
     <SafeAreaView
       style={[styles.container, !isAuthenticated && !isGuestMode && styles.containerAuth]}
@@ -1576,7 +2187,12 @@ export default function HomeScreen() {
         isGuestModeOverride={isGuestMode}
         currentUserIdOverride={currentUserId}
         currentUserEmailOverride={currentUserEmail}
+        forceMenuOpenKey={homeHeaderMenuOpenKey}
+        externalTouchHandling
+        menuVisibleOverride={homeHeaderMenuVisible}
+        onMenuVisibleChange={setHomeHeaderMenuVisible}
       />
+      <View style={styles.screenBody}>
       {!sessionChecked && skipLaunchParam !== '1' && !forceLoggedOut ? (
         <View style={styles.launchScreen}>
           <View style={styles.launchCard}>
@@ -1758,6 +2374,63 @@ export default function HomeScreen() {
         url={legalModal?.url ?? getLegalUrl(locale, 'terms')}
         onClose={() => setLegalModal(null)}
       />
+      {isAuthenticated && loading && !hasLoaded ? (
+        <View style={styles.startupDebugCard}>
+          {compactStartupDebugLines.map((line) => (
+            <Text key={line} style={styles.startupDebugText}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      </View>
+      {(isAuthenticated || isGuestMode) ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.homeHeaderTouchOverlay,
+            { top: 0, height: insets.top + 64 },
+          ]}
+        >
+          <View style={[styles.homeHeaderTouchRow, { paddingTop: insets.top + 6 }]}>
+            <View style={styles.homeHeaderTouchEdge}>
+              {isRTL ? (
+                <Pressable
+                  style={styles.homeHeaderTouchButton}
+                  hitSlop={20}
+                  onPress={() => router.push('/search')}
+                />
+              ) : (
+                <Pressable
+                  style={styles.homeHeaderTouchButton}
+                  hitSlop={20}
+                  onPress={openHomeHeaderMenu}
+                />
+              )}
+            </View>
+            <Pressable
+              style={styles.homeHeaderTouchCenter}
+              hitSlop={20}
+              onPress={goHomeFromHeader}
+            />
+            <View style={styles.homeHeaderTouchEdge}>
+              {isRTL ? (
+                <Pressable
+                  style={styles.homeHeaderTouchButton}
+                  hitSlop={20}
+                  onPress={openHomeHeaderMenu}
+                />
+              ) : (
+                <Pressable
+                  style={styles.homeHeaderTouchButton}
+                  hitSlop={20}
+                  onPress={() => router.push('/search')}
+                />
+              )}
+            </View>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1770,6 +2443,38 @@ const styles = StyleSheet.create({
   },
   containerAuth: {
     backgroundColor: theme.colors.background,
+  },
+  screenBody: {
+    flex: 1,
+  },
+  homeHeaderTouchOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    elevation: 1000,
+  },
+  homeHeaderTouchRow: {
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  homeHeaderTouchEdge: {
+    width: 56,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeHeaderTouchCenter: {
+    flex: 1,
+    minHeight: 48,
+    marginHorizontal: 8,
+  },
+  homeHeaderTouchButton: {
+    width: 44,
+    height: 44,
   },
   header: {
     height: 56,
@@ -2309,6 +3014,24 @@ const styles = StyleSheet.create({
   },
   fabButtonPressed: {
     transform: [{ scale: 0.96 }],
+  },
+  startupDebugCard: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 120,
+    backgroundColor: 'rgba(32, 18, 12, 0.92)',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+    zIndex: 40,
+  },
+  startupDebugText: {
+    color: '#FFF7F0',
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'left',
   },
   favoritesHeader: {
     flexDirection: 'row',

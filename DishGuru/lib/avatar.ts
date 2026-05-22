@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from './supabase';
+import { getCurrentAuthUser, supabase } from './supabase';
 
 const AVATAR_CACHE_PREFIX = 'userAvatarUrl:';
 
@@ -74,14 +74,13 @@ export const resolveAvatarForUser = async (
 };
 
 export const fetchAvatarFromAuth = async (): Promise<string | null> => {
-  const { data, error } = await supabase.auth.getUser();
-  const userId = data.user?.id ?? null;
+  const authUser = await getCurrentAuthUser();
+  const userId = authUser?.id ?? null;
   const resolvedAvatar = await resolveAvatarForUser(
     userId,
-    (data.user?.user_metadata as any)?.avatar_url ?? null
+    (authUser?.user_metadata as any)?.avatar_url ?? null
   );
   if (resolvedAvatar) return resolvedAvatar;
-  if (error) return null;
   return null;
 };
 

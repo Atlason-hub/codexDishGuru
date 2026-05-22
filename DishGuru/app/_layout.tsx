@@ -12,7 +12,12 @@ import { useEffect, useState } from 'react';
 import * as Font from 'expo-font';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { subscribeTheme } from '../lib/theme';
-import { clearInvalidStoredSession, startSupabaseAutoRefresh, stopSupabaseAutoRefresh } from '../lib/supabase';
+import {
+  clearInvalidStoredSession,
+  startSupabaseAutoRefresh,
+  stopSupabaseAutoRefresh,
+  warmSupabaseSession,
+} from '../lib/supabase';
 import { LocaleProvider, useLocale } from '../lib/locale';
 import { RATING_IMAGES } from '../lib/ratings';
 
@@ -37,6 +42,8 @@ function AppShell() {
         <Stack.Screen name="restaurant" options={{ animation: 'none' }} />
         <Stack.Screen name="dish" options={{ animation: 'none' }} />
         <Stack.Screen name="edit-dish" options={{ animation: 'none' }} />
+        <Stack.Screen name="account" options={{ headerShown: false, animation: 'none' }} />
+        <Stack.Screen name="my-dishes" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="camera" options={{ headerShown: false }} />
         <Stack.Screen name="camera/result" options={{ headerShown: false }} />
         <Stack.Screen name="camera/details" options={{ headerShown: false }} />
@@ -76,15 +83,17 @@ export default function RootLayout() {
   useEffect(() => {
     let isMounted = true;
     const prepareAuth = async () => {
-      if (isMounted) {
-        setAuthReady(true);
-      }
       try {
         await clearInvalidStoredSession();
         await startSupabaseAutoRefresh();
+        await warmSupabaseSession();
       } catch {
         // Let the app render immediately and allow the screen-level session
         // bootstrap to recover gracefully if auth storage is stale.
+      } finally {
+        if (isMounted) {
+          setAuthReady(true);
+        }
       }
     };
     void prepareAuth();

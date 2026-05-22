@@ -3,7 +3,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { supabase } from '../lib/supabase';
+import AppHeader from '../components/AppHeader';
+import { getCurrentAuthUser, supabase } from '../lib/supabase';
 import { fetchAvatarFromAuth, fetchAvatarFromProfile, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
@@ -44,6 +45,7 @@ export default function MyDishesScreen() {
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [orderVendor, setOrderVendor] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const appStateRef = useRef(AppState.currentState);
@@ -88,8 +90,7 @@ export default function MyDishesScreen() {
   }, []);
 
   const toggleFavorite = useCallback(async (dishAssociationId: string) => {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
+    const userId = (await getCurrentAuthUser())?.id ?? null;
     if (!userId) return;
     const isFav = Boolean(favorites[dishAssociationId]);
     setFavorites((prev) => ({ ...prev, [dishAssociationId]: !isFav }));
@@ -216,17 +217,30 @@ export default function MyDishesScreen() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => {
+    const resolveSignedInUser = async () => {
+      let session = (await supabase.auth.getSession()).data.session;
+      let authUser = session?.user ?? (await getCurrentAuthUser());
+      if (authUser) {
+        return { session, authUser };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      session = (await supabase.auth.getSession()).data.session;
+      authUser = session?.user ?? (await getCurrentAuthUser());
+      return { session, authUser };
+    };
+
+    resolveSignedInUser().then(async ({ session, authUser }) => {
       if (!mounted) return;
-      const { data: userData, error: userError } = await supabase.auth.getUser();
       if (!mounted) return;
-      const userId = userData.user?.id ?? data.session?.user?.id ?? null;
+      const userId = authUser?.id ?? null;
+      const email = authUser?.email ?? session?.user?.email ?? null;
       const guestModeEnabled = !userId ? await loadGuestMode() : false;
-      if (userError && !userId) {
+      if (!userId && !guestModeEnabled) {
         router.replace('/');
         return;
       }
       setCurrentUserId(userId);
+      setCurrentUserEmail(email);
       if (!userId || guestModeEnabled) {
         router.replace('/');
         return;
@@ -238,9 +252,10 @@ export default function MyDishesScreen() {
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       void (async () => {
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData.user?.id ?? session?.user?.id ?? null;
+        const authUser = (await getCurrentAuthUser()) ?? session?.user ?? null;
+        const userId = authUser?.id ?? null;
         setCurrentUserId(userId);
+        setCurrentUserEmail(authUser?.email ?? session?.user?.email ?? null);
         if (userId) {
           await refreshAvatar(userId);
           loadFavorites(userId);
@@ -276,8 +291,8 @@ export default function MyDishesScreen() {
       let active = true;
       (async () => {
         const { data: sessionData } = await supabase.auth.getSession();
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData.user?.id ?? sessionData.session?.user?.id ?? null;
+        const authUser = (await getCurrentAuthUser()) ?? sessionData.session?.user ?? null;
+        const userId = authUser?.id ?? null;
         const guestModeEnabled = !userId ? await loadGuestMode() : false;
         if (active && (!userId || guestModeEnabled)) {
           router.replace({ pathname: '/', params: { refresh: String(Date.now()) } });
@@ -429,6 +444,11 @@ export default function MyDishesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <AppHeader
+        isAuthenticatedOverride={Boolean(currentUserId)}
+        currentUserIdOverride={currentUserId}
+        currentUserEmailOverride={currentUserEmail}
+      />
       <FlatList
         data={groupedMyDishes}
         keyExtractor={(item) => item[0]?.id ?? Math.random().toString()}

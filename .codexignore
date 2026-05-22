@@ -1,0 +1,43 @@
+# Keep Codex focused on the mobile app by default.
+# The main working surface is:
+# - DishGuru/app
+# - DishGuru/components
+# - DishGuru/lib
+# - DishGuru/assets
+# - supabase/functions (when backend/app integration is needed)
+
+# Package/build noise
+node_modules/
+.expo/
+.pnpm-store/
+*.log
+*.aab
+*.apk
+*.ipa
+.DS_Store
+
+# Mobile generated output
+DishGuru/android/app/build/
+DishGuru/ios/build/
+DishGuru/android/.gradle/
+DishGuru/.expo/
+
+# Local credentials / temporary artifacts
+DishGuru/credentials.json
+admin-web/.env.local
+admin-web/tsconfig.tsbuildinfo
+supabase/.temp/
+supabase-migration/
+
+# Non-app surfaces that usually do not matter for app programming
+admin-web/
+docs/
+legal-site/
+account-delete.html
+account-delete-en.html
+auth-link.html
+auth-link-en.html
+index.html
+index_en.html
+supabase-email-confirmation.html
+supabase-email-recovery.html

@@ -52,6 +52,10 @@ type AppHeaderProps = {
   isGuestModeOverride?: boolean;
   currentUserIdOverride?: string | null;
   currentUserEmailOverride?: string | null;
+  forceMenuOpenKey?: number;
+  externalTouchHandling?: boolean;
+  menuVisibleOverride?: boolean;
+  onMenuVisibleChange?: (visible: boolean) => void;
 };
 
 export default function AppHeader({
@@ -62,6 +66,10 @@ export default function AppHeader({
   isGuestModeOverride,
   currentUserIdOverride,
   currentUserEmailOverride,
+  forceMenuOpenKey = 0,
+  externalTouchHandling = false,
+  menuVisibleOverride,
+  onMenuVisibleChange,
 }: AppHeaderProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
@@ -104,6 +112,8 @@ export default function AppHeader({
   const [resolvedSessionLogoUrl, setResolvedSessionLogoUrl] = useState<string | null>(null);
   const lastPaletteLogoRef = useRef<string | null>(null);
   const syncRunIdRef = useRef(0);
+  const isMenuControlled = typeof menuVisibleOverride === 'boolean';
+  const resolvedMenuVisible = isMenuControlled ? menuVisibleOverride : menuVisible;
 
   const hasExternalAuthControl =
     typeof isAuthenticatedOverride === 'boolean' ||
@@ -467,10 +477,30 @@ export default function AppHeader({
     });
   }, [effectiveCurrentUserId]);
 
+  useEffect(() => {
+    if (!forceMenuOpenKey) return;
+    if (isMenuControlled) {
+      onMenuVisibleChange?.(true);
+      return;
+    }
+    setMenuVisible(true);
+  }, [forceMenuOpenKey, isMenuControlled, onMenuVisibleChange]);
+
+  const setResolvedMenuVisible = useCallback(
+    (visible: boolean) => {
+      if (isMenuControlled) {
+        onMenuVisibleChange?.(visible);
+        return;
+      }
+      setMenuVisible(visible);
+    },
+    [isMenuControlled, onMenuVisibleChange]
+  );
+
   const signOut = async () => {
     setDebugStage('logout:start');
     setPendingLocalLogout(true);
-    setMenuVisible(false);
+    setResolvedMenuVisible(false);
     setIsLoggingOut(true);
     setIsAuthenticated(false);
     setIsGuestMode(false);
@@ -506,7 +536,7 @@ export default function AppHeader({
     setIsGuestMode(false);
     setSessionLogo(null);
     setResolvedSessionLogoUrl(null);
-    setMenuVisible(false);
+    setResolvedMenuVisible(false);
     router.replace({
       pathname: '/',
       params: {
@@ -554,7 +584,7 @@ export default function AppHeader({
   };
 
   const goHome = () => {
-    setMenuVisible(false);
+    setResolvedMenuVisible(false);
     const isPlainHomeRoute =
       pathname === '/' &&
       favoritesParam !== '1' &&
@@ -574,6 +604,10 @@ export default function AppHeader({
         homeTab: 'dishes',
       },
     });
+  };
+
+  const openMenu = () => {
+    setResolvedMenuVisible(true);
   };
 
   const renderMenuItem = (label: string, icon: React.ReactNode, onPress: () => void) => (
@@ -601,9 +635,14 @@ export default function AppHeader({
   const shouldShowHeader = (!isLoggingOut || hasSignedInSession || isGuestHeader) && (hasSignedInSession || isGuestHeader);
   const shouldShowAuthenticatedMenu = hasSignedInSession;
   const sessionLogoSnapshot = getSessionCompanyLogoSnapshot();
+  const normalizedOverrideLogoUrl = companyLogoPathOverride
+    ? resolveLogoUrl(companyLogoPathOverride)
+    : companyLogoUrlOverride
+      ? resolveLogoUrl(companyLogoUrlOverride)
+      : null;
   const effectiveCompanyLogoUrl = hasSignedInSession
     ? (
-        companyLogoUrlOverride ??
+        normalizedOverrideLogoUrl ??
         resolvedSessionLogoUrl ??
         sessionLogo?.logoUrl ??
         sessionLogoSnapshot?.logoUrl ??
@@ -631,21 +670,21 @@ export default function AppHeader({
       style={[styles.header, { paddingTop: insets.top + 6 }]}
       onLayout={captureLayout('headerLayout')}
     >
-      <View style={styles.leftIcons}>
+      <View style={styles.leftIcons} pointerEvents="none">
         {!isRTL ? (
-          <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
+          <View style={styles.iconButton}>
             <Ionicons name="menu" size={28} color={theme.colors.ink} />
-          </Pressable>
+          </View>
         ) : (
-          <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
+          <View style={styles.iconButton}>
             <Ionicons name="search" size={24} color={theme.colors.ink} />
-          </Pressable>
+          </View>
         )}
       </View>
-      <Pressable
+      <View
         style={styles.logoContainer}
-        onPress={goHome}
         onLayout={captureLayout('logoContainerLayout')}
+        pointerEvents="none"
       >
         <Text style={[styles.logoText, shouldShowCompanyLogo && styles.logoTextHidden]}>DishGuru</Text>
         {shouldShowCompanyLogo ? (
@@ -673,26 +712,45 @@ export default function AppHeader({
             onLayout={captureLayout('imageLayout')}
           />
         ) : null}
-      </Pressable>
-      <View style={styles.rightIcons}>
+      </View>
+      <View style={styles.rightIcons} pointerEvents="none">
         {isRTL ? (
-          <Pressable style={styles.iconButton} onPress={() => setMenuVisible((prev) => !prev)}>
+          <View style={styles.iconButton}>
             <Ionicons name="menu" size={28} color={theme.colors.ink} />
-          </Pressable>
+          </View>
         ) : (
-          <Pressable style={styles.iconButton} onPress={() => router.push('/search')}>
+          <View style={styles.iconButton}>
             <Ionicons name="search" size={24} color={theme.colors.ink} />
-          </Pressable>
+          </View>
         )}
       </View>
+      {!externalTouchHandling ? (
+        <View style={styles.headerTapLayer}>
+          <View style={styles.leftIcons}>
+            {!isRTL ? (
+              <Pressable style={styles.iconButton} hitSlop={20} onPress={openMenu} />
+            ) : (
+              <Pressable style={styles.iconButton} hitSlop={20} onPress={() => router.push('/search')} />
+            )}
+          </View>
+          <Pressable style={styles.logoTapTarget} hitSlop={20} onPress={goHome} />
+          <View style={styles.rightIcons}>
+            {isRTL ? (
+              <Pressable style={styles.iconButton} hitSlop={20} onPress={openMenu} />
+            ) : (
+              <Pressable style={styles.iconButton} hitSlop={20} onPress={() => router.push('/search')} />
+            )}
+          </View>
+        </View>
+      ) : null}
       <Modal
-        visible={menuVisible}
+        visible={resolvedMenuVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setMenuVisible(false)}
+        onRequestClose={() => setResolvedMenuVisible(false)}
       >
         <View style={styles.menuContainer}>
-          <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)} />
+          <Pressable style={styles.menuBackdrop} onPress={() => setResolvedMenuVisible(false)} />
           <View
             style={[
               styles.menuOverlay,
@@ -701,7 +759,7 @@ export default function AppHeader({
           >
             <Pressable
               style={[styles.menuClose, isRTL ? styles.menuCloseRtl : styles.menuCloseLtr]}
-              onPress={() => setMenuVisible(false)}
+              onPress={() => setResolvedMenuVisible(false)}
             >
               <Ionicons name="close" size={20} color={theme.colors.textMuted} />
             </Pressable>
@@ -714,7 +772,7 @@ export default function AppHeader({
                     <Ionicons name="person-circle-outline" size={20} color={theme.colors.accent} />
                   ),
                   () => {
-                    setMenuVisible(false);
+                    setResolvedMenuVisible(false);
                     router.push('/account');
                   }
                 )
@@ -724,7 +782,7 @@ export default function AppHeader({
                   t('headerMenuMyDishes'),
                   <Ionicons name="restaurant-outline" size={20} color={theme.colors.accent} />,
                   () => {
-                    setMenuVisible(false);
+                    setResolvedMenuVisible(false);
                     router.push('/my-dishes');
                   }
                 )
@@ -733,7 +791,7 @@ export default function AppHeader({
               t('headerMenuFavorites'),
               <Ionicons name="heart-outline" size={20} color={theme.colors.accent} />,
               () => {
-                setMenuVisible(false);
+                setResolvedMenuVisible(false);
                 router.push('/?favorites=1');
               }
             )}
@@ -741,7 +799,7 @@ export default function AppHeader({
               t('headerMenuPrivacy'),
               <Ionicons name="megaphone-outline" size={20} color={theme.colors.accent} />,
               () => {
-                setMenuVisible(false);
+                setResolvedMenuVisible(false);
                 setLegalModal({
                   title: t('legalPrivacyTitle'),
                   url: getLegalUrl(locale, 'privacy'),
@@ -752,7 +810,7 @@ export default function AppHeader({
               t('headerMenuTerms'),
               <Ionicons name="document-text-outline" size={20} color={theme.colors.accent} />,
               () => {
-                setMenuVisible(false);
+                setResolvedMenuVisible(false);
                 setLegalModal({
                   title: t('legalTermsTitle'),
                   url: getLegalUrl(locale, 'terms'),
@@ -763,7 +821,7 @@ export default function AppHeader({
               t('headerMenuFeedback'),
               <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.colors.accent} />,
               () => {
-                setMenuVisible(false);
+                setResolvedMenuVisible(false);
                 setFeedbackVisible(true);
               }
             )}
@@ -852,16 +910,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 2,
     backgroundColor: theme.colors.white,
+    zIndex: 40,
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
   },
   leftIcons: {
+    width: 56,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    width: 72,
+    justifyContent: 'center',
+    zIndex: 4,
   },
   rightIcons: {
-    width: 72,
-    alignItems: 'flex-end',
+    width: 56,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
   },
   iconButton: {
     height: 40,
@@ -869,6 +939,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
+    backgroundColor: 'transparent',
   },
   logoContainer: {
     flex: 1,
@@ -876,6 +947,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 0,
     minHeight: 44,
+    marginHorizontal: 8,
+    paddingBottom: 2,
   },
   logoText: {
     fontSize: 20,
@@ -890,6 +963,18 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 172,
     height: 44,
+  },
+  headerTapLayer: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 20,
+  },
+  logoTapTarget: {
+    flex: 1,
+    minHeight: 48,
+    marginHorizontal: 8,
   },
   menuContainer: {
     position: 'absolute',

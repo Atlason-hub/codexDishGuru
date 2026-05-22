@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from './supabase';
+import { getCurrentAuthUser, supabase } from './supabase';
 
 const RESTAURANT_MENU_CACHE_PREFIX = 'restaurant_menu_cache:v1:';
 const RESTAURANT_MENU_TTL_MS = 15 * 60 * 1000;
@@ -171,8 +171,7 @@ export const fetchCompanyIdForUser = async (userId: string) => {
   }
   if (!companyId) {
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const authUser = authData.user;
+      const authUser = await getCurrentAuthUser();
       const authEmail =
         authUser?.id === userId ? authUser.email?.trim().toLowerCase() ?? '' : '';
       const domain = authEmail.includes('@') ? authEmail.split('@').pop()?.trim().toLowerCase() ?? '' : '';

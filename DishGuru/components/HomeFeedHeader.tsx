@@ -1,6 +1,5 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { HomeFeedSkeleton } from './LoadingSkeleton';
 import { theme } from '../lib/theme';
 import { publishHomeTab, type HomeTabKey } from '../lib/homeTabs';
 
@@ -77,15 +76,6 @@ export default function HomeFeedHeader({
           </Text>
         </View>
       ) : null}
-      {shouldShowSkeleton ? (
-        <View style={styles.results}>
-          <HomeFeedSkeleton />
-        </View>
-      ) : error ? (
-        <View style={styles.results}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : null}
       {!showFavoritesOnly ? (
         <View style={[styles.homeSearchBox, !isRTL && styles.homeSearchBoxLtr]}>
           <Ionicons name="search" size={16} color={theme.colors.accent} />
@@ -140,6 +130,18 @@ export default function HomeFeedHeader({
           <View style={styles.tabsDivider} />
         </View>
       ) : null}
+      {shouldShowSkeleton ? (
+        <View style={styles.loadingCard}>
+          <ActivityIndicator size="small" color={theme.colors.accent} />
+          <Text style={[styles.loadingText, !isRTL && styles.loadingTextLtr]}>
+            {t('launchSubtitle')}
+          </Text>
+        </View>
+      ) : error ? (
+        <View style={styles.results}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -188,6 +190,28 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     backgroundColor: 'transparent',
+  },
+  loadingCard: {
+    marginTop: 12,
+    alignSelf: 'stretch',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  loadingTextLtr: {
+    textAlign: 'left',
   },
   errorText: {
     color: theme.colors.danger,

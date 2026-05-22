@@ -10,18 +10,19 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
+import { getCurrentAuthUser, supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Buffer } from 'buffer';
 import { Image } from 'expo-image';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cacheAvatar, hydrateAvatarForUser, loadCachedAvatar } from '../lib/avatar';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { theme } from '../lib/theme';
+import AppHeader from '../components/AppHeader';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { Locale, useLocale } from '../lib/locale';
-import { clearCachedLogo } from '../lib/logo';
 import { setGuestModeEnabled } from '../lib/guestMode';
 import { publishAvatarUpdate, subscribeAvatarUpdates } from '../lib/avatarEvents';
 
@@ -35,6 +36,7 @@ export default function AccountScreen() {
   const [changingLocale, setChangingLocale] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [tempAvatarUrl, setTempAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -188,7 +190,6 @@ export default function AccountScreen() {
     void (async () => {
       try {
         await setGuestModeEnabled(false);
-        await clearCachedLogo();
       } catch (error) {
         console.warn('[account] post-logout cleanup failed', error);
       }
@@ -223,20 +224,31 @@ export default function AccountScreen() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => {
+    const resolveSignedInUser = async () => {
+      let session = (await supabase.auth.getSession()).data.session;
+      let authUser = session?.user ?? (await getCurrentAuthUser());
+      if (authUser) {
+        return { session, authUser };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      session = (await supabase.auth.getSession()).data.session;
+      authUser = session?.user ?? (await getCurrentAuthUser());
+      return { session, authUser };
+    };
+
+    resolveSignedInUser().then(async ({ session, authUser }) => {
       if (!mounted) return;
-      if (!data.session) {
+      if (!session) {
         routeToLoggedOutHome();
         return;
       }
-      const { data: userData, error: userError } = await supabase.auth.getUser();
       if (!mounted) return;
-      const authUser = userData.user ?? data.session.user ?? null;
-      if (userError || !authUser) {
+      if (!authUser) {
         routeToLoggedOutHome();
         return;
       }
-      setEmail(authUser.email ?? null);
+      setEmail(authUser.email ?? session.user?.email ?? null);
+      setCurrentUserId(authUser.id ?? null);
       authUserIdRef.current = authUser.id ?? null;
       const cached = await loadCachedAvatar(authUser.id);
       if (cached) setAvatarUrl(cached);
@@ -253,15 +265,16 @@ export default function AccountScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!session) {
         setEmail(null);
+        setCurrentUserId(null);
         setAvatarUrl(null);
         setTempAvatarUrl(null);
         setPendingAsset(null);
         routeToLoggedOutHome();
         return;
       }
-      const { data: userData } = await supabase.auth.getUser();
-      const authUser = userData.user ?? session.user ?? null;
-      setEmail(authUser?.email ?? null);
+      const authUser = (await getCurrentAuthUser()) ?? session.user ?? null;
+      setEmail(authUser?.email ?? session.user?.email ?? null);
+      setCurrentUserId(authUser?.id ?? session.user?.id ?? null);
       authUserIdRef.current = authUser?.id ?? null;
       const cached = await loadCachedAvatar(authUser?.id ?? null);
       if (cached) setAvatarUrl(cached);
@@ -287,8 +300,8 @@ export default function AccountScreen() {
   }, [routeToLoggedOutHome]);
 
   useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => {
-      authUserIdRef.current = data.user?.id ?? null;
+    void getCurrentAuthUser().then((user) => {
+      authUserIdRef.current = user?.id ?? null;
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       authUserIdRef.current = session?.user?.id ?? null;
@@ -308,6 +321,11 @@ export default function AccountScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
     >
+      <AppHeader
+        isAuthenticatedOverride={Boolean(currentUserId)}
+        currentUserIdOverride={currentUserId}
+        currentUserEmailOverride={email}
+      />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

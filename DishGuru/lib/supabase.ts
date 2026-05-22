@@ -43,6 +43,7 @@ const sessionMatchesCurrentProject = (session: { access_token?: string } | null 
 const rawGetSession = supabase.auth.getSession.bind(supabase.auth);
 const rawGetUser = supabase.auth.getUser.bind(supabase.auth);
 const rawSignOut = supabase.auth.signOut.bind(supabase.auth);
+const rawRefreshSession = supabase.auth.refreshSession.bind(supabase.auth);
 
 let invalidSessionRecoveryPromise: Promise<void> | null = null;
 
@@ -131,6 +132,47 @@ export async function clearInvalidStoredSession() {
 }
 
 let autoRefreshStarted = false;
+
+export async function getCurrentAuthUser() {
+  const { data } = await supabase.auth.getSession();
+  const sessionUser = data.session?.user ?? null;
+  if (sessionUser) {
+    return sessionUser;
+  }
+
+  try {
+    const userResult = await supabase.auth.getUser();
+    return userResult.data.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function warmSupabaseSession() {
+  const sessionResult = await supabase.auth.getSession();
+  const session = sessionResult.data.session;
+  if (!session?.refresh_token) {
+    return session;
+  }
+
+  try {
+    const refreshResult = await rawRefreshSession({
+      refresh_token: session.refresh_token,
+    });
+    if (isInvalidRefreshTokenError(refreshResult.error?.message)) {
+      await recoverInvalidStoredSession();
+      return null;
+    }
+    return refreshResult.data.session ?? session;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isInvalidRefreshTokenError(message)) {
+      await recoverInvalidStoredSession();
+      return null;
+    }
+    return session;
+  }
+}
 
 export async function startSupabaseAutoRefresh() {
   if (autoRefreshStarted) return;
