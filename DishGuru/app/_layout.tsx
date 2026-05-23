@@ -85,8 +85,8 @@ export default function RootLayout() {
     const prepareAuth = async () => {
       try {
         await clearInvalidStoredSession();
-        await startSupabaseAutoRefresh();
         await warmSupabaseSession();
+        await startSupabaseAutoRefresh();
       } catch {
         // Let the app render immediately and allow the screen-level session
         // bootstrap to recover gracefully if auth storage is stale.

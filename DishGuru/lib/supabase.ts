@@ -8,7 +8,7 @@ const expectedJwtIssuer = `${supabaseUrl}/auth/v1`;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    autoRefreshToken: false,
+    autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
   },
