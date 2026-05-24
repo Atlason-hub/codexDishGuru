@@ -6,7 +6,6 @@ import {
   Keyboard,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -2166,13 +2165,33 @@ export default function HomeScreen() {
   }, []);
 
   const goHomeFromHeader = useCallback(() => {
+    const isPlainHomeRoute =
+      !showFavoritesOnly &&
+      !showRestaurantOnly &&
+      activeHomeTab === 'dishes' &&
+      !homeSearch.trim();
+
     publishHomeTab('dishes');
     setActiveHomeTab('dishes');
     setHomeSearch('');
     setDebouncedHomeSearch('');
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
     scrollYRef.current = 0;
-  }, []);
+
+    if (isPlainHomeRoute) {
+      return;
+    }
+
+    router.replace({
+      pathname: '/',
+      params: {
+        refresh: String(Date.now()),
+        headerSync: String(Date.now()),
+        guestMode: isGuestMode ? '1' : '0',
+        homeTab: 'dishes',
+      },
+    });
+  }, [activeHomeTab, homeSearch, isGuestMode, router, showFavoritesOnly, showRestaurantOnly]);
 
   return (
     <SafeAreaView
@@ -2303,20 +2322,6 @@ export default function HomeScreen() {
               ]}
               pointerEvents={activeHomeTab === 'restaurants' ? 'auto' : 'none'}
             >
-            <ScrollView
-              contentContainerStyle={styles.restaurantsTabScrollContent}
-              refreshControl={
-                <RefreshControl
-                  refreshing={isRefreshing}
-                  onRefresh={() => refreshContent({ force: true, showSpinner: true })}
-                  tintColor={theme.colors.accent}
-                  colors={[theme.colors.accent]}
-                />
-              }
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {listHeader}
               <RestaurantsTab
                 dishes={dishAssociations}
                 loading={loading}
@@ -2325,8 +2330,10 @@ export default function HomeScreen() {
                 canAddDish={isAuthenticated}
                 onRequireLogin={showGuestLoginDialog}
                 searchQuery={debouncedHomeSearch}
+                listHeader={listHeader}
+                isRefreshing={isRefreshing}
+                onRefresh={() => refreshContent({ force: true, showSpinner: true })}
               />
-            </ScrollView>
             </View>
           ) : null}
         </View>

@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  FlatList,
   LayoutAnimation,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   UIManager,
@@ -62,6 +64,9 @@ type Props = {
   canAddDish: boolean;
   onRequireLogin: () => void;
   searchQuery: string;
+  listHeader?: React.ReactElement | null;
+  isRefreshing: boolean;
+  onRefresh: () => void;
 };
 
 function SectionChevron({ collapsed }: { collapsed: boolean }) {
@@ -93,9 +98,14 @@ function RestaurantAccordionItem({
   const [error, setError] = useState<string | null>(null);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const canUseAndroidLayoutAnimation =
+    Platform.OS === 'android' && !(global as any)?.nativeFabricUIManager;
 
   const animateLayout = useCallback(() => {
     if (Platform.OS === 'ios') {
+      return;
+    }
+    if (!canUseAndroidLayoutAnimation) {
       return;
     }
     LayoutAnimation.configureNext({
@@ -112,7 +122,7 @@ function RestaurantAccordionItem({
         property: LayoutAnimation.Properties.opacity,
       },
     });
-  }, []);
+  }, [canUseAndroidLayoutAnimation]);
 
   const loadMenu = useCallback(async () => {
     if (menuCategories.length > 0 || loading) return;
@@ -403,6 +413,9 @@ export default function RestaurantsTab({
   canAddDish,
   onRequireLogin,
   searchQuery,
+  listHeader = null,
+  isRefreshing,
+  onRefresh,
 }: Props) {
   const { isRTL, t } = useLocale();
   const [imagePreview, setImagePreview] = useState<{
@@ -410,12 +423,14 @@ export default function RestaurantsTab({
     title: string | null;
     subtitle: string | null;
   } | null>(null);
+  const canUseAndroidLayoutAnimation =
+    Platform.OS === 'android' && !(global as any)?.nativeFabricUIManager;
 
   useEffect(() => {
-    if (Platform.OS === 'android') {
+    if (canUseAndroidLayoutAnimation) {
       UIManager.setLayoutAnimationEnabledExperimental?.(true);
     }
-  }, []);
+  }, [canUseAndroidLayoutAnimation]);
 
   const restaurantGroups = useMemo(() => {
     const normalizedQuery = normalizeDishLookup(searchQuery) ?? '';
@@ -462,34 +477,63 @@ export default function RestaurantsTab({
   }, [dishes, searchQuery]);
 
   if (loading && !hasLoaded) {
-    return <RestaurantScreenSkeleton />;
+    return (
+      <View style={styles.screenStateWrap}>
+        {listHeader}
+        <RestaurantScreenSkeleton />
+      </View>
+    );
   }
 
   if (error) {
-    return <Text style={[styles.stateText, !isRTL && styles.stateTextLtr]}>{error}</Text>;
-  }
-
-  if (restaurantGroups.length === 0 && hasLoaded) {
     return (
-      <Text style={[styles.stateText, !isRTL && styles.stateTextLtr]}>
-        {t('restaurantsTabEmpty')}
-      </Text>
+      <View style={styles.screenStateWrap}>
+        {listHeader}
+        <Text style={[styles.stateText, !isRTL && styles.stateTextLtr]}>{error}</Text>
+      </View>
     );
   }
 
   return (
-    <View style={styles.content}>
-      {restaurantGroups.map((group) => (
-        <RestaurantAccordionItem
-          key={group.key}
-          group={group}
-          canAddDish={canAddDish}
-          onRequireLogin={onRequireLogin}
-          onPreviewImage={(imageUrl, title, subtitle) =>
-            setImagePreview({ imageUrl, title, subtitle })
-          }
-        />
-      ))}
+    <>
+      <FlatList
+        data={restaurantGroups}
+        keyExtractor={(item) => item.key}
+        renderItem={({ item }) => (
+          <RestaurantAccordionItem
+            group={item}
+            canAddDish={canAddDish}
+            onRequireLogin={onRequireLogin}
+            onPreviewImage={(imageUrl, title, subtitle) =>
+              setImagePreview({ imageUrl, title, subtitle })
+            }
+          />
+        )}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={
+          hasLoaded ? (
+            <Text style={[styles.stateText, !isRTL && styles.stateTextLtr]}>
+              {t('restaurantsTabEmpty')}
+            </Text>
+          ) : null
+        }
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.accent}
+            colors={[theme.colors.accent]}
+          />
+        }
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={40}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === 'android'}
+        showsVerticalScrollIndicator={false}
+      />
       <ImagePreviewModal
         visible={Boolean(imagePreview?.imageUrl)}
         imageUrl={imagePreview?.imageUrl ?? null}
@@ -497,12 +541,16 @@ export default function RestaurantsTab({
         subtitle={imagePreview?.subtitle ?? null}
         onClose={() => setImagePreview(null)}
       />
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
+    gap: 14,
+    paddingBottom: 180,
+  },
+  screenStateWrap: {
     gap: 14,
     paddingBottom: 180,
   },
