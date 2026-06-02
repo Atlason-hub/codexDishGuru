@@ -1828,6 +1828,19 @@ export default function HomeScreen() {
         setAuthError(t('authEmailDomainUnknown'));
         return;
       }
+      const { data: existingByEmail, error: existingByEmailError } = await supabase
+        .from('AppUsers')
+        .select('user_id, email')
+        .ilike('email', trimmedEmail)
+        .limit(1)
+        .maybeSingle();
+      if (existingByEmailError) {
+        throw existingByEmailError;
+      }
+      if (existingByEmail?.email) {
+        setAuthError(t('authUserExists'));
+        return;
+      }
       const redirectTo = buildAuthRedirectUrl(locale);
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -1839,6 +1852,15 @@ export default function HomeScreen() {
       });
       if (error) {
         throw error;
+      }
+      const signupLooksLikeExistingUser =
+        !data.session &&
+        Boolean(data.user) &&
+        Array.isArray((data.user as { identities?: unknown[] }).identities) &&
+        ((data.user as { identities?: unknown[] }).identities?.length ?? 0) === 0;
+      if (signupLooksLikeExistingUser) {
+        setAuthError(t('authUserExists'));
+        return;
       }
       setDebugStage('signup:success');
       const supabaseUserId = data.user?.id;
