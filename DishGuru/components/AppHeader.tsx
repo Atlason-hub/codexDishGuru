@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
-import { supabase } from '../lib/supabase';
+import { getCurrentAuthUser, supabase } from '../lib/supabase';
 import {
   cacheScopedLogo,
   getSessionCompanyLogoSnapshot,
@@ -560,15 +560,24 @@ export default function AppHeader({
     }
     try {
       setFeedbackSending(true);
+      const authUser = await getCurrentAuthUser().catch(() => null);
+      const feedbackEmail =
+        effectiveCurrentUserEmail ??
+        authUser?.email ??
+        null;
+      const feedbackUserId =
+        effectiveCurrentUserId ??
+        authUser?.id ??
+        null;
       const { error } = await supabase.functions.invoke('send-feedback', {
         body: {
           message: trimmed,
-          email: currentUserEmail,
+          email: feedbackEmail,
           locale,
           platform: Platform.OS,
           pathname,
-          isGuestMode,
-          userId: currentUserId,
+          isGuestMode: effectiveIsGuestMode,
+          userId: feedbackUserId,
         },
       });
       if (error) {

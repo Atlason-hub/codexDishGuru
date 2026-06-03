@@ -83,6 +83,16 @@ export default function MyDishesScreen() {
     });
   }, [dishAssociations]);
 
+  const getGroupedDishKey = useCallback((items: DishAssociation[]) => {
+    const lead = items[0];
+    if (!lead) return 'group:empty';
+    const normalizedDish = (lead.dish_name ?? '').trim().toLowerCase();
+    const normalizedRest = (lead.restaurant_name ?? '').trim().toLowerCase();
+    const dishKey = normalizedDish ? `dishName:${normalizedDish}` : `dish:${lead.dish_id ?? 'none'}`;
+    const restKey = normalizedRest ? `restName:${normalizedRest}` : `rest:${lead.restaurant_id ?? 'none'}`;
+    return `${dishKey}::${restKey}`;
+  }, []);
+
   const loadFavorites = useCallback(async (userId: string) => {
     try {
       setFavorites(await fetchFavoritesMap(userId));
@@ -451,7 +461,7 @@ export default function MyDishesScreen() {
       />
       <FlatList
         data={groupedMyDishes}
-        keyExtractor={(item) => item[0]?.id ?? Math.random().toString()}
+        keyExtractor={getGroupedDishKey}
         initialNumToRender={4}
         maxToRenderPerBatch={4}
         updateCellsBatchingPeriod={50}
