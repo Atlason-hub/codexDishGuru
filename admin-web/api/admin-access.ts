@@ -17,14 +17,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return json(res, 405, { error: "Method not allowed" });
   }
 
-  const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
-  if (!email) {
-    return json(res, 400, { error: "Missing email" });
+  const userId = typeof req.query.userId === "string" ? req.query.userId.trim() : "";
+  if (!userId) {
+    return json(res, 400, { error: "Missing userId" });
   }
 
   try {
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/${ADMIN_USERS_TABLE}?select=role,status,email&email=eq.${encodeURIComponent(email)}&limit=1`,
+      `${SUPABASE_URL}/rest/v1/${ADMIN_USERS_TABLE}?select=id,role,status,email&id=eq.${encodeURIComponent(userId)}&limit=1`,
       {
         headers: {
           apikey: SERVICE_ROLE,
@@ -39,6 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const rows = (text ? JSON.parse(text) : []) as Array<{
+      id?: string | null;
       role?: string | null;
       status?: string | null;
       email?: string | null;

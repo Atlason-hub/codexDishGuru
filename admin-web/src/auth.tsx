@@ -17,14 +17,14 @@ type AuthContextValue = {
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
 
 async function fetchAdminAccess(
-  email: string | null
+  userId: string | null
 ): Promise<{ role: Role | null; allowed: boolean }> {
-  if (!email) {
+  if (!userId) {
     return { role: null, allowed: false };
   }
 
   const response = await fetch(
-    `/api/admin-access?email=${encodeURIComponent(email.trim().toLowerCase())}`
+    `/api/admin-access?userId=${encodeURIComponent(userId)}`
   );
   const payload = (await response.json()) as {
     allowed?: boolean;
@@ -50,7 +50,7 @@ async function resolveAdminSession(
   }
 
   const email = sessionUser.email ?? null;
-  const adminAccess = await fetchAdminAccess(email);
+  const adminAccess = await fetchAdminAccess(sessionUser.id);
   if (!adminAccess.allowed) {
     return { user: null, role: null };
   }
