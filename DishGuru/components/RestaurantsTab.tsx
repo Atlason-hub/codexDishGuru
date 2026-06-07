@@ -67,6 +67,7 @@ type Props = {
   listHeader?: React.ReactElement | null;
   isRefreshing: boolean;
   onRefresh: () => void;
+  onScrollYChange?: (y: number) => void;
 };
 
 function SectionChevron({ collapsed }: { collapsed: boolean }) {
@@ -416,6 +417,7 @@ export default function RestaurantsTab({
   listHeader = null,
   isRefreshing,
   onRefresh,
+  onScrollYChange,
 }: Props) {
   const { isRTL, t } = useLocale();
   const [imagePreview, setImagePreview] = useState<{
@@ -533,6 +535,10 @@ export default function RestaurantsTab({
         windowSize={7}
         removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
+        onScroll={(event) => {
+          onScrollYChange?.(event.nativeEvent.contentOffset.y);
+        }}
+        scrollEventThrottle={32}
       />
       <ImagePreviewModal
         visible={Boolean(imagePreview?.imageUrl)}

@@ -304,8 +304,18 @@ export default function HomeScreen() {
     ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
   >(null);
   const fabPulse = useRef(new Animated.Value(1)).current;
+  const fabScrollY = useRef(new Animated.Value(0)).current;
   const hasPulsedFabRef = useRef(false);
   const handledEmailConfirmedRef = useRef(false);
+  const fabScrollScale = useMemo(
+    () =>
+      fabScrollY.interpolate({
+        inputRange: [0, 60, 140],
+        outputRange: [1, 0.93, 0.84],
+        extrapolate: 'clamp',
+      }),
+    [fabScrollY]
+  );
 
   const upsertStartupDebugLine = useCallback((prefix: string, value: string) => {
     setStartupDebugLines((prev) => {
@@ -1992,6 +2002,15 @@ export default function HomeScreen() {
     });
   }, []);
 
+  const updateFabScrollState = useCallback(
+    (y: number) => {
+      const nextY = Math.max(0, y);
+      scrollYRef.current = nextY;
+      fabScrollY.setValue(nextY);
+    },
+    [fabScrollY]
+  );
+
   const handleToggleFavorite = useCallback(
     (id: string) => {
       toggleFavorite(id);
@@ -2327,8 +2346,7 @@ export default function HomeScreen() {
                 />
               }
               onScroll={(event) => {
-                const y = event.nativeEvent.contentOffset.y;
-                scrollYRef.current = y;
+                updateFabScrollState(event.nativeEvent.contentOffset.y);
               }}
               scrollEventThrottle={32}
               ListHeaderComponent={listHeader}
@@ -2364,6 +2382,7 @@ export default function HomeScreen() {
                 listHeader={listHeader}
                 isRefreshing={isRefreshing}
                 onRefresh={() => refreshContent({ force: true, showSpinner: true })}
+                onScrollYChange={updateFabScrollState}
               />
             </View>
           ) : null}
@@ -2372,7 +2391,8 @@ export default function HomeScreen() {
       {(isAuthenticated || isGuestMode) && (
         <>
           <Animated.View style={styles.fabWrapAnimated}>
-            <Animated.View style={{ transform: [{ scale: fabPulse }] }}>
+            <Animated.View style={{ transform: [{ scale: fabScrollScale }] }}>
+              <Animated.View style={{ transform: [{ scale: fabPulse }] }}>
               <Pressable
                 style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
                 onPress={() => {
@@ -2385,6 +2405,7 @@ export default function HomeScreen() {
               >
                 <Ionicons name="camera" size={38} color={theme.colors.white} />
               </Pressable>
+              </Animated.View>
             </Animated.View>
           </Animated.View>
         </>
