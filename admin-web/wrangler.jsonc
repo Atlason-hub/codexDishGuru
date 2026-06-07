@@ -1,0 +1,6 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "codex-dishguru-admin",
+  "compatibility_date": "2026-06-07",
+  "pages_build_output_dir": "dist"
+}

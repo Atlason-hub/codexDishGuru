@@ -161,6 +161,29 @@ Open the URL printed by Vite (typically `http://localhost:5174`).
 
 City search is proxied through Vite at `/api/cities` to avoid CORS during local dev.
 
+## Deploy to Cloudflare Pages
+
+Use Cloudflare Pages for the Vite frontend and Cloudflare Pages Functions for the `/api/*` routes.
+
+1. Push this repo to GitHub.
+2. In Cloudflare Pages, create a project from `Atlason-hub/codexDishGuru`.
+3. Set **Production branch** to `main`.
+4. Set **Root directory** to `admin-web`.
+5. Use:
+   - **Build command**: `npm run build`
+   - **Build output directory**: `dist`
+6. Add these Cloudflare environment variables:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - optional: `COMPANY_LOGOS_BUCKET`
+   - optional: `GUEST_COMPANY_ID`
+   - optional: `GUEST_USER_ID`
+7. Deploy.
+
+Cloudflare Pages Functions live in `admin-web/functions` and replace the Vercel-style handlers in `admin-web/api` for production on Cloudflare.
+
 ## Deploy to Vercel (free)
 
 1) Push this repo to GitHub.
