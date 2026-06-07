@@ -2,6 +2,7 @@ export interface Env {
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   COMPANY_LOGOS_BUCKET?: string;
+  DISH_IMAGES_BUCKET?: string;
   GUEST_COMPANY_ID?: string;
   GUEST_USER_ID?: string;
 }

@@ -120,7 +120,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         <header className="topbar">
           <div className="topbar-brand">
             <div className="brand-mark">
-              <img src="/admin-topbar-logo.png" alt="DishGuru logo" />
+              <img src="/favicon.png" alt="DishGuru logo" />
             </div>
             <div>
               <div className="topbar-title">DishGuru Admin</div>

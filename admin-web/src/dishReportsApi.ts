@@ -16,6 +16,28 @@ export type DishReportItem = {
   dishCreatedAt?: string | null;
 };
 
+function normalizeDishImageUrl(rawUrl?: string | null, rawPath?: string | null): string | undefined {
+  if (rawPath) {
+    return `/api/dish-image?path=${encodeURIComponent(rawPath)}`;
+  }
+
+  if (!rawUrl) return undefined;
+
+  const publicMarker = "/storage/v1/object/public/";
+  const publicIndex = rawUrl.indexOf(publicMarker);
+  if (publicIndex !== -1) {
+    const tail = rawUrl.slice(publicIndex + publicMarker.length);
+    const segments = tail.split("/");
+    const bucket = segments[0];
+    const path = segments.slice(1).join("/");
+    if (bucket && path) {
+      return `/api/dish-image?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
+    }
+  }
+
+  return rawUrl;
+}
+
 export async function fetchDishReports(): Promise<DishReportItem[]> {
   const response = await fetch("/api/dish-reports");
   const text = await response.text();
@@ -24,7 +46,11 @@ export async function fetchDishReports(): Promise<DishReportItem[]> {
   }
 
   try {
-    return JSON.parse(text) as DishReportItem[];
+    const rows = JSON.parse(text) as DishReportItem[];
+    return rows.map((row) => ({
+      ...row,
+      imageUrl: normalizeDishImageUrl(row.imageUrl, row.imagePath)
+    }));
   } catch {
     throw new Error(text || "Invalid JSON response from /api/dish-reports");
   }
