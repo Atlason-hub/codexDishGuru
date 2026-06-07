@@ -51,6 +51,7 @@ const recoverInvalidStoredSession = async () => {
   if (!invalidSessionRecoveryPromise) {
     invalidSessionRecoveryPromise = (async () => {
       try {
+        await supabase.auth.stopAutoRefresh().catch(() => {});
         await rawSignOut({ scope: 'local' });
       } catch {
         // Ignore local cleanup failures and let the caller proceed signed out.

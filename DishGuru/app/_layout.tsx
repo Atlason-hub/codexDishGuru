@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { I18nManager, Image, Platform, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { I18nManager, Image, LogBox, Platform, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import AppHeader from '../components/AppHeader';
 import AppDialogHost from '../components/AppDialogHost';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -68,6 +68,12 @@ export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [, setThemeTick] = useState(0);
+
+  useEffect(() => {
+    LogBox.ignoreLogs([
+      'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
+    ]);
+  }, []);
 
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();

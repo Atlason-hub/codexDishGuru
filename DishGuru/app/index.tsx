@@ -2187,9 +2187,11 @@ export default function HomeScreen() {
   }, []);
 
   const goHomeFromHeader = useCallback(() => {
-    const isPlainHomeRoute =
+    const isHomeRouteWithoutFilters =
       !showFavoritesOnly &&
-      !showRestaurantOnly &&
+      !showRestaurantOnly;
+    const isPlainHomeRoute =
+      isHomeRouteWithoutFilters &&
       activeHomeTab === 'dishes' &&
       !homeSearch.trim();
 
@@ -2201,6 +2203,13 @@ export default function HomeScreen() {
     scrollYRef.current = 0;
 
     if (isPlainHomeRoute) {
+      return;
+    }
+
+    // When we're already on the root home route, switching back to the dishes tab
+    // should stay in-place instead of forcing a route replacement. The extra
+    // replace() is the most likely release-only crash trigger from restaurants.
+    if (isHomeRouteWithoutFilters) {
       return;
     }
 
