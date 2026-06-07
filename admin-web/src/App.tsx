@@ -1323,6 +1323,18 @@ function ReportsPage() {
     }).format(date);
   };
 
+  const formatDateParts = (value?: string | null) => {
+    const formatted = formatDate(value);
+    if (formatted === "—" || !formatted.includes(",")) {
+      return { date: formatted, time: "" };
+    }
+    const [date, ...time] = formatted.split(",");
+    return {
+      date: date.trim(),
+      time: time.join(",").trim()
+    };
+  };
+
   const reasonLabel = (reason: string) =>
     ({
       wrong_photo: "Wrong photo",
@@ -1373,22 +1385,38 @@ function ReportsPage() {
                 <div className="report-image report-image-fallback">No image</div>
               )}
             </div>
-            <div data-label="Dish">
+            <div className="report-dish-cell" data-label="Dish">
               <strong>{report.dishName || "Unknown dish"}</strong>
               <div className="muted">{report.restaurantName || "Unknown restaurant"}</div>
             </div>
-            <div data-label="Reported By">{report.reporterEmail || report.reportedByUserId}</div>
-            <div data-label="Uploaded By">
-              {report.uploadedByEmail || report.uploadedByUserId || "—"}
+            <div className="report-email-cell" data-label="Reported By">
+              <span className="report-email">{report.reporterEmail || report.reportedByUserId}</span>
             </div>
-            <div data-label="Reason">
+            <div className="report-email-cell" data-label="Uploaded By">
+              <span className="report-email">
+                {report.uploadedByEmail || report.uploadedByUserId || "—"}
+              </span>
+            </div>
+            <div className="report-reason-cell" data-label="Reason">
               <span className="vendor-badge report-reason-badge">
                 {reasonLabel(report.reason)}
               </span>
             </div>
-            <div data-label="Free Text">{report.details || "—"}</div>
-            <div data-label="Reported At">{formatDate(report.createdAt)}</div>
-            <div data-label="Uploaded At">{formatDate(report.dishCreatedAt)}</div>
+            <div className="report-text-cell" data-label="Free Text">
+              {report.details || "—"}
+            </div>
+            <div className="report-date-cell" data-label="Reported At">
+              <span>{formatDateParts(report.createdAt).date}</span>
+              {formatDateParts(report.createdAt).time && (
+                <span className="muted">{formatDateParts(report.createdAt).time}</span>
+              )}
+            </div>
+            <div className="report-date-cell" data-label="Uploaded At">
+              <span>{formatDateParts(report.dishCreatedAt).date}</span>
+              {formatDateParts(report.dishCreatedAt).time && (
+                <span className="muted">{formatDateParts(report.dishCreatedAt).time}</span>
+              )}
+            </div>
           </article>
         ))}
       </div>
