@@ -1,1 +1,5 @@
 .DS_Store
+
+# Local Supabase scratch and dumps
+supabase/.temp/
+supabase-migration/
