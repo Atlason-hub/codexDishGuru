@@ -13,6 +13,7 @@ export type DishSummary = {
   key: string;
   name: string;
   imageUrl: string | null;
+  imagePath?: string | null;
   avgTasty: number;
   avgFilling: number;
   cuisine: string;
@@ -28,6 +29,7 @@ type DishAssociationLike = {
   dish_id: number | null;
   dish_name: string | null;
   image_url: string | null;
+  image_path?: string | null;
   cuisine?: string | null;
   tasty_score: number | null;
   filling_score: number | null;
@@ -188,6 +190,7 @@ export const summarizeMenuDishes = <T extends DishAssociationLike>(categories: M
     let fillingSum = 0;
     let fillingCount = 0;
     let imageUrl: string | null = null;
+    let imagePath: string | null = null;
     let cuisine = 'ללא מטבח';
     let latestCreatedAt = 0;
 
@@ -204,6 +207,7 @@ export const summarizeMenuDishes = <T extends DishAssociationLike>(categories: M
       if (createdAt >= latestCreatedAt) {
         latestCreatedAt = createdAt;
         imageUrl = row.image_url ?? imageUrl;
+        imagePath = row.image_path ?? imagePath;
         cuisine = row.cuisine ?? cuisine;
       }
     });
@@ -212,6 +216,7 @@ export const summarizeMenuDishes = <T extends DishAssociationLike>(categories: M
       key: String(menuDish.primaryId),
       name: menuDish.name,
       imageUrl,
+      imagePath,
       avgTasty: tastyCount ? tastySum / tastyCount : 0,
       avgFilling: fillingCount ? fillingSum / fillingCount : 0,
       cuisine,

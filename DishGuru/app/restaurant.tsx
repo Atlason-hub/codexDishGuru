@@ -51,6 +51,7 @@ type DishAssociation = {
   dish_name: string | null;
   restaurant_id?: number | null;
   image_url: string | null;
+  image_path?: string | null;
   cuisine: string | null;
   tasty_score: number | null;
   filling_score: number | null;
@@ -172,7 +173,7 @@ export default function RestaurantScreen() {
               ? await supabase
                   .from('dish_associations')
                   .select(
-                    'id, user_id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at, restaurant_id'
+                    'id, user_id, dish_id, dish_name, image_url, image_path, cuisine, tasty_score, filling_score, created_at, restaurant_id'
                   )
                   .eq('restaurant_id', restaurantId)
                   .in('user_id', companyUserIds)
@@ -190,7 +191,7 @@ export default function RestaurantScreen() {
         const { data, error: fetchError } = await supabase
           .from('dish_associations')
           .select(
-            'id, user_id, dish_id, dish_name, image_url, cuisine, tasty_score, filling_score, created_at, restaurant_id'
+            'id, user_id, dish_id, dish_name, image_url, image_path, cuisine, tasty_score, filling_score, created_at, restaurant_id'
           )
           .eq('restaurant_id', restaurantId)
           .order('created_at', { ascending: false });
@@ -515,7 +516,12 @@ export default function RestaurantScreen() {
                               <View style={[styles.imageStackLayer, styles.imageStackLayerMid]} />
                             </>
                           ) : null}
-                          <CachedLogo uri={item.dish.imageUrl} style={styles.image} />
+                          <CachedLogo
+                            uri={item.dish.imageUrl}
+                            imagePath={item.dish.imagePath ?? null}
+                            style={styles.image}
+                            preferNative
+                          />
                           {item.dish.reviewCount > 1 ? (
                             <View style={styles.multiReviewBadge}>
                               <Ionicons name="copy-outline" size={10} color={theme.colors.white} />

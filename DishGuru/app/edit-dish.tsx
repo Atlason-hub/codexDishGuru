@@ -335,7 +335,12 @@ export default function EditDishScreen() {
           <View style={styles.body} pointerEvents="box-none">
             <View style={styles.photoPressable}>
               {photoUri ? (
-                <CachedLogo uri={photoUri} style={styles.photo} />
+                <CachedLogo
+                  uri={photoUri}
+                  imagePath={dish.image_path}
+                  style={styles.photo}
+                  preferNative
+                />
               ) : (
                 <View style={styles.photoPlaceholder}>
                   <Ionicons name="camera" size={24} color={theme.colors.accent} />

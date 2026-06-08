@@ -37,6 +37,7 @@ type DishAssociation = {
   user_id: string | null;
   dish_id: number | null;
   image_url: string | null;
+  image_path?: string | null;
   dish_name: string | null;
   restaurant_name: string | null;
   restaurant_id: number | null;
@@ -368,7 +369,12 @@ function RestaurantAccordionItem({
                               <View style={[styles.imageStackLayer, styles.imageStackLayerMid]} />
                             </>
                           ) : null}
-                          <CachedLogo uri={item.dish.imageUrl} style={styles.image} />
+                          <CachedLogo
+                            uri={item.dish.imageUrl}
+                            imagePath={item.dish.imagePath ?? null}
+                            style={styles.image}
+                            preferNative
+                          />
                           {item.dish.reviewCount > 1 ? (
                             <View style={styles.multiReviewBadge}>
                               <Ionicons name="copy-outline" size={10} color={theme.colors.white} />

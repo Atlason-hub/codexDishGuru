@@ -19,6 +19,7 @@ import { useLocale } from '../lib/locale';
 type DishPhoto = {
   id: string;
   image_url: string | null;
+  image_path?: string | null;
   review_text: string | null;
   dish_name: string | null;
   dish_id: number | null;
@@ -55,7 +56,7 @@ export default function PhotoScreen() {
         const { data, error: fetchError } = await supabase
           .from('dish_associations')
           .select(
-            'id, image_url, review_text, dish_name, dish_id, restaurant_name, restaurant_id, created_at'
+            'id, image_url, image_path, review_text, dish_name, dish_id, restaurant_name, restaurant_id, created_at'
           )
           .eq('id', id)
           .maybeSingle();
@@ -142,7 +143,12 @@ export default function PhotoScreen() {
       ) : photo?.image_url ? (
         <View style={styles.content}>
           <Pressable style={styles.imageWrap} onPress={() => setPreviewOpen(true)}>
-            <CachedLogo uri={photo.image_url} style={styles.image} />
+            <CachedLogo
+              uri={photo.image_url}
+              imagePath={photo.image_path ?? null}
+              style={styles.image}
+              preferNative
+            />
             <View style={styles.imageHint}>
               <Ionicons name="expand" size={16} color="#ffffff" />
               <Text style={styles.imageHintText}>הצג במסך מלא</Text>

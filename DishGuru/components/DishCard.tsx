@@ -24,6 +24,7 @@ export type DishCardItem = {
   user_id: string | null;
   dish_id: number | null;
   image_url: string | null;
+  image_path?: string | null;
   dish_name: string | null;
   restaurant_name: string | null;
   restaurant_id: number | null;
@@ -191,7 +192,12 @@ function DishCard({
                       </>
                     ) : null}
                     {imageItem.image_url ? (
-                      <CachedLogo uri={imageItem.image_url} style={styles.feedImage} />
+                      <CachedLogo
+                        uri={imageItem.image_url}
+                        imagePath={imageItem.image_path ?? null}
+                        style={styles.feedImage}
+                        preferNative
+                      />
                     ) : (
                       <View style={styles.feedImagePlaceholder} />
                     )}
@@ -222,7 +228,12 @@ function DishCard({
                 </>
               ) : null}
               {currentItem?.image_url ? (
-                <CachedLogo uri={currentItem.image_url} style={styles.feedImage} />
+                <CachedLogo
+                  uri={currentItem.image_url}
+                  imagePath={currentItem.image_path ?? null}
+                  style={styles.feedImage}
+                  preferNative
+                />
               ) : (
                 <View style={styles.feedImagePlaceholder} />
               )}
