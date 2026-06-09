@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Image as NativeImage,
   ImageResizeMode,
+  Platform,
   StyleProp,
 } from 'react-native';
 import { Image, ImageContentFit, ImageStyle } from 'expo-image';
@@ -36,6 +37,10 @@ export default function CachedLogo({
     if (!imagePath) return uri;
     return resolveDishImageUrl(uri, imagePath) ?? uri;
   }, [imagePath, uri]);
+  const deterministicDishCacheKey = useMemo(
+    () => encodeURIComponent(imagePath ?? resolvedUri),
+    [imagePath, resolvedUri]
+  );
   const [renderMode, setRenderMode] = useState<'expo' | 'native'>(
     preferNative ? 'native' : 'expo'
   );
@@ -61,20 +66,30 @@ export default function CachedLogo({
     }
   }, [contentFit]);
 
-  const resolvedUriWithRetry =
-    attemptNonce > 0
-      ? `${resolvedUri}${resolvedUri.includes('?') ? '&' : '?'}imageRetry=${attemptNonce}`
-      : resolvedUri;
+  const resolvedUriWithRetry = (() => {
+    const base = `${resolvedUri}${resolvedUri.includes('?') ? '&' : '?'}imgKey=${deterministicDishCacheKey}`;
+    if (attemptNonce > 0) {
+      return `${base}&imageRetry=${attemptNonce}`;
+    }
+    return base;
+  })();
 
   if (renderMode === 'native') {
-    const fallbackUri =
-      attemptNonce > 0
-        ? `${resolvedUri}${resolvedUri.includes('?') ? '&' : '?'}nativeFallback=${attemptNonce}`
-        : resolvedUri;
+    const fallbackUri = (() => {
+      const base = `${resolvedUri}${resolvedUri.includes('?') ? '&' : '?'}imgKey=${deterministicDishCacheKey}`;
+      if (attemptNonce > 0) {
+        return `${base}&nativeFallback=${attemptNonce}`;
+      }
+      return base;
+    })();
 
     return (
       <NativeImage
-        source={{ uri: fallbackUri }}
+        source={
+          Platform.OS === 'ios'
+            ? { uri: fallbackUri, cache: 'reload' }
+            : { uri: fallbackUri }
+        }
         style={style}
         resizeMode={nativeResizeMode}
         onError={() => {
@@ -93,7 +108,11 @@ export default function CachedLogo({
     <Image
       source={{ uri: resolvedUriWithRetry }}
       style={style}
-      cachePolicy={cachePolicy ?? 'memory-disk'}
+      cachePolicy={
+        preferNative && Platform.OS === 'ios'
+          ? 'none'
+          : cachePolicy ?? 'memory-disk'
+      }
       contentFit={contentFit}
       placeholderContentFit={contentFit}
       transition={transition}
