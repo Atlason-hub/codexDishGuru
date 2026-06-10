@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
-  ImageLoadEventData,
   LayoutChangeEvent,
   KeyboardAvoidingView,
   Modal,
@@ -28,6 +26,8 @@ import {
 import { cacheAvatar, hydrateAvatarForUser, loadCachedAvatar, resolveAvatarForUser } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LegalModal from './LegalModal';
+import CachedLogo from './CachedLogo';
+import DefaultAvatar from './DefaultAvatar';
 import { theme } from '../lib/theme';
 import { applyPaletteFromLogo } from '../lib/brandPalette';
 import { getLegalUrl, useLocale } from '../lib/locale';
@@ -47,7 +47,6 @@ const getSessionAvatarUrl = (session: any) =>
 type AppHeaderProps = {
   companyLogoUrlOverride?: string | null;
   companyLogoPathOverride?: string | null;
-  debugStageOverride?: string | null;
   isAuthenticatedOverride?: boolean;
   isGuestModeOverride?: boolean;
   currentUserIdOverride?: string | null;
@@ -61,7 +60,6 @@ type AppHeaderProps = {
 export default function AppHeader({
   companyLogoUrlOverride,
   companyLogoPathOverride,
-  debugStageOverride,
   isAuthenticatedOverride,
   isGuestModeOverride,
   currentUserIdOverride,
@@ -93,6 +91,7 @@ export default function AppHeader({
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(lastKnownCompanyLogoUrl);
   const [menuVisible, setMenuVisible] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [menuAvatarLoadFailed, setMenuAvatarLoadFailed] = useState(false);
   const [legalModal, setLegalModal] = useState<{ title: string; url: string } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -105,7 +104,6 @@ export default function AppHeader({
   const [debugStage, setDebugStage] = useState('init');
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [logoDebugLines, setLogoDebugLines] = useState<string[]>([]);
-  const [logoInstanceKey, setLogoInstanceKey] = useState(0);
   const [sessionLogo, setSessionLogo] = useState<ReturnType<typeof getSessionCompanyLogoSnapshot>>(
     getSessionCompanyLogoSnapshot()
   );
@@ -128,6 +126,11 @@ export default function AppHeader({
     typeof currentUserIdOverride !== 'undefined' ? currentUserIdOverride : currentUserId;
   const effectiveCurrentUserEmail =
     typeof currentUserEmailOverride !== 'undefined' ? currentUserEmailOverride : currentUserEmail;
+  const shouldShowMenuAvatar = Boolean(avatarUrl && !menuAvatarLoadFailed);
+
+  useEffect(() => {
+    setMenuAvatarLoadFailed(false);
+  }, [avatarUrl]);
 
   const upsertLogoDebugLine = useCallback((prefix: string, value: string) => {
     setLogoDebugLines((prev) => {
@@ -261,7 +264,6 @@ export default function AppHeader({
   useEffect(() => {
     const visibleLogoUrl = sessionLogo?.logoUrl ?? companyLogoUrl ?? null;
     setLogoLoadFailed(false);
-    setLogoInstanceKey((prev) => prev + 1);
     if (!visibleLogoUrl) {
       upsertLogoDebugLine('imageEvent', '-');
       upsertLogoDebugLine('imageEventEnd', '-');
@@ -342,7 +344,6 @@ export default function AppHeader({
           'stage=sync:signed-in-logo-ok',
           `email=${sessionEmail ?? '-'}`,
           `uid=${userId.slice(0, 8)}`,
-          `logoInstanceKey=${logoInstanceKey + 1}`,
           `matchedBy=${resolvedLogo.matchedBy}`,
           `appUser.company_id=${resolvedLogo.appUserCompanyId ?? '-'}`,
           `company.id=${resolvedLogo.companyId ?? '-'}`,
@@ -350,7 +351,7 @@ export default function AppHeader({
           `company.logo_url=${resolvedLogo.companyRowLogoUrl ?? '-'}`,
           `resolved.logoPath=${resolvedLogo.logoPath ?? '-'}`,
           `resolved.logoUrl=${resolvedLogo.logoUrl ?? '-'}`,
-          `display.logoUrl=${resolvedLogo.logoUrl ? `${resolvedLogo.logoUrl}${resolvedLogo.logoUrl.includes('?') ? '&' : '?'}cb=${logoInstanceKey + 1}` : '-'}`,
+          `display.logoUrl=${resolvedLogo.logoUrl ?? '-'}`,
           'logoLoadFailed=0',
         ]);
       } else if (!lastKnownCompanyLogoUrl) {
@@ -659,9 +660,7 @@ export default function AppHeader({
         null
       )
     : companyLogoUrl;
-  const effectiveLogoDisplayUrl = effectiveCompanyLogoUrl
-    ? `${effectiveCompanyLogoUrl}${effectiveCompanyLogoUrl.includes('?') ? '&' : '?'}cb=${logoInstanceKey || 1}`
-    : null;
+  const effectiveLogoDisplayUrl = effectiveCompanyLogoUrl;
   const shouldShowCompanyLogo = hasSignedInSession && Boolean(effectiveLogoDisplayUrl) && !logoLoadFailed;
   const headerVisualKey = hasSignedInSession
     ? `auth:${effectiveCurrentUserId ?? 'anon'}:${effectiveCurrentUserEmail ?? ''}:${skipLaunchParam}`
@@ -697,28 +696,18 @@ export default function AppHeader({
       >
         <Text style={[styles.logoText, shouldShowCompanyLogo && styles.logoTextHidden]}>DishGuru</Text>
         {shouldShowCompanyLogo ? (
-          <Image
-            key={`${logoInstanceKey}:${effectiveLogoDisplayUrl}`}
-            source={{ uri: effectiveLogoDisplayUrl! }}
+          <CachedLogo
+            uri={effectiveLogoDisplayUrl!}
             style={styles.logoImage}
-            onLoadStart={() => {
-              upsertLogoDebugLine('imageEvent', 'loadStart');
-            }}
-            onLoad={(event: { nativeEvent: ImageLoadEventData }) => {
-              const source = event.nativeEvent.source;
-              upsertLogoDebugLine('imageEvent', 'load');
-              upsertLogoDebugLine('imageSize', `${source.width}x${source.height}`);
-            }}
-            onLoadEnd={() => {
-              upsertLogoDebugLine('imageEventEnd', 'loadEnd');
-            }}
+            contentFit="contain"
+            transition={0}
+            priority="high"
+            cachePolicy="memory-disk"
             onError={() => {
               setLogoLoadFailed(true);
               upsertLogoDebugLine('imageEvent', 'error');
               upsertLogoDebugLine('logoLoadFailed', '1');
             }}
-            resizeMode="contain"
-            onLayout={captureLayout('imageLayout')}
           />
         ) : null}
       </View>
@@ -775,10 +764,14 @@ export default function AppHeader({
             {shouldShowAuthenticatedMenu
               ? renderMenuItem(
                   t('headerMenuAccount'),
-                  avatarUrl ? (
-                    <Image source={{ uri: avatarUrl }} style={styles.menuAvatar} />
+                  shouldShowMenuAvatar ? (
+                    <CachedLogo
+                      uri={avatarUrl!}
+                      style={styles.menuAvatar}
+                      onError={() => setMenuAvatarLoadFailed(true)}
+                    />
                   ) : (
-                    <Ionicons name="person-circle-outline" size={20} color={theme.colors.accent} />
+                    <DefaultAvatar size={24} />
                   ),
                   () => {
                     setResolvedMenuVisible(false);
@@ -1074,24 +1067,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-  },
-  debugOverlay: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    top: 96,
-    zIndex: 40,
-    backgroundColor: 'rgba(30, 16, 8, 0.94)',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 2,
-  },
-  debugText: {
-    color: '#F7EEE7',
-    fontSize: 10,
-    lineHeight: 13,
-    fontFamily: theme.typography.regular,
   },
   feedbackBackdrop: {
     flex: 1,

@@ -21,6 +21,8 @@ import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { theme } from '../lib/theme';
 import AppHeader from '../components/AppHeader';
+import CachedLogo from '../components/CachedLogo';
+import DefaultAvatar from '../components/DefaultAvatar';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { Locale, useLocale } from '../lib/locale';
 import { setGuestModeEnabled } from '../lib/guestMode';
@@ -36,6 +38,7 @@ export default function AccountScreen() {
   const [changingLocale, setChangingLocale] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [tempAvatarUrl, setTempAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -58,6 +61,10 @@ export default function AccountScreen() {
   const displayWidth = pendingAsset ? pendingAsset.width * scaleFactor : FRAME_SIZE;
   const displayHeight = pendingAsset ? pendingAsset.height * scaleFactor : FRAME_SIZE;
   const extraDragAllowance = pendingAsset ? FRAME_SIZE * 0.55 : 0;
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarUrl]);
   const maxOffsetX = Math.max(FRAME_SIZE * 0.35, (displayWidth - FRAME_SIZE) / 2 + extraDragAllowance);
   const maxOffsetY = Math.max(FRAME_SIZE * 0.35, (displayHeight - FRAME_SIZE) / 2 + extraDragAllowance);
 
@@ -394,23 +401,89 @@ export default function AccountScreen() {
           <View style={styles.divider} />
 
           <View style={styles.avatarSection}>
-            <View style={styles.avatarCircle} {...panResponder.panHandlers}>
-              {tempAvatarUrl ? (
-                <Image
-                  source={{ uri: tempAvatarUrl }}
-                  style={[
-                    styles.tempAvatarImage,
-                    { width: displayWidth, height: displayHeight },
-                    { transform: [{ translateX: avatarOffset.x }, { translateY: avatarOffset.y }] },
+            <View style={styles.avatarFrame}>
+              <View style={styles.avatarCircle} {...panResponder.panHandlers}>
+                {tempAvatarUrl ? (
+                  <Image
+                    source={{ uri: tempAvatarUrl }}
+                    style={[
+                      styles.tempAvatarImage,
+                      { width: displayWidth, height: displayHeight },
+                      { transform: [{ translateX: avatarOffset.x }, { translateY: avatarOffset.y }] },
+                    ]}
+                    contentFit="cover"
+                    pointerEvents="none"
+                  />
+                ) : avatarUrl && !avatarLoadFailed ? (
+                  <CachedLogo
+                    uri={avatarUrl}
+                    style={styles.avatarImage}
+                    onError={() => setAvatarLoadFailed(true)}
+                  />
+                ) : (
+                  <DefaultAvatar size={188} />
+                )}
+              </View>
+
+              {avatarUrl && !tempAvatarUrl && !avatarLoadFailed ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.removeAvatarOverlayButton,
+                    pressed && styles.removeAvatarOverlayButtonPressed,
                   ]}
-                  contentFit="cover"
-                  pointerEvents="none"
-                />
-              ) : avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-              ) : (
-                <Ionicons name="person" size={44} color="#ffffff" />
-              )}
+                  disabled={saving}
+                  onPress={() => {
+                    if (saving) return;
+                    showAppDialog({
+                      title: t('accountRemoveAvatarTitle'),
+                      message: t('accountRemoveAvatarMessage'),
+                      actions: [
+                        { text: t('commonCancel'), style: 'cancel' },
+                        {
+                          text: t('accountRemoveAvatarAction'),
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              setSaving(true);
+                              const { data: userData, error: userError } = await supabase.auth.getUser();
+                              const userId = userData.user?.id ?? null;
+                              if (userError) throw userError;
+                              if (!userId) {
+                                showAppAlert(t('accountUnauthorized'), t('accountUploadFailed'));
+                                return;
+                              }
+
+                              const { error: updateError } = await supabase
+                                .from('AppUsers')
+                                .update({ avatar_url: null })
+                                .eq('user_id', userId);
+                              if (updateError) throw updateError;
+
+                              await cacheAvatar(userId, null);
+                              publishAvatarUpdate(userId, null);
+                              setAvatarUrl(null);
+                              setTempAvatarUrl(null);
+                              setPendingAsset(null);
+                              setAvatarOffset({ x: 0, y: 0 });
+                              setZoom(MIN_ZOOM);
+                              showAppAlert(t('accountSaveSuccessTitle'), t('accountRemoveAvatarSuccess'));
+                            } catch (error) {
+                              showAppAlert(
+                                t('accountRemoveAvatarFailed'),
+                                error instanceof Error ? error.message : t('accountRemoveAvatarFailed')
+                              );
+                            } finally {
+                              setSaving(false);
+                            }
+                          },
+                        },
+                      ],
+                    });
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={14} color={theme.colors.accent} />
+                </Pressable>
+              ) : null}
             </View>
 
             {tempAvatarUrl ? (
@@ -805,6 +878,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 2,
   },
+  avatarFrame: {
+    position: 'relative',
+  },
   avatarCircle: {
     width: 188,
     height: 188,
@@ -864,6 +940,28 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
     fontSize: 14,
     fontWeight: '700',
+  },
+  removeAvatarOverlayButton: {
+    position: 'absolute',
+    right: 6,
+    bottom: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFF8F2',
+    borderWidth: 1,
+    borderColor: 'rgba(166, 73, 22, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: theme.colors.ink,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  removeAvatarOverlayButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
   },
   deleteAccountButton: {
     marginTop: 12,

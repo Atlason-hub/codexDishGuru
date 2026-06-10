@@ -30,7 +30,13 @@ import {
 import { openVendorDish } from '../lib/orderVendor';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { buildAuthRedirectUrl } from '../lib/authRedirect';
-import { cacheAvatar, fetchAvatarFromAuth, loadCachedAvatar, resolveAvatarForUser } from '../lib/avatar';
+import {
+  cacheAvatar,
+  fetchAvatarFromAuth,
+  loadCachedAvatar,
+  normalizeAvatarUrl,
+  resolveAvatarForUser,
+} from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import StaggeredEntrance from '../components/StaggeredEntrance';
 import LegalModal from '../components/LegalModal';
@@ -212,8 +218,9 @@ const fetchBootstrapUserAvatarMaps = async (userIds: string[], accessToken?: str
 
   if (Array.isArray(rows)) {
     rows.forEach((row: any) => {
-      if (row?.user_id && row?.avatar_url) {
-        avatars[String(row.user_id)] = String(row.avatar_url);
+      const normalizedAvatar = normalizeAvatarUrl(row?.avatar_url);
+      if (row?.user_id && normalizedAvatar) {
+        avatars[String(row.user_id)] = normalizedAvatar;
       }
       if (row?.user_id && row?.email_prefix) {
         labels[String(row.user_id)] = String(row.email_prefix);
@@ -2176,30 +2183,6 @@ export default function HomeScreen() {
     ]
   );
 
-  const compactStartupDebugLines = useMemo(
-    () =>
-      startupDebugLines.filter((line) => {
-        return (
-          line.startsWith('boot.step=') ||
-          line.startsWith('boot.start=') ||
-          line.startsWith('boot.domain=') ||
-          line.startsWith('boot.companyIdDomain=') ||
-          line.startsWith('boot.feed=') ||
-          line.startsWith('boot.done=') ||
-          line.startsWith('boot.recovery=') ||
-          line.startsWith('boot.recoveryCompanyId=') ||
-          line.startsWith('boot.recoveryError=') ||
-          line.startsWith('render.auth=') ||
-          line.startsWith('render.authHydrating=') ||
-          line.startsWith('render.loading=') ||
-          line.startsWith('render.hasLoaded=') ||
-          line.startsWith('render.dishes=') ||
-          line.startsWith('render.error=')
-        );
-      }),
-    [startupDebugLines]
-  );
-
   const openHomeHeaderMenu = useCallback(() => {
     setHomeHeaderMenuOpenKey((value) => value + 1);
     setHomeHeaderMenuVisible(true);
@@ -2251,7 +2234,6 @@ export default function HomeScreen() {
       <AppHeader
         companyLogoUrlOverride={companyLogoUrl}
         companyLogoPathOverride={companyLogoPath}
-        debugStageOverride={debugStage}
         isAuthenticatedOverride={isAuthenticated}
         isGuestModeOverride={isGuestMode}
         currentUserIdOverride={currentUserId}
@@ -2433,15 +2415,6 @@ export default function HomeScreen() {
         url={legalModal?.url ?? getLegalUrl(locale, 'terms')}
         onClose={() => setLegalModal(null)}
       />
-      {isAuthenticated && loading && !hasLoaded ? (
-        <View style={styles.startupDebugCard}>
-          {compactStartupDebugLines.map((line) => (
-            <Text key={line} style={styles.startupDebugText}>
-              {line}
-            </Text>
-          ))}
-        </View>
-      ) : null}
       </View>
       {(isAuthenticated || isGuestMode) ? (
         <View
@@ -3073,24 +3046,6 @@ const styles = StyleSheet.create({
   },
   fabButtonPressed: {
     transform: [{ scale: 0.96 }],
-  },
-  startupDebugCard: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 120,
-    backgroundColor: 'rgba(32, 18, 12, 0.92)',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 4,
-    zIndex: 40,
-  },
-  startupDebugText: {
-    color: '#FFF7F0',
-    fontSize: 12,
-    lineHeight: 16,
-    textAlign: 'left',
   },
   favoritesHeader: {
     flexDirection: 'row',

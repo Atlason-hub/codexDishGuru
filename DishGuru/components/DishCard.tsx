@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CachedLogo from './CachedLogo';
+import DefaultAvatar from './DefaultAvatar';
 import RatingValueRow from './RatingValueRow';
 import { theme } from '../lib/theme';
 import { useLocale } from '../lib/locale';
@@ -82,6 +83,7 @@ function DishCard({
   const { isRTL, t } = useLocale();
   const [imageWidth, setImageWidth] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const heartScale = useRef(new Animated.Value(1)).current;
   const cameraScale = useRef(new Animated.Value(1)).current;
   const editScale = useRef(new Animated.Value(1)).current;
@@ -104,6 +106,7 @@ function DishCard({
     () => (currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null),
     [currentItem?.user_id, userLabels]
   );
+  const shouldShowAvatarImage = Boolean(resolvedAvatarUrl && !avatarLoadFailed);
   const hasRestaurantTarget = Boolean(
     currentItem && (currentItem.restaurant_id || currentItem.restaurant_name)
   );
@@ -118,6 +121,10 @@ function DishCard({
   );
   const effectiveReviewStackCount = Math.max(reviewStackCount ?? 0, items.length);
   const showMultiReviewMarker = effectiveReviewStackCount > 1;
+
+  React.useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [resolvedAvatarUrl]);
 
   const bouncePress = (scale: Animated.Value) => {
     Animated.sequence([
@@ -366,10 +373,14 @@ function DishCard({
               }}
               disabled={!onAvatarPress}
             >
-              {resolvedAvatarUrl ? (
-                <CachedLogo uri={resolvedAvatarUrl} style={styles.avatarImage} />
+              {shouldShowAvatarImage ? (
+                <CachedLogo
+                  uri={resolvedAvatarUrl!}
+                  style={styles.avatarImage}
+                  onError={() => setAvatarLoadFailed(true)}
+                />
               ) : (
-                <Ionicons name="person" size={16} color={theme.colors.textMuted} />
+                <DefaultAvatar size={32} />
               )}
             </Pressable>
           </Animated.View>

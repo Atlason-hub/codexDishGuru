@@ -1,6 +1,7 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import CachedLogo from './CachedLogo';
+import DefaultAvatar from './DefaultAvatar';
 import { theme } from '../lib/theme';
 
 const AVATAR_MODAL_SIZE = 220;
@@ -23,7 +24,7 @@ export default function AvatarPreviewModal({ visible, avatarUrl, label, onClose 
               <CachedLogo uri={avatarUrl} style={styles.image} />
             ) : (
               <View style={styles.placeholder}>
-                <Ionicons name="person" size={64} color={theme.colors.textMuted} />
+                <DefaultAvatar size={AVATAR_MODAL_SIZE - 8} />
               </View>
             )}
             {label ? (
@@ -100,7 +101,7 @@ const styles = StyleSheet.create({
   },
   emailPill: {
     position: 'absolute',
-    bottom: 10,
+    bottom: 18,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,

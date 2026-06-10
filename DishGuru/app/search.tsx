@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
+import AppHeader from '../components/AppHeader';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { fetchCompanyIdForUser, fetchGlobalCompanyContext, fetchVisibleDishes } from '../lib/appData';
@@ -298,6 +299,7 @@ export default function SearchScreen() {
   const menuRequestIdRef = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [restaurantDropdownOpen, setRestaurantDropdownOpen] = useState(false);
   const [dishDropdownOpen, setDishDropdownOpen] = useState(false);
   const [restaurantQuery, setRestaurantQuery] = useState('');
@@ -341,6 +343,7 @@ export default function SearchScreen() {
       if (!mounted) return;
       setIsAuthenticated(Boolean(data.session?.user));
       setCurrentUserId(data.session?.user?.id ?? null);
+      setCurrentUserEmail(data.session?.user?.email ?? null);
     };
     syncAuthState();
     const {
@@ -349,6 +352,7 @@ export default function SearchScreen() {
       if (!mounted) return;
       setIsAuthenticated(Boolean(session?.user));
       setCurrentUserId(session?.user?.id ?? null);
+      setCurrentUserEmail(session?.user?.email ?? null);
     });
     return () => {
       mounted = false;
@@ -656,34 +660,32 @@ export default function SearchScreen() {
     collapsedDishCategories.size === dishCategories.length;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoiding}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-      >
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          keyboardInset > 0 ? { paddingBottom: 24 + keyboardInset } : null,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        showsVerticalScrollIndicator={false}
-      >
-      <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-        >
-          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={theme.colors.ink} />
-        </Pressable>
-        <Text style={[styles.headerTitle, !isRTL && styles.headerTitleLtr]}>{t('searchTitle')}</Text>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <View style={styles.headerShell}>
+        <AppHeader
+          isAuthenticatedOverride={isAuthenticated}
+          currentUserIdOverride={currentUserId}
+          currentUserEmailOverride={currentUserEmail}
+        />
       </View>
-
-      <View style={[styles.modeRow, !isRTL && styles.modeRowLtr]}>
+      <View style={styles.screenBody}>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoiding}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            keyboardInset > 0 ? { paddingBottom: 24 + keyboardInset } : null,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+        >
+        <View style={[styles.modeRow, !isRTL && styles.modeRowLtr]}>
         <Pressable
           style={[styles.modeButton, mode === 'api' && styles.modeButtonActive]}
           onPress={() => setMode('api')}
@@ -1166,8 +1168,9 @@ export default function SearchScreen() {
         </View>
       ) : null}
 
-      </ScrollView>
-      </KeyboardAvoidingView>
+        </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1180,6 +1183,12 @@ const styles = StyleSheet.create({
   keyboardAvoiding: {
     flex: 1,
   },
+  screenBody: {
+    flex: 1,
+  },
+  headerShell: {
+    paddingHorizontal: 16,
+  },
   scroll: {
     flex: 1,
   },
@@ -1187,39 +1196,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
     flexGrow: 1,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    marginBottom: 10,
-  },
-  headerRowLtr: {
-    flexDirection: 'row-reverse',
-  },
-  backButton: {
-    height: 32,
-    width: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    marginTop: 2,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text,
-    textAlign: 'right',
-    flex: 1,
-    marginRight: 8,
-  },
-  headerTitleLtr: {
-    textAlign: 'left',
-    marginRight: 0,
-    marginLeft: 8,
   },
   dropdownContainer: {
     width: '100%',

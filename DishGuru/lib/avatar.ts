@@ -3,20 +3,22 @@ import { getCurrentAuthUser, supabase } from './supabase';
 
 const AVATAR_CACHE_PREFIX = 'userAvatarUrl:';
 
-const normalizeAvatarUrl = (raw: string | null | undefined): string | null => {
+export const normalizeAvatarUrl = (raw: string | null | undefined): string | null => {
   if (!raw) return null;
-  if (raw.includes('/storage/v1/object/public/')) {
-    const parts = raw.split('/storage/v1/object/public/');
+  const normalizedRaw = raw.trim();
+  if (!normalizedRaw) return null;
+  if (normalizedRaw.includes('/storage/v1/object/public/')) {
+    const parts = normalizedRaw.split('/storage/v1/object/public/');
     if (parts.length === 2) {
       const tail = parts[1];
       const segments = tail.split('/');
       const bucket = segments[0];
       const objectPath = segments.slice(1).join('/');
       const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
-      return data?.publicUrl ?? raw;
+      return data?.publicUrl ?? normalizedRaw;
     }
   }
-  return raw;
+  return normalizedRaw;
 };
 
 const getAvatarCacheKey = (userId: string | null | undefined) => {

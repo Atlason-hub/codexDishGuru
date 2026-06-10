@@ -41,6 +41,7 @@ function AppShell() {
         <Stack.Screen name="reset-password" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="restaurant" options={{ animation: 'none' }} />
         <Stack.Screen name="dish" options={{ animation: 'none' }} />
+        <Stack.Screen name="search" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="edit-dish" options={{ animation: 'none' }} />
         <Stack.Screen name="account" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="my-dishes" options={{ headerShown: false, animation: 'none' }} />

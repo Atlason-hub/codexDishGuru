@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentAuthUser, supabase } from './supabase';
+import { normalizeAvatarUrl } from './avatar';
 
 const RESTAURANT_MENU_CACHE_PREFIX = 'restaurant_menu_cache:v1:';
 const RESTAURANT_MENU_TTL_MS = 15 * 60 * 1000;
@@ -464,8 +465,9 @@ export const fetchUserAvatarMaps = async (userIds: string[]) => {
     const avatars: Record<string, string> = {};
     const labels: Record<string, string> = {};
     (profileData ?? []).forEach((row: any) => {
-      if (row?.user_id && row?.avatar_url) {
-        avatars[String(row.user_id)] = String(row.avatar_url);
+      const normalizedAvatar = normalizeAvatarUrl(row?.avatar_url);
+      if (row?.user_id && normalizedAvatar) {
+        avatars[String(row.user_id)] = normalizedAvatar;
       }
       if (row?.user_id && row?.email_prefix) {
         labels[String(row.user_id)] = String(row.email_prefix);
@@ -485,8 +487,9 @@ export const fetchUserAvatarMaps = async (userIds: string[]) => {
 
   const avatars: Record<string, string> = {};
   (data ?? []).forEach((row: any) => {
-    if (row?.user_id && row?.avatar_url) {
-      avatars[String(row.user_id)] = String(row.avatar_url);
+    const normalizedAvatar = normalizeAvatarUrl(row?.avatar_url);
+    if (row?.user_id && normalizedAvatar) {
+      avatars[String(row.user_id)] = normalizedAvatar;
     }
   });
   return { avatars, labels: {} };
