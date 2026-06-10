@@ -282,6 +282,7 @@ export const buildRowsFromMenu = (
           key: String(dish.id),
           name: dish.name,
           imageUrl: summary?.imageUrl ?? null,
+          imagePath: summary?.imagePath ?? null,
           avgTasty: summary?.avgTasty ?? 0,
           avgFilling: summary?.avgFilling ?? 0,
           cuisine: summary?.cuisine ?? 'ללא מטבח',
