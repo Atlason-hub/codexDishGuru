@@ -1,6 +1,11 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { RATING_IMAGES, getSelectedEmojiIndex } from '../lib/ratings';
+import {
+  RATING_IMAGE_BASELINE_OFFSETS,
+  RATING_IMAGE_SCALES,
+  RATING_IMAGES,
+  getSelectedEmojiIndex,
+} from '../lib/ratings';
 import { useLocale } from '../lib/locale';
 
 type EmojiRatingInputProps = {
@@ -41,7 +46,15 @@ export default function EmojiRatingInput({
           >
             <Image
               source={RATING_IMAGES[idx]}
-              style={{ width: size, height: size, opacity }}
+              style={{
+                width: size,
+                height: size,
+                opacity,
+                transform: [
+                  { translateY: size * RATING_IMAGE_BASELINE_OFFSETS[idx] },
+                  { scale: RATING_IMAGE_SCALES[idx] },
+                ],
+              }}
               resizeMode="contain"
             />
             <Pressable

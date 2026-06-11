@@ -9,7 +9,13 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { RATING_IMAGES, getSelectedEmojiIndex, scoreToStars } from '../lib/ratings';
+import {
+  RATING_IMAGE_BASELINE_OFFSETS,
+  RATING_IMAGE_SCALES,
+  RATING_IMAGES,
+  getSelectedEmojiIndex,
+  scoreToStars,
+} from '../lib/ratings';
 import { useLocale } from '../lib/locale';
 
 type Props = {
@@ -54,6 +60,12 @@ function RatingValueRow({
                     styles.emojiIcon,
                     isRTL ? styles.emojiIconRtl : styles.emojiIconLtr,
                     { width: iconSize, height: iconSize },
+                    {
+                      transform: [
+                        { translateY: iconSize * RATING_IMAGE_BASELINE_OFFSETS[idx] },
+                        { scale: RATING_IMAGE_SCALES[idx] },
+                      ],
+                    },
                     { opacity: selectedIndex === idx ? 1 : 0.38 },
                   ]}
                 />
