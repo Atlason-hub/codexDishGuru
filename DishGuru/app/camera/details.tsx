@@ -926,20 +926,20 @@ export default function CameraDetailsScreen() {
           )}
         </View>
 
-        <Text style={styles.ratingHeader}>{t('cameraRateDish')}</Text>
-        <View style={styles.sliderRow}>
-          <View style={styles.sliderLabelRow}>
-            <Text style={styles.sliderText}>{t('ratingTasty')}</Text>
+        <Text style={[styles.ratingHeader, !isRTL && styles.ratingHeaderLtr]}>{t('cameraRateDish')}</Text>
+        <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
+          <View style={[styles.sliderLabelRow, !isRTL && styles.sliderLabelRowLtr]}>
+            <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
           </View>
-          <View style={styles.starInputWrap}>
+          <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
             <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
           </View>
         </View>
-        <View style={styles.sliderRow}>
-          <View style={styles.sliderLabelRow}>
-            <Text style={styles.sliderText}>{t('ratingSize')}</Text>
+        <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
+          <View style={[styles.sliderLabelRow, !isRTL && styles.sliderLabelRowLtr]}>
+            <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingSize')}</Text>
           </View>
-          <View style={styles.starInputWrap}>
+          <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
             <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
           </View>
         </View>
@@ -1304,19 +1304,33 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     fontWeight: '600',
   },
+  ratingHeaderLtr: {
+    textAlign: 'left',
+  },
   sliderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: Platform.OS === 'ios' ? 16 : 0,
+    gap: Platform.OS === 'ios' ? 4 : 0,
     marginBottom: 12,
-    justifyContent: 'flex-end',
+    justifyContent: Platform.OS === 'ios' ? 'flex-start' : 'flex-end',
     width: '100%',
-    paddingRight: 32,
+    paddingRight: Platform.OS === 'ios' ? 20 : 32,
+  },
+  sliderRowLtr: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    paddingRight: 0,
+    paddingLeft: Platform.OS === 'ios' ? 20 : 0,
   },
   starInputWrap: {
     flex: 0,
     alignItems: 'flex-end',
+    marginRight: Platform.OS === 'ios' ? 2 : 0,
+  },
+  starInputWrapLtr: {
+    alignItems: 'flex-start',
     marginRight: 0,
+    marginLeft: Platform.OS === 'ios' ? 2 : 0,
   },
   sliderLabel: {
     width: 90,
@@ -1326,11 +1340,19 @@ const styles = StyleSheet.create({
   sliderLabelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    width: 92,
+    width: Platform.OS === 'ios' ? 74 : 92,
     justifyContent: 'flex-end',
     marginLeft: 2,
-    paddingRight: 20,
+    paddingRight: Platform.OS === 'ios' ? 4 : 20,
     height: 44,
+  },
+  sliderLabelRowLtr: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginLeft: Platform.OS === 'ios' ? 4 : 0,
+    marginRight: 0,
+    paddingRight: 0,
+    paddingLeft: 0,
   },
   sliderText: {
     fontSize: 12,
@@ -1339,6 +1361,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     lineHeight: 44,
     width: '100%',
+  },
+  sliderTextLtr: {
+    textAlign: 'left',
   },
   saveButton: {
     paddingVertical: 10,

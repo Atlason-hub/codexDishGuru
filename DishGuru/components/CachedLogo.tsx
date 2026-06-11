@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Image as NativeImage,
   ImageResizeMode,
   Platform,
   StyleProp,
 } from 'react-native';
+import { Image as NativeImage } from 'react-native';
 import { Image, ImageContentFit, ImageStyle } from 'expo-image';
 import { resolveDishImageUrl } from '../lib/dishImage';
 
@@ -41,15 +41,16 @@ export default function CachedLogo({
     () => encodeURIComponent(imagePath ?? resolvedUri),
     [imagePath, resolvedUri]
   );
+  const shouldUseSimpleIosDishImage = Platform.OS === 'ios' && Boolean(imagePath);
   const [renderMode, setRenderMode] = useState<'expo' | 'native'>(
-    preferNative ? 'native' : 'expo'
+    shouldUseSimpleIosDishImage ? 'expo' : preferNative ? 'native' : 'expo'
   );
   const [attemptNonce, setAttemptNonce] = useState(0);
 
   useEffect(() => {
-    setRenderMode(preferNative ? 'native' : 'expo');
+    setRenderMode(shouldUseSimpleIosDishImage ? 'expo' : preferNative ? 'native' : 'expo');
     setAttemptNonce(0);
-  }, [preferNative, resolvedUri]);
+  }, [preferNative, resolvedUri, shouldUseSimpleIosDishImage]);
 
   const nativeResizeMode = useMemo<ImageResizeMode>(() => {
     switch (contentFit) {
@@ -74,7 +75,7 @@ export default function CachedLogo({
     return base;
   })();
 
-  if (renderMode === 'native') {
+  if (renderMode === 'native' && !shouldUseSimpleIosDishImage) {
     const fallbackUri = (() => {
       const base = `${resolvedUri}${resolvedUri.includes('?') ? '&' : '?'}imgKey=${deterministicDishCacheKey}`;
       if (attemptNonce > 0) {
@@ -109,7 +110,9 @@ export default function CachedLogo({
       source={{ uri: resolvedUriWithRetry }}
       style={style}
       cachePolicy={
-        preferNative && Platform.OS === 'ios'
+        shouldUseSimpleIosDishImage
+          ? 'none'
+          : preferNative && Platform.OS === 'ios'
           ? 'none'
           : cachePolicy ?? 'memory-disk'
       }
@@ -121,6 +124,10 @@ export default function CachedLogo({
       onError={() => {
         if (attemptNonce === 0) {
           setAttemptNonce(1);
+          return;
+        }
+        if (shouldUseSimpleIosDishImage) {
+          onError?.();
           return;
         }
         if (!preferNative) {

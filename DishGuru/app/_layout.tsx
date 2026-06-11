@@ -3,7 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { I18nManager, Image, LogBox, Platform, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { I18nManager, LogBox, Platform, StyleSheet, Text, TextInput, useColorScheme } from 'react-native';
+import { Asset } from 'expo-asset';
 import AppHeader from '../components/AppHeader';
 import AppDialogHost from '../components/AppDialogHost';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -50,16 +51,6 @@ function AppShell() {
         <Stack.Screen name="camera/details" options={{ headerShown: false }} />
       </Stack>
       <AppDialogHost />
-      <View pointerEvents="none" style={styles.hiddenAssetPreload}>
-        {RATING_IMAGES.map((source, index) => (
-          <Image
-            key={`rating-preload-${index}`}
-            source={source}
-            style={styles.hiddenAssetImage}
-            fadeDuration={0}
-          />
-        ))}
-      </View>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
@@ -169,6 +160,10 @@ export default function RootLayout() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    void Asset.loadAsync(RATING_IMAGES.filter((source): source is number => typeof source === 'number'));
+  }, []);
+
   if (!fontsLoaded || !authReady) {
     return null;
   }
@@ -182,16 +177,4 @@ export default function RootLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  hiddenAssetPreload: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
-    overflow: 'hidden',
-  },
-  hiddenAssetImage: {
-    width: 1,
-    height: 1,
-  },
-});
+const styles = StyleSheet.create({});

@@ -45,6 +45,20 @@ type DishAssociation = {
   review_text?: string | null;
 };
 
+const toNullableNumber = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeDishAssociation = (row: DishAssociation): DishAssociation => ({
+  ...row,
+  dish_id: toNullableNumber(row.dish_id),
+  restaurant_id: toNullableNumber(row.restaurant_id),
+  tasty_score: toNullableNumber(row.tasty_score),
+  filling_score: toNullableNumber(row.filling_score),
+});
+
 export default function DishScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
@@ -72,6 +86,7 @@ export default function DishScreen() {
   const [orderVendor, setOrderVendor] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<{
     imageUrl: string | null;
+    imagePath: string | null;
     title: string | null;
     subtitle: string | null;
   } | null>(null);
@@ -244,21 +259,21 @@ export default function DishScreen() {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id ?? null;
       let list: DishAssociation[] = [];
-
-      let hasScopedSource = false;
       if (userId) {
         const companyId = await fetchCompanyIdForUser(userId);
         if (companyId) {
-          hasScopedSource = true;
-          const allRows = (await fetchVisibleDishes(companyId)) as DishAssociation[];
+          const allRows = ((await fetchVisibleDishes(companyId)) as DishAssociation[]).map(
+            normalizeDishAssociation
+          );
           const normalizedQuery = dishQuery.trim().toLowerCase();
+          const normalizedDishName = dishName.toLowerCase();
           list = allRows.filter((row) => {
             const matchesDish =
               dishIdParam !== null
                 ? row.dish_id === dishIdParam
                 : normalizedQuery
                   ? (row.dish_name ?? '').toLowerCase().includes(normalizedQuery)
-                  : (row.dish_name ?? '').toLowerCase() === dishName.toLowerCase();
+                  : (row.dish_name ?? '').toLowerCase() === normalizedDishName;
 
             if (!matchesDish) {
               return false;
@@ -275,7 +290,7 @@ export default function DishScreen() {
         }
       }
 
-      if (list.length === 0 && !hasScopedSource) {
+      if (list.length === 0) {
         let query = supabase
           .from('dish_associations')
           .select(
@@ -301,7 +316,7 @@ export default function DishScreen() {
 
         const { data, error: fetchError } = await query;
         if (fetchError) throw fetchError;
-        list = (data as DishAssociation[]) ?? [];
+        list = ((data as DishAssociation[]) ?? []).map(normalizeDishAssociation);
       }
 
       list.sort((a, b) => {
@@ -478,6 +493,7 @@ export default function DishScreen() {
   const handleOpenPhoto = useCallback((dish: DishAssociation) => {
     setImagePreview({
       imageUrl: dish.image_url ?? null,
+      imagePath: dish.image_path ?? null,
       title: dish.dish_name ?? null,
       subtitle: dish.restaurant_name ?? null,
     });
@@ -584,6 +600,7 @@ export default function DishScreen() {
         onEdit={handleEdit}
         onOrder={handleOrder}
         onReport={handleOpenReport}
+        preferNativeImage={Platform.OS !== 'ios'}
       />
     ),
     [
@@ -614,7 +631,6 @@ export default function DishScreen() {
         : null);
   const headerRestaurantTarget =
     dishAssociations.find((item) => item.restaurant_id || item.restaurant_name) ?? null;
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
@@ -695,7 +711,7 @@ export default function DishScreen() {
             maxToRenderPerBatch={4}
             updateCellsBatchingPeriod={50}
             windowSize={7}
-            removeClippedSubviews
+            removeClippedSubviews={Platform.OS === 'android'}
             contentContainerStyle={styles.feedContent}
             refreshControl={
               <RefreshControl
@@ -811,8 +827,10 @@ export default function DishScreen() {
         </View>
       ) : null}
       <ImagePreviewModal
-        visible={Boolean(imagePreview?.imageUrl)}
+        visible={Boolean(imagePreview?.imageUrl || imagePreview?.imagePath)}
         imageUrl={imagePreview?.imageUrl ?? null}
+        imagePath={imagePreview?.imagePath ?? null}
+        preferNative={Platform.OS !== 'ios'}
         title={imagePreview?.title ?? null}
         subtitle={imagePreview?.subtitle ?? null}
         onClose={() => setImagePreview(null)}
@@ -906,27 +924,24 @@ const styles = StyleSheet.create({
   avgCard: {
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: theme.colors.card,
-    marginBottom: 10,
+    marginBottom: 8,
     alignItems: 'flex-end',
-    alignSelf: 'flex-end',
-    width: '98%',
-    marginRight: 6,
+    alignSelf: 'stretch',
+    width: '100%',
   },
   avgCardLtr: {
     alignItems: 'flex-start',
-    alignSelf: 'flex-start',
-    marginRight: 0,
-    marginLeft: 6,
+    alignSelf: 'stretch',
   },
   avgHeader: {
     fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
-    marginBottom: 6,
+    marginBottom: 2,
     alignSelf: 'flex-end',
     fontFamily: theme.typography.bold,
   },
@@ -944,23 +959,22 @@ const styles = StyleSheet.create({
   },
   ratingRow: {
     flexDirection: 'column',
-    gap: 10,
-    paddingTop: 10,
-    paddingBottom: 6,
+    gap: 6,
+    paddingTop: 4,
+    paddingBottom: 2,
     alignItems: 'flex-end',
     alignSelf: 'flex-end',
-    marginRight: Platform.OS === 'ios' ? 4 : 14,
+    marginRight: Platform.OS === 'ios' ? 2 : 8,
   },
   ratingRowLtr: {
     alignItems: 'flex-start',
     alignSelf: 'flex-start',
     marginRight: 0,
-    marginLeft: 6,
+    marginLeft: 2,
   },
   ratingItem: {
     alignSelf: 'flex-end',
     alignItems: 'flex-end',
-    width: Platform.OS === 'ios' ? 236 : undefined,
   },
   ratingItemLtr: {
     alignSelf: 'flex-start',
@@ -984,21 +998,19 @@ const styles = StyleSheet.create({
   avgRatingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: Platform.OS === 'ios' ? 8 : 4,
+    gap: Platform.OS === 'ios' ? 6 : 4,
     alignSelf: 'flex-end',
     justifyContent: 'flex-end',
-    paddingRight: Platform.OS === 'ios' ? 0 : 8,
-    width: Platform.OS === 'ios' ? 236 : undefined,
+    paddingRight: Platform.OS === 'ios' ? 0 : 4,
   },
   avgRatingInlineRowLtr: {
     flexDirection: 'row',
     alignSelf: 'flex-start',
     justifyContent: 'flex-start',
     paddingRight: 0,
-    paddingLeft: 8,
+    paddingLeft: 4,
   },
   avgRatingIconsWrap: {
-    width: Platform.OS === 'ios' ? 152 : 150,
     alignItems: 'flex-end',
   },
   ratingLabelInline: {
@@ -1019,14 +1031,14 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   avgRatingLabelInline: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.colors.textMuted,
     textAlign: 'right',
     alignSelf: 'flex-end',
-    lineHeight: 30,
+    lineHeight: 26,
     paddingRight: Platform.OS === 'ios' ? 0 : 2,
-    minWidth: Platform.OS === 'ios' ? 68 : 48,
-    width: Platform.OS === 'ios' ? 68 : 56,
+    minWidth: Platform.OS === 'ios' ? 56 : 44,
+    width: Platform.OS === 'ios' ? 56 : 48,
     fontFamily: theme.typography.semibold,
   },
   avgRatingLabelInlineLtr: {

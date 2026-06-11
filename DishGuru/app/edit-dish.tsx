@@ -378,19 +378,20 @@ export default function EditDishScreen() {
               }}
             />
 
+            <Text style={[styles.ratingHeader, !isRTL && styles.ratingHeaderLtr]}>{t('cameraRateDish')}</Text>
             <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
-              <View style={styles.sliderLabelRow}>
+              <View style={[styles.sliderLabelRow, !isRTL && styles.sliderLabelRowLtr]}>
                 <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
               </View>
-              <View style={styles.starInputWrap}>
+              <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
                 <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
               </View>
             </View>
             <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
-              <View style={styles.sliderLabelRow}>
+              <View style={[styles.sliderLabelRow, !isRTL && styles.sliderLabelRowLtr]}>
                 <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingSize')}</Text>
               </View>
-              <View style={styles.starInputWrap}>
+              <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
                 <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
               </View>
             </View>
@@ -566,6 +567,17 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     minHeight: 90,
   },
+  ratingHeader: {
+    marginTop: 28,
+    marginBottom: 6,
+    fontSize: 16,
+    color: theme.colors.text,
+    textAlign: 'right',
+    fontWeight: '600',
+  },
+  ratingHeaderLtr: {
+    textAlign: 'left',
+  },
   sliderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -576,7 +588,7 @@ const styles = StyleSheet.create({
   },
   sliderRowLtr: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     paddingRight: 0,
     paddingLeft: 6,
   },
@@ -585,6 +597,9 @@ const styles = StyleSheet.create({
     width: 230,
     alignItems: 'flex-end',
     marginRight: 0,
+  },
+  starInputWrapLtr: {
+    alignItems: 'flex-start',
   },
   sliderLabel: {
     width: 90,
@@ -598,6 +613,12 @@ const styles = StyleSheet.create({
     marginLeft: Platform.OS === 'ios' ? 0 : 2,
     paddingRight: 0,
     height: 44,
+  },
+  sliderLabelRowLtr: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginRight: 0,
+    marginLeft: 4,
   },
   sliderText: {
     fontSize: 14,

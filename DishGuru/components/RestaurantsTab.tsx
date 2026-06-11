@@ -90,7 +90,12 @@ function RestaurantAccordionItem({
   group: RestaurantGroup;
   canAddDish: boolean;
   onRequireLogin: () => void;
-  onPreviewImage: (imageUrl: string, title: string, subtitle: string) => void;
+  onPreviewImage: (
+    imageUrl: string,
+    imagePath: string | null,
+    title: string,
+    subtitle: string
+  ) => void;
 }) {
   const router = useRouter();
   const { isRTL, t } = useLocale();
@@ -211,6 +216,41 @@ function RestaurantAccordionItem({
 
   const ratedCount = summaries.filter((item) => item.hasUploads).length;
   const shouldRenderPanel = expanded || hasOpenedOnce || loading;
+  const openDish = useCallback(
+    (dish: DishSummary) => {
+      if (dish.hasUploads) {
+        router.push({
+          pathname: '/dish',
+          params: {
+            dishId: dish.key,
+            restaurantId: group.restaurantId ? String(group.restaurantId) : '',
+            restaurantName: group.restaurantName,
+            dishName: dish.name,
+            dishQuery: dish.name,
+          },
+        });
+        return;
+      }
+
+      if (!canAddDish) {
+        onRequireLogin();
+        return;
+      }
+
+      router.push({
+        pathname: '/camera/details',
+        params: {
+          restaurantId: group.restaurantId ? String(group.restaurantId) : '',
+          restaurantName: group.restaurantName,
+          dishId: dish.key,
+          dishName: dish.name,
+          defaultImageUrl: dish.imageUrl ?? '',
+          lockSelection: '1',
+        },
+      });
+    },
+    [canAddDish, group.restaurantId, group.restaurantName, onRequireLogin]
+  );
 
   return (
     <View style={styles.accordionWrap}>
@@ -271,37 +311,7 @@ function RestaurantAccordionItem({
                   <Pressable
                     key={item.id}
                     style={[styles.dishCard, !isRTL && styles.dishCardLtr]}
-                    onPress={() => {
-                      if (item.dish.hasUploads) {
-                        router.push({
-                          pathname: '/dish',
-                          params: {
-                            restaurantId: group.restaurantId ? String(group.restaurantId) : '',
-                            restaurantName: group.restaurantName,
-                            dishName: item.dish.name,
-                            dishQuery: item.dish.name,
-                          },
-                        });
-                        return;
-                      }
-
-                      if (!canAddDish) {
-                        onRequireLogin();
-                        return;
-                      }
-
-                      router.push({
-                        pathname: '/camera/details',
-                        params: {
-                          restaurantId: group.restaurantId ? String(group.restaurantId) : '',
-                          restaurantName: group.restaurantName,
-                          dishId: item.dish.key,
-                          dishName: item.dish.name,
-                          defaultImageUrl: item.dish.imageUrl ?? '',
-                          lockSelection: '1',
-                        },
-                      });
-                    }}
+                    onPress={() => openDish(item.dish)}
                   >
                     <View style={[styles.dishInfo, !isRTL && styles.dishInfoLtr]}>
                       <Text style={[styles.dishName, !isRTL && styles.dishNameLtr]}>
@@ -354,10 +364,15 @@ function RestaurantAccordionItem({
                     </View>
                     <Pressable
                       style={styles.imageWrap}
-                      disabled={!item.dish.imageUrl}
+                      onPress={() => openDish(item.dish)}
                       onLongPress={() => {
                         if (!item.dish.imageUrl) return;
-                        onPreviewImage(item.dish.imageUrl, item.dish.name, group.restaurantName);
+                        onPreviewImage(
+                          item.dish.imageUrl,
+                          item.dish.imagePath ?? null,
+                          item.dish.name,
+                          group.restaurantName
+                        );
                       }}
                       delayLongPress={180}
                     >
@@ -428,6 +443,7 @@ export default function RestaurantsTab({
   const { isRTL, t } = useLocale();
   const [imagePreview, setImagePreview] = useState<{
     imageUrl: string | null;
+    imagePath: string | null;
     title: string | null;
     subtitle: string | null;
   } | null>(null);
@@ -512,8 +528,8 @@ export default function RestaurantsTab({
             group={item}
             canAddDish={canAddDish}
             onRequireLogin={onRequireLogin}
-            onPreviewImage={(imageUrl, title, subtitle) =>
-              setImagePreview({ imageUrl, title, subtitle })
+            onPreviewImage={(imageUrl, imagePath, title, subtitle) =>
+              setImagePreview({ imageUrl, imagePath, title, subtitle })
             }
           />
         )}
@@ -549,6 +565,7 @@ export default function RestaurantsTab({
       <ImagePreviewModal
         visible={Boolean(imagePreview?.imageUrl)}
         imageUrl={imagePreview?.imageUrl ?? null}
+        imagePath={imagePreview?.imagePath ?? null}
         title={imagePreview?.title ?? null}
         subtitle={imagePreview?.subtitle ?? null}
         onClose={() => setImagePreview(null)}

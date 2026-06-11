@@ -108,6 +108,7 @@ export default function RestaurantScreen() {
   const [dishSearch, setDishSearch] = useState('');
   const [imagePreview, setImagePreview] = useState<{
     imageUrl: string | null;
+    imagePath: string | null;
     title: string | null;
     subtitle: string | null;
   } | null>(null);
@@ -311,6 +312,36 @@ export default function RestaurantScreen() {
   const allSectionsCollapsed =
     menuCategories.length > 0 &&
     collapsedCategories.size === menuCategories.length + (summaries.some((dish) => dish.hasUploads) ? 1 : 0);
+  const openDish = useCallback(
+    (dish: DishSummary) => {
+      if (dish.hasUploads) {
+        router.push({
+          pathname: '/dish',
+          params: {
+            dishId: dish.key,
+            restaurantId: restaurantId ? String(restaurantId) : '',
+            restaurantName,
+            dishName: dish.name,
+            dishQuery: dish.name,
+          },
+        });
+        return;
+      }
+
+      router.push({
+        pathname: '/camera/details',
+        params: {
+          restaurantId: restaurantId ? String(restaurantId) : '',
+          restaurantName,
+          dishId: dish.key,
+          dishName: dish.name,
+          defaultImageUrl: dish.imageUrl ?? '',
+          lockSelection: '1',
+        },
+      });
+    },
+    [restaurantId, restaurantName]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -426,32 +457,7 @@ export default function RestaurantScreen() {
                 <StaggeredEntrance index={index}>
                   <Pressable
                     style={[styles.dishCard, !isRTL && styles.dishCardLtr]}
-                    onPress={() => {
-                      if (item.dish.hasUploads) {
-                        router.push({
-                          pathname: '/dish',
-                          params: {
-                            restaurantId: restaurantId ? String(restaurantId) : '',
-                            restaurantName,
-                            dishName: item.dish.name,
-                            dishQuery: item.dish.name,
-                          },
-                        });
-                        return;
-                      }
-
-                      router.push({
-                        pathname: '/camera/details',
-                        params: {
-                          restaurantId: restaurantId ? String(restaurantId) : '',
-                          restaurantName,
-                          dishId: item.dish.key,
-                          dishName: item.dish.name,
-                          defaultImageUrl: item.dish.imageUrl ?? '',
-                          lockSelection: '1',
-                        },
-                      });
-                    }}
+                    onPress={() => openDish(item.dish)}
                   >
                     <View style={[styles.dishInfo, !isRTL && styles.dishInfoLtr]}>
                       <Text style={[styles.dishName, !isRTL && styles.dishNameLtr]}>{item.dish.name}</Text>
@@ -497,11 +503,12 @@ export default function RestaurantScreen() {
                     </View>
                     <Pressable
                       style={styles.imageWrap}
-                      disabled={!item.dish.imageUrl}
+                      onPress={() => openDish(item.dish)}
                       onLongPress={() => {
                         if (!item.dish.imageUrl) return;
                         setImagePreview({
                           imageUrl: item.dish.imageUrl,
+                          imagePath: item.dish.imagePath ?? null,
                           title: item.dish.name,
                           subtitle: restaurantName,
                         });
@@ -553,6 +560,7 @@ export default function RestaurantScreen() {
       <ImagePreviewModal
         visible={Boolean(imagePreview?.imageUrl)}
         imageUrl={imagePreview?.imageUrl ?? null}
+        imagePath={imagePreview?.imagePath ?? null}
         title={imagePreview?.title ?? null}
         subtitle={imagePreview?.subtitle ?? null}
         onClose={() => setImagePreview(null)}

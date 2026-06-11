@@ -57,6 +57,7 @@ type DishCardProps = {
   onDelete?: (item: DishCardItem) => void;
   onOrder?: (item: DishCardItem) => void;
   onReport?: (item: DishCardItem) => void;
+  preferNativeImage?: boolean;
 };
 
 function DishCard({
@@ -79,6 +80,7 @@ function DishCard({
   onDelete,
   onOrder,
   onReport,
+  preferNativeImage = true,
 }: DishCardProps) {
   const { isRTL, t } = useLocale();
   const [imageWidth, setImageWidth] = useState(0);
@@ -198,12 +200,12 @@ function DishCard({
                         <View style={[styles.imageStackLayer, styles.imageStackLayerMid]} />
                       </>
                     ) : null}
-                    {imageItem.image_url ? (
+                    {imageItem.image_url || imageItem.image_path ? (
                       <CachedLogo
-                        uri={imageItem.image_url}
+                        uri={imageItem.image_url ?? imageItem.image_path ?? ''}
                         imagePath={imageItem.image_path ?? null}
                         style={styles.feedImage}
-                        preferNative
+                        preferNative={preferNativeImage}
                       />
                     ) : (
                       <View style={styles.feedImagePlaceholder} />
@@ -234,12 +236,12 @@ function DishCard({
                   <View style={[styles.imageStackLayer, styles.imageStackLayerMid]} />
                 </>
               ) : null}
-              {currentItem?.image_url ? (
+              {currentItem?.image_url || currentItem?.image_path ? (
                 <CachedLogo
-                  uri={currentItem.image_url}
+                  uri={currentItem.image_url ?? currentItem.image_path ?? ''}
                   imagePath={currentItem.image_path ?? null}
                   style={styles.feedImage}
-                  preferNative
+                  preferNative={preferNativeImage}
                 />
               ) : (
                 <View style={styles.feedImagePlaceholder} />
@@ -1059,7 +1061,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginRight: 0,
     alignSelf: 'flex-end',
-    width: Platform.OS === 'ios' ? 236 : undefined,
   },
   ratingItemLtr: {
     alignItems: 'flex-start',
@@ -1071,7 +1072,6 @@ const styles = StyleSheet.create({
   ratingStarWrap: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    width: Platform.OS === 'ios' ? 152 : undefined,
   },
   ratingStarWrapLtr: {
     flexDirection: 'row',

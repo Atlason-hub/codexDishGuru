@@ -68,6 +68,7 @@ function RatingValueRow({
                     },
                     { opacity: selectedIndex === idx ? 1 : 0.38 },
                   ]}
+                  resizeMode="contain"
                 />
               </View>
             ))}

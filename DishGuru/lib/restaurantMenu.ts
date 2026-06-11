@@ -193,6 +193,7 @@ export const summarizeMenuDishes = <T extends DishAssociationLike>(categories: M
     let imagePath: string | null = null;
     let cuisine = 'ללא מטבח';
     let latestCreatedAt = 0;
+    let resolvedDishId: number | null = null;
 
     matchingRows.forEach((row) => {
       if (typeof row.tasty_score === 'number') {
@@ -206,14 +207,17 @@ export const summarizeMenuDishes = <T extends DishAssociationLike>(categories: M
       const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
       if (createdAt >= latestCreatedAt) {
         latestCreatedAt = createdAt;
+        resolvedDishId = row.dish_id ?? resolvedDishId;
         imageUrl = row.image_url ?? imageUrl;
         imagePath = row.image_path ?? imagePath;
         cuisine = row.cuisine ?? cuisine;
+      } else if (resolvedDishId === null && row.dish_id !== null) {
+        resolvedDishId = row.dish_id;
       }
     });
 
     return {
-      key: String(menuDish.primaryId),
+      key: String(resolvedDishId ?? menuDish.primaryId),
       name: menuDish.name,
       imageUrl,
       imagePath,
@@ -279,7 +283,7 @@ export const buildRowsFromMenu = (
         type: 'dish',
         id: `${cat.id}-${dish.id}`,
         dish: {
-          key: String(dish.id),
+          key: summary?.key ?? String(dish.id),
           name: dish.name,
           imageUrl: summary?.imageUrl ?? null,
           imagePath: summary?.imagePath ?? null,

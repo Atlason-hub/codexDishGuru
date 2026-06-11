@@ -7,6 +7,8 @@ import { theme } from '../lib/theme';
 type Props = {
   visible: boolean;
   imageUrl: string | null;
+  imagePath?: string | null;
+  preferNative?: boolean;
   title?: string | null;
   subtitle?: string | null;
   onClose: () => void;
@@ -15,6 +17,8 @@ type Props = {
 export default function ImagePreviewModal({
   visible,
   imageUrl,
+  imagePath = null,
+  preferNative = true,
   title,
   subtitle,
   onClose,
@@ -24,10 +28,17 @@ export default function ImagePreviewModal({
       <SafeAreaView style={styles.backdrop}>
         <Pressable style={styles.overlay} onPress={onClose} />
         <View style={styles.shell}>
-          <View style={styles.handle} />
-          <View style={styles.card}>
-            {imageUrl ? <CachedLogo uri={imageUrl} style={styles.image} /> : null}
-          </View>
+        <View style={styles.handle} />
+        <View style={styles.card}>
+            {imageUrl || imagePath ? (
+              <CachedLogo
+                uri={imageUrl ?? imagePath ?? ''}
+                imagePath={imagePath}
+                style={styles.image}
+                preferNative={preferNative}
+              />
+            ) : null}
+        </View>
           {title || subtitle ? (
             <View style={styles.captionWrap}>
               {title ? <Text style={styles.title}>{title}</Text> : null}
