@@ -359,7 +359,7 @@ export default function CameraDetailsScreen() {
         const curated = mapMenuToCategories(data);
         if (menuRequestIdRef.current !== requestId) return;
         setDishCategories(curated);
-        setCollapsedDishCategories(new Set());
+        setCollapsedDishCategories(new Set(curated.map((cat) => cat.id)));
       } catch {
       } finally {
         if (menuRequestIdRef.current === requestId) {
