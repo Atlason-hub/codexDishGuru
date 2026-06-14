@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  LayoutChangeEvent,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
-import { getCurrentAuthUser, supabase } from '../lib/supabase';
+import { getCurrentAuthUser, SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
 import {
   cacheScopedLogo,
   getSessionCompanyLogoSnapshot,
@@ -101,9 +100,7 @@ export default function AppHeader({
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSending, setFeedbackSending] = useState(false);
-  const [debugStage, setDebugStage] = useState('init');
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
-  const [logoDebugLines, setLogoDebugLines] = useState<string[]>([]);
   const [sessionLogo, setSessionLogo] = useState<ReturnType<typeof getSessionCompanyLogoSnapshot>>(
     getSessionCompanyLogoSnapshot()
   );
@@ -132,22 +129,6 @@ export default function AppHeader({
     setMenuAvatarLoadFailed(false);
   }, [avatarUrl]);
 
-  const upsertLogoDebugLine = useCallback((prefix: string, value: string) => {
-    setLogoDebugLines((prev) => {
-      const next = prev.filter((line) => !line.startsWith(`${prefix}=`));
-      next.push(`${prefix}=${value}`);
-      return next;
-    });
-  }, []);
-
-  const captureLayout = useCallback(
-    (prefix: string) => (event: LayoutChangeEvent) => {
-      const { width, height, x, y } = event.nativeEvent.layout;
-      upsertLogoDebugLine(prefix, `${Math.round(width)}x${Math.round(height)}@${Math.round(x)},${Math.round(y)}`);
-    },
-    [upsertLogoDebugLine]
-  );
-
   const applyResolvedLogo = (url: string | null) => {
     setCompanyLogoUrl(url);
     lastKnownCompanyLogoUrl = url;
@@ -165,36 +146,11 @@ export default function AppHeader({
     const applySessionLogo = (logo: ReturnType<typeof getSessionCompanyLogoSnapshot>) => {
       setSessionLogo(logo);
       setResolvedSessionLogoUrl(logo?.logoUrl ?? null);
-      if (!logo?.logoUrl) {
-        return;
-      }
-      setLogoDebugLines((prev) => {
-        const preserved = prev.filter(
-          (line) =>
-            line.startsWith('image') ||
-            line.startsWith('headerLayout=') ||
-            line.startsWith('logoContainerLayout=')
-        );
-        return [
-          'stage=session-logo',
-          `email=${logo.email ?? '-'}`,
-          `matchedBy=${logo.matchedBy}`,
-          `appUser.company_id=${logo.appUserCompanyId ?? '-'}`,
-          `company.id=${logo.companyId ?? '-'}`,
-          `company.domain=${logo.domain ?? '-'}`,
-          `company.logo_url=${logo.companyRowLogoUrl ?? '-'}`,
-          `resolved.logoPath=${logo.logoPath ?? '-'}`,
-          `resolved.logoUrl=${logo.logoUrl ?? '-'}`,
-          `display.logoUrl=${logo.logoUrl}`,
-          `logoLoadFailed=${logoLoadFailed ? '1' : '0'}`,
-          ...preserved,
-        ];
-      });
     };
 
     applySessionLogo(getSessionCompanyLogoSnapshot());
     return subscribeSessionCompanyLogo(applySessionLogo);
-  }, [logoLoadFailed]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -262,21 +218,14 @@ export default function AppHeader({
   }, [companyLogoUrl, sessionLogo?.logoUrl]);
 
   useEffect(() => {
-    const visibleLogoUrl = sessionLogo?.logoUrl ?? companyLogoUrl ?? null;
     setLogoLoadFailed(false);
-    if (!visibleLogoUrl) {
-      upsertLogoDebugLine('imageEvent', '-');
-      upsertLogoDebugLine('imageEventEnd', '-');
-      upsertLogoDebugLine('imageSize', '-');
-    }
-  }, [companyLogoUrl, sessionLogo?.logoUrl, upsertLogoDebugLine]);
+  }, [companyLogoUrl, sessionLogo?.logoUrl]);
 
   const syncHeaderState = useCallback(async (sessionOverride?: any, options?: {
     useCachedAssets?: boolean;
   }) => {
     const runId = ++syncRunIdRef.current;
     const isCurrentRun = () => syncRunIdRef.current === runId;
-    setDebugStage('sync:start');
     const session =
       sessionOverride ?? (await supabase.auth.getSession()).data.session;
     if (!isCurrentRun()) return;
@@ -296,7 +245,6 @@ export default function AppHeader({
     setCurrentUserEmail(sessionEmail);
 
     if (options?.useCachedAssets) {
-      setDebugStage('sync:cached-assets');
       const [cached, cachedAvatar] = await Promise.all([
         loadCachedLogo(logoCacheScope),
         loadCachedAvatar(userId),
@@ -326,74 +274,35 @@ export default function AppHeader({
     }
 
     if (userId) {
-      setDebugStage('sync:signed-in-logo');
       let resolvedLogo =
         getSessionCompanyLogoSnapshot() ?? (await loadSessionCompanyLogo(userId, sessionEmail));
       if (!isCurrentRun()) return;
       if (!resolvedLogo.logoUrl) {
-        setDebugStage('sync:signed-in-logo-retry');
         await new Promise((resolve) => setTimeout(resolve, 250));
         resolvedLogo = await loadSessionCompanyLogo(userId, sessionEmail, { forceRefresh: true });
         if (!isCurrentRun()) return;
       }
       if (resolvedLogo.logoUrl) {
-        setDebugStage('sync:signed-in-logo-ok');
         setSessionLogo(resolvedLogo);
         setResolvedSessionLogoUrl(resolvedLogo.logoUrl);
-        setLogoDebugLines([
-          'stage=sync:signed-in-logo-ok',
-          `email=${sessionEmail ?? '-'}`,
-          `uid=${userId.slice(0, 8)}`,
-          `matchedBy=${resolvedLogo.matchedBy}`,
-          `appUser.company_id=${resolvedLogo.appUserCompanyId ?? '-'}`,
-          `company.id=${resolvedLogo.companyId ?? '-'}`,
-          `company.domain=${resolvedLogo.domain ?? '-'}`,
-          `company.logo_url=${resolvedLogo.companyRowLogoUrl ?? '-'}`,
-          `resolved.logoPath=${resolvedLogo.logoPath ?? '-'}`,
-          `resolved.logoUrl=${resolvedLogo.logoUrl ?? '-'}`,
-          `display.logoUrl=${resolvedLogo.logoUrl ?? '-'}`,
-          'logoLoadFailed=0',
-        ]);
       } else if (!lastKnownCompanyLogoUrl) {
-        setDebugStage('sync:signed-in-logo-missing');
         setSessionLogo(resolvedLogo);
         setResolvedSessionLogoUrl(null);
-        setLogoDebugLines([
-          'stage=sync:signed-in-logo-missing',
-          `email=${sessionEmail ?? '-'}`,
-          `uid=${userId.slice(0, 8)}`,
-          `matchedBy=${resolvedLogo.matchedBy}`,
-          `appUser.company_id=${resolvedLogo.appUserCompanyId ?? '-'}`,
-          `company.id=${resolvedLogo.companyId ?? '-'}`,
-          `company.domain=${resolvedLogo.domain ?? '-'}`,
-          `company.logo_url=${resolvedLogo.companyRowLogoUrl ?? '-'}`,
-          `resolved.logoPath=${resolvedLogo.logoPath ?? '-'}`,
-          `resolved.logoUrl=${resolvedLogo.logoUrl ?? '-'}`,
-          'logoLoadFailed=0',
-        ]);
-      } else {
-        setDebugStage('sync:signed-in-logo-keep-cache');
       }
       return;
     }
 
     if (guestModeEnabled) {
-      setDebugStage('sync:guest-logo');
       setSessionLogo(null);
       setResolvedSessionLogoUrl(null);
       const globalContext = await fetchGlobalCompanyContext();
       if (!isCurrentRun()) return;
       const resolved = resolveLogoUrl(globalContext?.logoUrl ?? null);
-      console.info('[guest-mode] header resolved guest logo', {
-        hasContext: Boolean(globalContext),
-        hasLogo: Boolean(resolved),
-      });
       applyResolvedLogo(resolved);
       await cacheScopedLogo({ logoUrl: resolved, logoPath: globalContext?.logoUrl ?? null }, logoCacheScope);
       return;
     }
 
-    setDebugStage('sync:logged-out-clear');
     setSessionLogo(null);
     setResolvedSessionLogoUrl(null);
     applyResolvedLogo(null);
@@ -401,7 +310,6 @@ export default function AppHeader({
 
   useEffect(() => {
     if (pathname === '/' && skipLaunchParam === '1' && !currentUserId && !isAuthenticated) {
-      setDebugStage('effect:skiplaunch-hide');
       setMenuVisible(false);
       setIsLoggingOut(true);
       setIsAuthenticated(false);
@@ -499,7 +407,6 @@ export default function AppHeader({
   );
 
   const signOut = async () => {
-    setDebugStage('logout:start');
     setPendingLocalLogout(true);
     setResolvedMenuVisible(false);
     setIsLoggingOut(true);
@@ -510,15 +417,12 @@ export default function AppHeader({
     setResolvedSessionLogoUrl(null);
     setAvatarUrl(null);
     applyResolvedLogo(null);
-    setDebugStage('logout:clear-caches');
     await clearUserSessionArtifacts(effectiveCurrentUserId, effectiveCurrentUserEmail);
     await setGuestModeEnabled(false);
     await cacheAvatar(effectiveCurrentUserId, null);
     try {
-      setDebugStage('logout:supabase');
       await supabase.auth.signOut({ scope: 'local' });
     } finally {
-      setDebugStage('logout:route-replace');
       router.replace({
         pathname: '/',
         params: {
@@ -570,24 +474,64 @@ export default function AppHeader({
         effectiveCurrentUserId ??
         authUser?.id ??
         null;
-      const { error } = await supabase.functions.invoke('send-feedback', {
-        body: {
-          message: trimmed,
-          email: feedbackEmail,
-          locale,
-          platform: Platform.OS,
-          pathname,
-          isGuestMode: effectiveIsGuestMode,
-          userId: feedbackUserId,
-        },
-      });
-      if (error) {
-        throw error;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token?.trim() ?? '';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      let response: Response;
+      try {
+        response = await fetch(`${SUPABASE_URL}/functions/v1/send-feedback`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${accessToken || SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            message: trimmed,
+            email: feedbackEmail,
+            locale,
+            platform: Platform.OS,
+            pathname,
+            isGuestMode: effectiveIsGuestMode,
+            userId: feedbackUserId,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
       }
+
+      const rawResponse = await response.text();
+      let parsedResponse: any = null;
+      try {
+        parsedResponse = rawResponse ? JSON.parse(rawResponse) : null;
+      } catch {
+        parsedResponse = rawResponse || null;
+      }
+
+      if (!response.ok) {
+        const serverMessage =
+          typeof parsedResponse?.error === 'string'
+            ? parsedResponse.error
+            : typeof parsedResponse === 'string'
+              ? parsedResponse
+              : '';
+        throw new Error(serverMessage || `send-feedback failed (${response.status})`);
+      }
+
       closeFeedback();
       showAppAlert(t('feedbackTitle'), t('feedbackSuccessMessage'));
-    } catch {
-      showAppAlert(t('feedbackTitle'), t('feedbackSendFailedMessage'));
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+      showAppAlert(
+        t('feedbackTitle'),
+        errorMessage
+          ? `${t('feedbackSendFailedMessage')}\n\n${errorMessage}`
+          : t('feedbackSendFailedMessage')
+      );
     } finally {
       setFeedbackSending(false);
     }
@@ -676,7 +620,6 @@ export default function AppHeader({
     <View
       key={headerVisualKey}
       style={[styles.header, { paddingTop: insets.top + 6 }]}
-      onLayout={captureLayout('headerLayout')}
     >
       <View style={styles.leftIcons} pointerEvents="none">
         {!isRTL ? (
@@ -691,7 +634,6 @@ export default function AppHeader({
       </View>
       <View
         style={styles.logoContainer}
-        onLayout={captureLayout('logoContainerLayout')}
         pointerEvents="none"
       >
         <Text style={[styles.logoText, shouldShowCompanyLogo && styles.logoTextHidden]}>DishGuru</Text>
@@ -703,11 +645,7 @@ export default function AppHeader({
             transition={0}
             priority="high"
             cachePolicy="memory-disk"
-            onError={() => {
-              setLogoLoadFailed(true);
-              upsertLogoDebugLine('imageEvent', 'error');
-              upsertLogoDebugLine('logoLoadFailed', '1');
-            }}
+            onError={() => setLogoLoadFailed(true)}
           />
         ) : null}
       </View>

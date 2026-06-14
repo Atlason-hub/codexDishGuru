@@ -4,6 +4,7 @@ import {
   AppState,
   FlatList,
   Keyboard,
+  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -76,6 +77,12 @@ const HOME_FEED_RPC_TIMEOUT_MS = 4000;
 const HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS = 1500;
 const BOOTSTRAP_SUPABASE_URL = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
 const BOOTSTRAP_SUPABASE_ANON_KEY = 'sb_publishable_7JyR16-ZDFnkOPYMHZrczA_oE10ympy';
+const buildCompanyRequestUrl = (email: string, locale: 'he' | 'en') =>
+  `https://www.dishguru.app/?${new URLSearchParams({
+    join: '1',
+    email,
+    lang: locale,
+  }).toString()}#join-request`;
 
 type DishAssociation = {
   id: string;
@@ -253,8 +260,6 @@ export default function HomeScreen() {
   const [authLoading, setAuthLoading] = useState(false);
   const [forceLoggedOut, setForceLoggedOut] = useState(false);
   const [pendingLocalLogout, setPendingLocalLogoutState] = useState(getPendingLocalLogout());
-  const [debugStage, setDebugStage] = useState('init');
-  const [startupDebugLines, setStartupDebugLines] = useState<string[]>([]);
   const [homeHeaderMenuOpenKey, setHomeHeaderMenuOpenKey] = useState(0);
   const [homeHeaderMenuVisible, setHomeHeaderMenuVisible] = useState(false);
   const [homeSearch, setHomeSearch] = useState('');
@@ -323,21 +328,6 @@ export default function HomeScreen() {
       }),
     [fabScrollY]
   );
-
-  const upsertStartupDebugLine = useCallback((prefix: string, value: string) => {
-    setStartupDebugLines((prev) => {
-      const next = prev.filter((line) => !line.startsWith(`${prefix}=`));
-      next.push(`${prefix}=${value}`);
-      return next;
-    });
-  }, []);
-
-  const setBootStep = useCallback((step: string, value?: string | null) => {
-    upsertStartupDebugLine('boot.step', step);
-    if (value != null) {
-      upsertStartupDebugLine(`boot.${step}`, value);
-    }
-  }, [upsertStartupDebugLine]);
 
   const getHomeCacheKey = (userId: string | null) => `home_dishes_cache:v2:${userId ?? 'guest'}`;
 
@@ -412,7 +402,6 @@ export default function HomeScreen() {
     let renderedCachedFeed = false;
 
     try {
-      upsertStartupDebugLine('load.start', String(Date.now()));
       const shouldShowLoading = options?.showLoading ?? true;
       if (shouldShowLoading) {
         setHasLoaded(false);
@@ -421,26 +410,15 @@ export default function HomeScreen() {
       setError(null);
       const userId = options?.userIdOverride ?? currentUserId;
       const userEmail = options?.userEmailOverride ?? currentUserEmail;
-      upsertStartupDebugLine('load.userId', userId ?? '-');
-      upsertStartupDebugLine('load.email', userEmail ?? '-');
       const guestModeEnabled =
         options?.guestModeOverride ?? (!userId ? isGuestMode || (await loadGuestMode()) : false);
-      upsertStartupDebugLine('load.guest', guestModeEnabled ? '1' : '0');
       if (!userId && guestModeEnabled) {
-        upsertStartupDebugLine('load.path', 'guest');
-        console.info('[guest-mode] loading home feed for guest');
         const [globalRows, globalContext] = await Promise.all([
           fetchGlobalDishes(),
           fetchGlobalCompanyContext(),
         ]);
         if (!isCurrentRequest()) return;
         const resolvedGlobalLogoUrl = resolveLogoUrl(globalContext?.logoUrl ?? null);
-        console.info('[guest-mode] guest home feed resolved', {
-          dishes: globalRows.length,
-          hasContext: Boolean(globalContext),
-          hasLogo: Boolean(resolvedGlobalLogoUrl),
-          orderVendor: globalContext?.orderVendor ?? null,
-        });
         setDishAssociations(globalRows as DishAssociation[]);
         await loadUserAvatars(globalRows as DishAssociation[]);
         setFavorites({});
@@ -456,7 +434,6 @@ export default function HomeScreen() {
         return;
       }
       if (options?.useCache && userId && !cacheHydratedRef.current) {
-        upsertStartupDebugLine('load.cacheAttempt', '1');
         const cachedRaw = await withTimeout(
           AsyncStorage.getItem(getHomeCacheKey(userId)),
           500,
@@ -473,7 +450,6 @@ export default function HomeScreen() {
               setLoading(false);
               cacheHydratedRef.current = true;
               renderedCachedFeed = true;
-              upsertStartupDebugLine('load.cacheHit', String(cached.items.length));
             }
           } catch {
             await AsyncStorage.removeItem(getHomeCacheKey(userId));
@@ -483,13 +459,10 @@ export default function HomeScreen() {
       if (userId) {
         let companyId: string | null = options?.companyIdOverride ?? null;
         if (companyId) {
-          upsertStartupDebugLine('load.companyIdOverride', companyId);
           primeCompanyIdForUser(userId, companyId);
         }
         if (userEmail) {
-          if (companyId) {
-            upsertStartupDebugLine('load.companyIdDomain', companyId);
-          } else {
+          if (!companyId) {
           const domain = userEmail.includes('@')
             ? userEmail.split('@').pop()?.trim().toLowerCase()
             : null;
@@ -509,7 +482,6 @@ export default function HomeScreen() {
             const companyDomainError = domainLookup.error;
             if (companyDomainError) throw companyDomainError;
             companyId = companyFromDomain?.id ?? null;
-            upsertStartupDebugLine('load.companyIdDomain', companyId ?? '-');
             if (companyId) {
               primeCompanyIdForUser(userId, companyId);
             }
@@ -523,10 +495,8 @@ export default function HomeScreen() {
             null
           );
         }
-        upsertStartupDebugLine('load.companyId', companyId ?? '-');
         if (!isCurrentRequest()) return;
         if (companyId) {
-          upsertStartupDebugLine('load.path', 'signed-in-company');
           const rpcPromise = withTimeout(
             fetchVisibleDishes(companyId).catch(() => [] as DishAssociation[]),
             HOME_FEED_RPC_TIMEOUT_MS,
@@ -545,9 +515,6 @@ export default function HomeScreen() {
               fetchGlobalCompanyContext(),
               fetchGlobalDishes(),
             ]);
-            upsertStartupDebugLine('load.rpcVisibleCount', String(Array.isArray(rpcData) ? rpcData.length : -1));
-            upsertStartupDebugLine('load.rpcCompanyCount', String(Array.isArray(companyRows) ? companyRows.length : -1));
-            upsertStartupDebugLine('load.globalCount', String(globalRows.length));
             if (!Array.isArray(rpcData)) {
               return null;
             }
@@ -576,7 +543,6 @@ export default function HomeScreen() {
             loadUserAvatars(resolvedFeed.rows);
             setHasLoaded(true);
             setLoading(false);
-            upsertStartupDebugLine('load.appliedRows', String(resolvedFeed.rows.length));
             if (userId) {
               await AsyncStorage.setItem(
                 getHomeCacheKey(userId),
@@ -604,10 +570,8 @@ export default function HomeScreen() {
           }
 
           const fallbackCompanyRows = (await companyRowsPromise) as DishAssociation[];
-          upsertStartupDebugLine('load.fallbackRows', String(fallbackCompanyRows.length));
           if (!isCurrentRequest()) return;
           if (fallbackCompanyRows.length === 0 && dishAssociationsRef.current.length > 0) {
-            upsertStartupDebugLine('load.preserveExisting', 'fallback-empty');
             setDishAssociations(dishAssociationsRef.current);
             setHasLoaded(true);
             setLoading(false);
@@ -630,7 +594,6 @@ export default function HomeScreen() {
       }
       if (!isCurrentRequest()) return;
       if (userId && dishAssociationsRef.current.length > 0) {
-        upsertStartupDebugLine('load.preserveExisting', 'no-company');
         setDishAssociations(dishAssociationsRef.current);
         setHasLoaded(true);
         setLoading(false);
@@ -641,20 +604,17 @@ export default function HomeScreen() {
       setFavorites({});
       setResolvedGlobalUserId(null);
       setResolvedGlobalDishIds([]);
-      upsertStartupDebugLine('load.empty', '1');
       return;
     } catch (err) {
       if (!isCurrentRequest()) return;
       setError(err instanceof Error ? err.message : 'Unknown error');
-      upsertStartupDebugLine('load.error', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       if (isCurrentRequest()) {
         setLoading(false);
         setHasLoaded(true);
-        upsertStartupDebugLine('load.final', `loading=0 hasLoaded=1 dishes=${dishAssociationsCountRef.current}`);
       }
     }
-  }, [currentUserEmail, currentUserId, hasLoaded, isGuestMode, upsertStartupDebugLine]);
+  }, [currentUserEmail, currentUserId, hasLoaded, isGuestMode]);
 
   useEffect(() => {
     dishAssociationsCountRef.current = dishAssociations.length;
@@ -914,13 +874,11 @@ export default function HomeScreen() {
     async (userId: string, emailAddress: string | null | undefined, accessToken?: string | null) => {
       setAuthHydrating(true);
       try {
-        setBootStep('start', userId.slice(0, 8));
         let companyIdFromDomain: string | null = null;
         let bootstrapCompanyLogoPath: string | null = null;
         let bootstrapOrderVendor: string | null = null;
         const domain = getEmailDomain(emailAddress ?? null);
         if (domain) {
-          setBootStep('domain', domain);
           const bootstrapCompany = await withTimeout(
             fetchBootstrapCompanyByDomain(domain, accessToken),
             HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
@@ -929,7 +887,6 @@ export default function HomeScreen() {
           companyIdFromDomain = bootstrapCompany?.id ?? null;
           bootstrapCompanyLogoPath = bootstrapCompany?.logo_url ?? null;
           bootstrapOrderVendor = bootstrapCompany?.order_vendor ?? null;
-          upsertStartupDebugLine('boot.companyIdDomain', companyIdFromDomain ?? '-');
           if (companyIdFromDomain) {
             primeCompanyIdForUser(userId, companyIdFromDomain);
             setCompanyLogoPath(bootstrapCompanyLogoPath);
@@ -952,7 +909,6 @@ export default function HomeScreen() {
             { data: null, error: null } as any
           );
           const appUserCompanyId = appUserLookup.data?.company_id ?? null;
-          upsertStartupDebugLine('boot.appUserCompanyId', appUserCompanyId ?? '-');
           if (appUserCompanyId) {
             companyIdFromDomain = appUserCompanyId;
             primeCompanyIdForUser(userId, appUserCompanyId);
@@ -968,14 +924,12 @@ export default function HomeScreen() {
             setOrderVendor(bootstrapOrderVendor);
           }
         }
-        setBootStep('profile-repair', 'bg');
         void withTimeout(
           ensureAppUserProfile(userId, emailAddress ?? null),
           4000,
           null
         ).catch(() => null);
 
-        setBootStep('feed', companyIdFromDomain ?? '-');
         await Promise.all([
           withTimeout(loadFavorites(userId), 1500, null),
           (async () => {
@@ -1024,7 +978,6 @@ export default function HomeScreen() {
                 getHomeCacheKey(userId),
                 JSON.stringify({ updatedAt: Date.now(), items: bootstrapRows })
               );
-              upsertStartupDebugLine('boot.feedRows', String(bootstrapRows.length));
               return;
             }
             await withTimeout(
@@ -1040,17 +993,15 @@ export default function HomeScreen() {
             );
           })(),
         ]);
-        setBootStep('done', String(dishAssociationsCountRef.current));
       } finally {
         setAuthHydrating(false);
       }
     },
-    [dishAssociationsCountRef, ensureAppUserProfile, loadDishAssociations, loadFavorites, setBootStep, upsertStartupDebugLine]
+    [dishAssociationsCountRef, ensureAppUserProfile, loadDishAssociations, loadFavorites]
   );
 
   useEffect(() => {
     if (emailConfirmedParam !== '1' || handledEmailConfirmedRef.current) return;
-    setDebugStage('effect:email-confirmed');
     handledEmailConfirmedRef.current = true;
     setShowSignup(false);
     setAuthError(null);
@@ -1065,7 +1016,6 @@ export default function HomeScreen() {
     return subscribePendingLocalLogout((pending) => {
       setPendingLocalLogoutState(pending);
       if (pending) {
-        setDebugStage('logout-gate:pending');
         resetAuthForm();
       }
     });
@@ -1073,7 +1023,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (skipLaunchParam !== '1') return;
-    setDebugStage('effect:skiplaunch-force-logged-out');
     setForceLoggedOut(true);
     setIsAuthenticated(false);
     setIsGuestMode(false);
@@ -1114,7 +1063,6 @@ export default function HomeScreen() {
   useEffect(() => {
     if (skipLaunchParam === '1') return;
     if ((currentUserId || isAuthenticated || isGuestMode) && !pendingLocalLogout) {
-      setDebugStage('effect:clear-force-logged-out');
       setForceLoggedOut(false);
     }
   }, [currentUserId, isAuthenticated, isGuestMode, pendingLocalLogout, skipLaunchParam]);
@@ -1130,39 +1078,7 @@ export default function HomeScreen() {
   }, [currentUserId, isAuthenticated, pendingLocalLogout]);
 
   useEffect(() => {
-    upsertStartupDebugLine('render.stage', debugStage);
-    upsertStartupDebugLine('render.sessionChecked', sessionChecked ? '1' : '0');
-    upsertStartupDebugLine('render.auth', isAuthenticated ? '1' : '0');
-    upsertStartupDebugLine('render.authHydrating', authHydrating ? '1' : '0');
-    upsertStartupDebugLine('render.guest', isGuestMode ? '1' : '0');
-    upsertStartupDebugLine('render.uid', currentUserId ? currentUserId.slice(0, 8) : '-');
-    upsertStartupDebugLine('render.loading', loading ? '1' : '0');
-    upsertStartupDebugLine('render.hasLoaded', hasLoaded ? '1' : '0');
-    upsertStartupDebugLine('render.dishes', String(dishAssociations.length));
-    upsertStartupDebugLine('render.logo', companyLogoUrl ? '1' : '0');
-    upsertStartupDebugLine('render.avatar', avatarUrl ? '1' : '0');
-    upsertStartupDebugLine('render.pendingLogout', pendingLocalLogout ? '1' : '0');
-    upsertStartupDebugLine('render.error', error ?? '-');
-  }, [
-    authHydrating,
-    avatarUrl,
-    companyLogoUrl,
-    currentUserId,
-    debugStage,
-    dishAssociations.length,
-    error,
-    hasLoaded,
-    isAuthenticated,
-    isGuestMode,
-    loading,
-    pendingLocalLogout,
-    sessionChecked,
-    upsertStartupDebugLine,
-  ]);
-
-  useEffect(() => {
     let mounted = true;
-    setDebugStage('session:getSession:start');
     supabase.auth.getSession().then(async ({ data }) => {
       try {
         if (!mounted) return;
@@ -1183,17 +1099,9 @@ export default function HomeScreen() {
         setCurrentUserId(data.session?.user?.id ?? null);
         setCurrentUserEmail(data.session?.user?.email ?? null);
         if (!data.session && !guestModeEnabled && skipLaunchParam === '1') {
-          setDebugStage('session:getSession:no-session-skiplaunch');
           setForceLoggedOut(true);
           setPendingLocalLogoutState(true);
         } else {
-          setDebugStage(
-            data.session?.user?.id
-              ? 'session:getSession:has-session'
-              : guestModeEnabled
-                ? 'session:getSession:guest'
-                : 'session:getSession:logged-out'
-          );
           if (!pendingLocalLogoutRef.current || data.session?.user?.id || guestModeEnabled) {
             setForceLoggedOut(false);
           }
@@ -1232,31 +1140,26 @@ export default function HomeScreen() {
         if (data.session?.user?.id) {
           void setGuestModeEnabled(false);
           try {
-            setDebugStage('session:getSession:hydrate-signed-in');
             await hydrateSignedInHome(
               data.session.user.id,
               data.session.user.email ?? null,
               data.session.access_token ?? null
             );
             if (!mounted) return;
-            setDebugStage('session:getSession:signed-in-ready');
           } catch (hydrateError) {
             if (!mounted) return;
             console.warn('[home] cold-start signed-in hydration failed', hydrateError);
           }
         } else if (guestModeEnabled) {
           setAuthHydrating(false);
-          setDebugStage('session:getSession:guest-ready');
         } else {
           setAuthHydrating(false);
-          setDebugStage('session:getSession:logged-out-ready');
           resetAuthForm();
           setDishAssociations([]);
           setFavorites({});
           rememberedHomeFeed = null;
         }
       } catch (error) {
-        setDebugStage('session:getSession:error');
         console.warn('[guest-mode] initial session bootstrap failed', error);
         setDishAssociations([]);
         setFavorites({});
@@ -1268,7 +1171,6 @@ export default function HomeScreen() {
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setDebugStage(`auth-change:${session?.user?.id ? 'signed-in' : 'signed-out'}`);
       setAuthHydrating(Boolean(session?.user?.id));
       setSessionChecked(true);
       setIsAuthenticated(Boolean(session));
@@ -1280,7 +1182,6 @@ export default function HomeScreen() {
         setPendingLocalLogoutState(false);
       }
       if (!session && skipLaunchParam === '1') {
-        setDebugStage('auth-change:signed-out-skiplaunch');
         setForceLoggedOut(true);
         setPendingLocalLogoutState(true);
       } else {
@@ -1310,7 +1211,6 @@ export default function HomeScreen() {
         setIsGuestMode(false);
         await setGuestModeEnabled(false);
         if (authBootstrapUserIdRef.current === session.user.id) {
-          setDebugStage('auth-change:signed-in-deferred');
           return;
         }
         try {
@@ -1319,7 +1219,6 @@ export default function HomeScreen() {
             session.user.email ?? null,
             session.access_token ?? null
           );
-          setDebugStage('auth-change:signed-in-ready');
         } finally {
           setAuthHydrating(false);
         }
@@ -1328,10 +1227,8 @@ export default function HomeScreen() {
         const guestModeEnabled = await loadGuestMode();
         setIsGuestMode(guestModeEnabled);
         if (guestModeEnabled) {
-          setDebugStage('auth-change:guest-ready');
           setFavorites({});
         } else {
-          setDebugStage('auth-change:signed-out-ready');
           resetAuthForm();
           setDishAssociations([]);
           setCompanyLogoUrl(null);
@@ -1495,11 +1392,8 @@ export default function HomeScreen() {
     startupRecoveryTriedRef.current = true;
     void (async () => {
       try {
-        setDebugStage('startup-recovery:start');
-        upsertStartupDebugLine('boot.recovery', 'start');
         const domain = getEmailDomain(currentUserEmail);
         if (!domain) {
-          upsertStartupDebugLine('boot.recovery', 'no-domain');
           return;
         }
         const domainLookup = await withTimeout(
@@ -1514,9 +1408,7 @@ export default function HomeScreen() {
           { data: null, error: null } as any
         );
         const companyId = domainLookup.data?.id ?? null;
-        upsertStartupDebugLine('boot.recoveryCompanyId', companyId ?? '-');
         if (!companyId) {
-          setDebugStage('startup-recovery:no-company');
           return;
         }
         primeCompanyIdForUser(currentUserId, companyId);
@@ -1527,15 +1419,7 @@ export default function HomeScreen() {
           userEmailOverride: currentUserEmail,
           companyIdOverride: companyId,
         });
-        upsertStartupDebugLine('boot.recovery', 'done');
-        setDebugStage('startup-recovery:done');
-      } catch (recoveryError) {
-        upsertStartupDebugLine(
-          'boot.recoveryError',
-          recoveryError instanceof Error ? recoveryError.message : 'unknown'
-        );
-        setDebugStage('startup-recovery:error');
-      }
+      } catch {}
     })();
   }, [
     authHydrating,
@@ -1547,7 +1431,6 @@ export default function HomeScreen() {
     isAuthenticated,
     loadDishAssociations,
     loading,
-    upsertStartupDebugLine,
   ]);
 
   useEffect(() => {
@@ -1653,7 +1536,6 @@ export default function HomeScreen() {
   }, [scrollParam]);
 
   const openLoginFromGuest = useCallback(async () => {
-    setDebugStage('guest:open-login');
     await setGuestModeEnabled(false);
     setIsGuestMode(false);
     resetAuthForm();
@@ -1674,7 +1556,6 @@ export default function HomeScreen() {
 
   const activateGuestMode = useCallback(async () => {
     try {
-      setDebugStage('guest:activate-start');
       guestActivationInFlightRef.current = true;
       setAuthLoading(true);
       setAuthError(null);
@@ -1701,17 +1582,13 @@ export default function HomeScreen() {
       });
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session?.user?.id) {
-        setDebugStage('guest:signout-existing-session');
         await clearUserSessionArtifacts(sessionData.session.user.id, sessionData.session.user.email ?? null);
         await supabase.auth.signOut({ scope: 'local' });
       }
-      console.info('[guest-mode] activating guest mode');
       setShowSignup(false);
       setSessionChecked(true);
-      setDebugStage('guest:load-dishes');
       await loadDishAssociations({ showLoading: false, guestModeOverride: true });
     } catch (error) {
-      setDebugStage('guest:activate-error');
       console.warn('[guest-mode] activation failed', error);
       await setGuestModeEnabled(false);
       setIsGuestMode(false);
@@ -1749,9 +1626,7 @@ export default function HomeScreen() {
 
   const signIn = async () => {
     Keyboard.dismiss();
-    setDebugStage('signin:start');
     if (!email.trim() || !pass.trim()) {
-      setDebugStage('signin:validation-error');
       setAuthError(t('authEnterEmailPassword'));
       return;
     }
@@ -1766,7 +1641,6 @@ export default function HomeScreen() {
         throw error;
       }
       const sessionUser = data.session?.user ?? data.user ?? null;
-      setDebugStage('signin:success');
       await setGuestModeEnabled(false);
       authBootstrapUserIdRef.current = sessionUser?.id ?? null;
       setAuthHydrating(Boolean(sessionUser));
@@ -1796,7 +1670,6 @@ export default function HomeScreen() {
       }
     } catch (err) {
       setAuthHydrating(false);
-      setDebugStage('signin:error');
       const message = err instanceof Error ? err.message : t('authLoginFailed');
       setAuthError(toLocalizedAuthError(message));
     } finally {
@@ -1807,9 +1680,7 @@ export default function HomeScreen() {
 
   const signUp = async () => {
     Keyboard.dismiss();
-    setDebugStage('signup:start');
     if (!email.trim() || !pass.trim() || !confirmPass.trim()) {
-      setDebugStage('signup:validation-error');
       setAuthError(t('authEnterEmailPasswordConfirm'));
       return;
     }
@@ -1843,6 +1714,23 @@ export default function HomeScreen() {
       }
       if (!companyMatch?.id) {
         setAuthError(t('authEmailDomainUnknown'));
+        showAppDialog({
+          title: t('authRequestCompanyTitle'),
+          message: t('authRequestCompanyMessage'),
+          actions: [
+            { text: t('commonCancel'), style: 'cancel' },
+            {
+              text: t('authRequestCompanyAction'),
+              onPress: async () => {
+                try {
+                  await Linking.openURL(buildCompanyRequestUrl(trimmedEmail, locale));
+                } catch {
+                  showAppAlert(t('authRequestCompanyTitle'), t('authRequestCompanyOpenFailed'));
+                }
+              },
+            },
+          ],
+        });
         return;
       }
       const { data: existingByEmail, error: existingByEmailError } = await supabase
@@ -1879,7 +1767,6 @@ export default function HomeScreen() {
         setAuthError(t('authUserExists'));
         return;
       }
-      setDebugStage('signup:success');
       const supabaseUserId = data.user?.id;
       if (!data.user) {
         throw new Error(t('authSignupFailed'));
@@ -1902,7 +1789,6 @@ export default function HomeScreen() {
       setConfirmPass('');
       setAcceptedTerms(false);
     } catch (err) {
-      setDebugStage('signup:error');
       const authApiError =
         err && typeof err === 'object' && 'name' in err ? (err as { [k: string]: any }) : null;
       const message = authApiError?.message ?? (err instanceof Error ? err.message : t('authSignupFailed'));
