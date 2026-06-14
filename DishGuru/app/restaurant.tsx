@@ -129,7 +129,9 @@ export default function RestaurantScreen() {
       return;
     }
     try {
-      setHasLoaded(false);
+      if (menuCategories.length === 0 && summaries.length === 0) {
+        setHasLoaded(false);
+      }
       setLoading(true);
       setError(null);
       const { data: sessionData } = await supabase.auth.getSession();
@@ -219,7 +221,7 @@ export default function RestaurantScreen() {
       setLoading(false);
       setHasLoaded(true);
     }
-  }, [restaurantId]);
+  }, [menuCategories.length, restaurantId, summaries.length]);
 
   useEffect(() => {
     loadRestaurantData();
@@ -409,7 +411,7 @@ export default function RestaurantScreen() {
         </View>
       ) : null}
 
-      {loading && !isRefreshing ? (
+      {loading && !isRefreshing && rows.length === 0 ? (
         <CrossfadeView style={styles.results}>
           <RestaurantScreenSkeleton />
         </CrossfadeView>
@@ -644,24 +646,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     gap: 8,
     marginBottom: 8,
+    alignSelf: 'flex-end',
   },
   controlsRowLtr: {
     flexDirection: 'row',
+    alignSelf: 'flex-start',
   },
   controlButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.cardAlt,
+    minWidth: 98,
   },
   controlButtonActive: {
     borderColor: theme.colors.accent,
     backgroundColor: theme.colors.accentSoft,
   },
   controlText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: theme.typography.semibold,
     color: theme.colors.textMuted,
   },
@@ -712,7 +719,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   dishName: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',

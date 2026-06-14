@@ -188,6 +188,19 @@ function RestaurantAccordionItem({
     [collapsedCategories, menuCategories, summaries, t]
   );
 
+  const collapseAllSections = useCallback(() => {
+    animateLayout();
+    const next = new Set<string>();
+    next.add('reviewed');
+    menuCategories.forEach((category) => next.add(category.id));
+    setCollapsedCategories(next);
+  }, [animateLayout, menuCategories]);
+
+  const expandAllSections = useCallback(() => {
+    animateLayout();
+    setCollapsedCategories(new Set());
+  }, [animateLayout]);
+
   const toggleExpanded = useCallback(async () => {
     animateLayout();
     const nextExpanded = !expanded;
@@ -216,6 +229,11 @@ function RestaurantAccordionItem({
 
   const ratedCount = summaries.filter((item) => item.hasUploads).length;
   const shouldRenderPanel = expanded || hasOpenedOnce || loading;
+  const hasReviewedSection = summaries.some((item) => item.hasUploads);
+  const totalSectionCount = menuCategories.length + (hasReviewedSection ? 1 : 0);
+  const canToggleAllSections = totalSectionCount > 1;
+  const allSectionsCollapsed =
+    canToggleAllSections && collapsedCategories.size === totalSectionCount;
   const openDish = useCallback(
     (dish: DishSummary) => {
       if (dish.hasUploads) {
@@ -293,6 +311,42 @@ function RestaurantAccordionItem({
             </Text>
           ) : (
             <View style={styles.panelRows}>
+              {canToggleAllSections ? (
+                <View style={[styles.panelControlsRow, !isRTL && styles.panelControlsRowLtr]}>
+                  <Pressable
+                    style={[
+                      styles.panelControlButton,
+                      allSectionsCollapsed && styles.panelControlButtonActive,
+                    ]}
+                    onPress={collapseAllSections}
+                  >
+                    <Text
+                      style={[
+                        styles.panelControlText,
+                        allSectionsCollapsed && styles.panelControlTextActive,
+                      ]}
+                    >
+                      {t('searchCollapseAll')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.panelControlButton,
+                      !allSectionsCollapsed && styles.panelControlButtonActive,
+                    ]}
+                    onPress={expandAllSections}
+                  >
+                    <Text
+                      style={[
+                        styles.panelControlText,
+                        !allSectionsCollapsed && styles.panelControlTextActive,
+                      ]}
+                    >
+                      {t('searchExpandAll')}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {rows.map((item, index) =>
                 item.type === 'header' ? (
                   <Pressable
@@ -649,6 +703,41 @@ const styles = StyleSheet.create({
   panelRows: {
     gap: 14,
   },
+  panelControlsRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 8,
+    marginBottom: 4,
+    paddingHorizontal: 6,
+  },
+  panelControlsRowLtr: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+  },
+  panelControlButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+    minWidth: 98,
+  },
+  panelControlButtonActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
+  panelControlText: {
+    fontSize: 11,
+    fontFamily: theme.typography.semibold,
+    color: theme.colors.textMuted,
+  },
+  panelControlTextActive: {
+    color: theme.colors.accent,
+  },
   sectionHeader: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -689,7 +778,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   dishName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: theme.colors.text,
     textAlign: 'right',
