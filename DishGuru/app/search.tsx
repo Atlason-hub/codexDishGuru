@@ -685,6 +685,9 @@ export default function SearchScreen() {
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
         >
+        <View style={styles.titleWrap}>
+          <Text style={[styles.titleText, !isRTL && styles.titleTextLtr]}>{t('searchTitle')}</Text>
+        </View>
         <View style={[styles.modeRow, !isRTL && styles.modeRowLtr]}>
         <Pressable
           style={[styles.modeButton, mode === 'api' && styles.modeButtonActive]}
@@ -1196,6 +1199,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
     flexGrow: 1,
+  },
+  titleWrap: {
+    marginTop: 8,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  titleText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: theme.colors.text,
+    textAlign: 'right',
+  },
+  titleTextLtr: {
+    textAlign: 'left',
   },
   dropdownContainer: {
     width: '100%',

@@ -11,6 +11,8 @@ type FeedbackPayload = {
   pathname?: string | null;
   isGuestMode?: boolean;
   userId?: string | null;
+  subject?: string | null;
+  title?: string | null;
 };
 
 Deno.serve(async (request) => {
@@ -47,6 +49,8 @@ Deno.serve(async (request) => {
     }
 
     const submittedAt = new Date().toISOString();
+    const subjectLine = payload.subject?.trim() || 'DishGuru Feedback';
+    const heading = payload.title?.trim() || 'New DishGuru feedback';
     const emailLabel = payload.email?.trim() || 'Guest';
     const localeLabel = payload.locale?.trim() || 'unknown';
     const platformLabel = payload.platform?.trim() || 'unknown';
@@ -59,7 +63,7 @@ Deno.serve(async (request) => {
       .replaceAll('>', '&gt;');
 
     const textBody = [
-      'New DishGuru feedback',
+      heading,
       '',
       `Submitted at: ${submittedAt}`,
       `Email: ${emailLabel}`,
@@ -75,7 +79,7 @@ Deno.serve(async (request) => {
 
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f1a17;">
-        <h2 style="margin: 0 0 16px;">New DishGuru feedback</h2>
+        <h2 style="margin: 0 0 16px;">${heading}</h2>
         <p><strong>Submitted at:</strong> ${submittedAt}</p>
         <p><strong>Email:</strong> ${emailLabel}</p>
         <p><strong>User ID:</strong> ${userIdLabel}</p>
@@ -97,7 +101,7 @@ Deno.serve(async (request) => {
       body: JSON.stringify({
         from: fromEmail,
         to: [toEmail],
-        subject: `DishGuru Feedback${payload.email ? ` - ${payload.email}` : ''}`,
+        subject: payload.email ? `${subjectLine} - ${payload.email}` : subjectLine,
         text: textBody,
         html: htmlBody,
         reply_to: payload.email?.trim() || undefined,
@@ -112,7 +116,12 @@ Deno.serve(async (request) => {
       });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    const resendPayload = (await resendResponse.json().catch(() => null)) as
+      | { id?: string | null }
+      | null;
+    const resendId = resendPayload?.id?.trim() || null;
+
+    return new Response(JSON.stringify({ ok: true, resendId }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

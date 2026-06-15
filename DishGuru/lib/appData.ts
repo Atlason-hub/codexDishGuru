@@ -109,12 +109,6 @@ const fetchGuestFeedSnapshotFromApi = async () => {
           return null;
         }
         const payload = (await response.json()) as GuestFeedSnapshot | null;
-        console.info('[guest-feed] api snapshot loaded', {
-          url: GUEST_FEED_URL,
-          dishes: payload?.dishes?.length ?? 0,
-          hasContext: Boolean(payload?.context),
-          source: payload?.source ?? null,
-        });
         return payload;
       } catch (error) {
         console.warn('[guest-feed] api request threw', {
@@ -298,18 +292,11 @@ export const fetchGlobalDishes = async () => {
     console.warn('[guest-feed] direct global dishes lookup failed', globalError.message);
   }
   if (Array.isArray(globalData) && globalData.length > 0) {
-    console.info('[guest-feed] loaded global dishes directly', {
-      count: globalData.length,
-    });
     return globalData as any[];
   }
 
   const snapshot = await fetchGuestFeedSnapshotFromApi();
   if (Array.isArray(snapshot?.dishes) && snapshot.dishes.length > 0) {
-    console.info('[guest-feed] using api guest dishes fallback', {
-      count: snapshot.dishes.length,
-      source: snapshot.source ?? null,
-    });
     return snapshot.dishes;
   }
 
@@ -331,10 +318,6 @@ export const fetchGlobalDishes = async () => {
     console.warn('[guest-feed] fallback user dishes lookup failed', fallbackError.message);
     throw fallbackError;
   }
-  console.info('[guest-feed] loaded guest dishes by fallback user id', {
-    count: (fallbackData as any[])?.length ?? 0,
-    userId: globalContext.userId,
-  });
   return (fallbackData as any[]) ?? [];
 };
 

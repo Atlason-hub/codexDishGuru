@@ -14,8 +14,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { supabase } from '../lib/supabase';
+import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
+import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
@@ -61,7 +61,9 @@ const normalizeDishAssociation = (row: DishAssociation): DishAssociation => ({
 
 export default function DishScreen() {
   const router = useRouter();
+  const pathname = usePathname();
   const { isRTL, t } = useLocale();
+  const locale = isRTL ? 'he' : 'en';
   const params = useLocalSearchParams();
   const dishName = typeof params.dishName === 'string' ? params.dishName : '';
   const dishQuery = typeof params.dishQuery === 'string' ? params.dishQuery : '';
@@ -101,7 +103,7 @@ export default function DishScreen() {
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportDetails, setReportDetails] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  const [reportSuccessPending, setReportSuccessPending] = useState(false);
+  const [reportSuccessPending, setReportSuccessPending] = useState<'success' | 'notify_failed' | null>(null);
   const [reportKeyboardHeight, setReportKeyboardHeight] = useState(0);
   const reportScrollRef = useRef<ScrollView | null>(null);
   const [avgScores, setAvgScores] = useState<{
@@ -445,8 +447,12 @@ export default function DishScreen() {
   useEffect(() => {
     if (!reportSuccessPending || reportModalDish) return;
     const timer = setTimeout(() => {
-      setReportSuccessPending(false);
-      showAppAlert(t('dishReportSuccessTitle'), t('dishReportSuccessMessage'));
+      const message =
+        reportSuccessPending === 'notify_failed'
+          ? t('dishReportNotifyFailedMessage')
+          : t('dishReportSuccessMessage');
+      setReportSuccessPending(null);
+      showAppAlert(t('dishReportSuccessTitle'), message);
     }, 120);
     return () => clearTimeout(timer);
   }, [reportModalDish, reportSuccessPending, t]);
@@ -552,25 +558,66 @@ export default function DishScreen() {
       });
       if (insertError) throw insertError;
 
+      let notificationFailed = false;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token?.trim() ?? '';
+        const reasonLabel =
+          reportReasons.find((item) => item.value === reportReason)?.label ?? reportReason;
+        const reportMessage = [
+          `Dish association ID: ${reportModalDish.id}`,
+          `Dish ID: ${reportModalDish.dish_id ?? 'unknown'}`,
+          `Dish: ${reportModalDish.dish_name ?? 'unknown'}`,
+          `Restaurant ID: ${reportModalDish.restaurant_id ?? 'unknown'}`,
+          `Restaurant: ${reportModalDish.restaurant_name ?? 'unknown'}`,
+          `Reason: ${reasonLabel}`,
+          `Details: ${reportDetails.trim() || 'none'}`,
+        ].join('\n');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        try {
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/send-feedback`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${accessToken || SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              message: reportMessage,
+              email: null,
+              locale,
+              platform: Platform.OS,
+              pathname,
+              isGuestMode: false,
+              userId: currentUserId,
+              subject: `Dish report: ${reportModalDish.dish_name ?? reportModalDish.id}`,
+              title: 'New DishGuru dish report',
+            }),
+            signal: controller.signal,
+          });
+
+          if (!response.ok) {
+            notificationFailed = true;
+          }
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      } catch {
+        notificationFailed = true;
+      }
+
       setReportModalDish(null);
       setReportReason(null);
       setReportDetails('');
-      setReportSuccessPending(true);
+      setReportSuccessPending(notificationFailed ? 'notify_failed' : 'success');
     } catch (error) {
-      const message =
-        error && typeof error === 'object' && 'message' in error ? String(error.message ?? '') : '';
-      if (
-        message.toLowerCase().includes('duplicate') ||
-        message.includes('dish_reports_unique_reporter_per_dish')
-      ) {
-        showAppAlert(t('dishReportDuplicateTitle'), t('dishReportDuplicateMessage'));
-      } else {
-        showAppAlert(t('dishReportFailedTitle'), t('dishReportFailedMessage'));
-      }
+      showAppAlert(t('dishReportFailedTitle'), t('dishReportFailedMessage'));
     } finally {
       setIsSubmittingReport(false);
     }
-  }, [currentUserId, reportDetails, reportModalDish, reportReason, t]);
+  }, [currentUserId, locale, pathname, reportDetails, reportModalDish, reportReason, reportReasons, t]);
 
   const handleOrder = useCallback(
     (dish: DishAssociation) => {
