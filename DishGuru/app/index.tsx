@@ -292,6 +292,7 @@ export default function HomeScreen() {
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<{
     imageUrl: string | null;
+    imagePath: string | null;
     title: string | null;
     subtitle: string | null;
   } | null>(null);
@@ -1890,6 +1891,7 @@ export default function HomeScreen() {
   const handlePreviewImage = useCallback((dish: DishAssociation) => {
     setImagePreview({
       imageUrl: dish.image_url ?? null,
+      imagePath: dish.image_path ?? null,
       title: dish.dish_name ?? null,
       subtitle: dish.restaurant_name ?? null,
     });
@@ -2289,8 +2291,9 @@ export default function HomeScreen() {
         }}
       />
       <ImagePreviewModal
-        visible={Boolean(imagePreview?.imageUrl)}
+        visible={Boolean(imagePreview?.imageUrl || imagePreview?.imagePath)}
         imageUrl={imagePreview?.imageUrl ?? null}
+        imagePath={imagePreview?.imagePath ?? null}
         title={imagePreview?.title ?? null}
         subtitle={imagePreview?.subtitle ?? null}
         onClose={() => setImagePreview(null)}
