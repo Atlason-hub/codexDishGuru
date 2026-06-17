@@ -1373,12 +1373,9 @@ function ReportsPage() {
         <div className="reports-row reports-header">
           <span>Image</span>
           <span>Dish</span>
-          <span>Reported By</span>
-          <span>Uploaded By</span>
-          <span>Reason</span>
-          <span>Free Text</span>
-          <span>Reported At</span>
-          <span>Uploaded At</span>
+          <span>People</span>
+          <span>Report</span>
+          <span>Dates</span>
           <span>Actions</span>
         </div>
         {reports.length === 0 && (
@@ -1409,33 +1406,49 @@ function ReportsPage() {
               <strong>{report.dishName || "Unknown dish"}</strong>
               <div className="muted">{report.restaurantName || "Unknown restaurant"}</div>
             </div>
-            <div className="report-email-cell" data-label="Reported By">
-              <span className="report-email">{report.reporterEmail || report.reportedByUserId}</span>
+            <div className="report-stack-cell" data-label="People">
+              <div className="report-stack-item">
+                <span className="report-section-label">Reported by</span>
+                <span className="report-email">{report.reporterEmail || report.reportedByUserId}</span>
+              </div>
+              <div className="report-stack-item">
+                <span className="report-section-label">Uploaded by</span>
+                <span className="report-email">
+                  {report.uploadedByEmail || report.uploadedByUserId || "—"}
+                </span>
+              </div>
             </div>
-            <div className="report-email-cell" data-label="Uploaded By">
-              <span className="report-email">
-                {report.uploadedByEmail || report.uploadedByUserId || "—"}
-              </span>
+            <div className="report-stack-cell" data-label="Report">
+              <div className="report-stack-item">
+                <span className="report-section-label">Reason</span>
+                <span className="vendor-badge report-reason-badge">
+                  {reasonLabel(report.reason)}
+                </span>
+              </div>
+              <div className="report-stack-item">
+                <span className="report-section-label">Free text</span>
+                <span className="report-text-value">{report.details || "—"}</span>
+              </div>
             </div>
-            <div className="report-reason-cell" data-label="Reason">
-              <span className="vendor-badge report-reason-badge">
-                {reasonLabel(report.reason)}
-              </span>
-            </div>
-            <div className="report-text-cell" data-label="Free Text">
-              {report.details || "—"}
-            </div>
-            <div className="report-date-cell" data-label="Reported At">
-              <span>{formatDateParts(report.createdAt).date}</span>
-              {formatDateParts(report.createdAt).time && (
-                <span className="muted">{formatDateParts(report.createdAt).time}</span>
-              )}
-            </div>
-            <div className="report-date-cell" data-label="Uploaded At">
-              <span>{formatDateParts(report.dishCreatedAt).date}</span>
-              {formatDateParts(report.dishCreatedAt).time && (
-                <span className="muted">{formatDateParts(report.dishCreatedAt).time}</span>
-              )}
+            <div className="report-stack-cell report-dates-cell" data-label="Dates">
+              <div className="report-stack-item">
+                <span className="report-section-label">Reported</span>
+                <div className="report-date-cell">
+                  <span>{formatDateParts(report.createdAt).date}</span>
+                  {formatDateParts(report.createdAt).time && (
+                    <span className="muted">{formatDateParts(report.createdAt).time}</span>
+                  )}
+                </div>
+              </div>
+              <div className="report-stack-item">
+                <span className="report-section-label">Uploaded</span>
+                <div className="report-date-cell">
+                  <span>{formatDateParts(report.dishCreatedAt).date}</span>
+                  {formatDateParts(report.dishCreatedAt).time && (
+                    <span className="muted">{formatDateParts(report.dishCreatedAt).time}</span>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="report-actions-cell" data-label="Actions">
               <button
