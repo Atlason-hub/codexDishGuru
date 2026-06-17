@@ -55,3 +55,13 @@ export async function fetchDishReports(): Promise<DishReportItem[]> {
     throw new Error(text || "Invalid JSON response from /api/dish-reports");
   }
 }
+
+export async function deleteDishReport(reportId: string): Promise<void> {
+  const response = await fetch(`/api/dish-reports?id=${encodeURIComponent(reportId)}`, {
+    method: "DELETE"
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || "Failed to delete dish report");
+  }
+}

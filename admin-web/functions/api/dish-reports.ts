@@ -88,3 +88,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     );
   }
 };
+
+export const onRequestDelete: PagesFunction<Env> = async ({ env, request }) => {
+  const id = new URL(request.url).searchParams.get("id")?.trim() ?? "";
+  if (!id) {
+    return json({ error: "Missing report id" }, { status: 400 });
+  }
+
+  try {
+    await fetchSupabaseJson<unknown>(env, `dish_reports?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+    return json({ ok: true });
+  } catch (error) {
+    return json(
+      { error: error instanceof Error ? error.message : "Failed to delete dish report" },
+      { status: 500 }
+    );
+  }
+};

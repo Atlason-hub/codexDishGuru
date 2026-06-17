@@ -26,6 +26,39 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     return json(res, 500, { error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" });
   }
 
+  if (_req.method === "DELETE") {
+    const id = typeof _req.query.id === "string" ? _req.query.id.trim() : "";
+    if (!id) {
+      return json(res, 400, { error: "Missing report id" });
+    }
+
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/dish_reports?id=eq.${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: {
+            apikey: SERVICE_ROLE,
+            Authorization: `Bearer ${SERVICE_ROLE}`
+          }
+        }
+      );
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(text || "Failed to delete dish report");
+      }
+      return json(res, 200, { ok: true });
+    } catch (error) {
+      return json(res, 500, {
+        error: error instanceof Error ? error.message : "Failed to delete dish report"
+      });
+    }
+  }
+
+  if (_req.method && _req.method !== "GET") {
+    return json(res, 405, { error: "Method not allowed" });
+  }
+
   try {
     const reports = (await fetchRest(
       "dish_reports?select=*&order=created_at.desc"

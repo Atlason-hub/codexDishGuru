@@ -24,7 +24,7 @@ import { createUser, deleteUser, fetchUsers, updateUser } from "./usersApi";
 import type { AdminUser } from "./usersApi";
 import { createContent, deleteContent, fetchContent, updateContent } from "./contentApi";
 import type { ContentItem } from "./contentApi";
-import { fetchDishReports } from "./dishReportsApi";
+import { deleteDishReport, fetchDishReports } from "./dishReportsApi";
 import type { DishReportItem } from "./dishReportsApi";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -1300,6 +1300,8 @@ function ReportsPage() {
   const [reports, setReports] = React.useState<DishReportItem[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [previewImage, setPreviewImage] = React.useState<string | null>(null);
+  const [reportToDelete, setReportToDelete] = React.useState<DishReportItem | null>(null);
+  const [isDeletingReport, setIsDeletingReport] = React.useState(false);
 
   React.useEffect(() => {
     const load = async () => {
@@ -1345,6 +1347,23 @@ function ReportsPage() {
       other: "Other"
     })[reason] ?? reason;
 
+  const handleDeleteReport = async () => {
+    if (!reportToDelete) return;
+
+    setIsDeletingReport(true);
+    setError(null);
+
+    try {
+      await deleteDishReport(reportToDelete.id);
+      setReports((current) => current.filter((item) => item.id !== reportToDelete.id));
+      setReportToDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete report.");
+    } finally {
+      setIsDeletingReport(false);
+    }
+  };
+
   return (
     <section className="panel">
       <h2>Dish Reports</h2>
@@ -1360,6 +1379,7 @@ function ReportsPage() {
           <span>Free Text</span>
           <span>Reported At</span>
           <span>Uploaded At</span>
+          <span>Actions</span>
         </div>
         {reports.length === 0 && (
           <div className="reports-empty">
@@ -1417,9 +1437,42 @@ function ReportsPage() {
                 <span className="muted">{formatDateParts(report.dishCreatedAt).time}</span>
               )}
             </div>
+            <div className="report-actions-cell" data-label="Actions">
+              <button
+                type="button"
+                className="ghost danger-button"
+                onClick={() => setReportToDelete(report)}
+              >
+                Delete
+              </button>
+            </div>
           </article>
         ))}
       </div>
+      {reportToDelete && (
+        <div className="modal-overlay" onClick={() => (isDeletingReport ? undefined : setReportToDelete(null))}>
+          <div className="confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Delete Report</h3>
+            <p className="muted">
+              Remove the report for <strong>{reportToDelete.dishName || "this dish"}</strong>?
+              The dish itself will stay in the app.
+            </p>
+            <div className="form-actions confirm-modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setReportToDelete(null)}
+                disabled={isDeletingReport}
+              >
+                Cancel
+              </button>
+              <button type="button" className="danger-button" onClick={handleDeleteReport} disabled={isDeletingReport}>
+                {isDeletingReport ? "Deleting..." : "Delete Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {previewImage && (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
           <div className="image-modal" onClick={(event) => event.stopPropagation()}>
