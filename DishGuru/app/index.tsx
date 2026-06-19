@@ -1172,78 +1172,83 @@ export default function HomeScreen() {
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setAuthHydrating(Boolean(session?.user?.id));
-      setSessionChecked(true);
-      setIsAuthenticated(Boolean(session));
-      setCurrentUserId(session?.user?.id ?? null);
-      setCurrentUserEmail(session?.user?.email ?? null);
-      sessionAccessTokenRef.current = session?.access_token ?? null;
-      if (session?.user?.id) {
-        setPendingLocalLogout(false);
-        setPendingLocalLogoutState(false);
-      }
-      if (!session && skipLaunchParam === '1') {
-        setForceLoggedOut(true);
-        setPendingLocalLogoutState(true);
-      } else {
-        if (!pendingLocalLogoutRef.current || session?.user?.id) {
-          setForceLoggedOut(false);
+      try {
+        setAuthHydrating(Boolean(session?.user?.id));
+        setSessionChecked(true);
+        setIsAuthenticated(Boolean(session));
+        setCurrentUserId(session?.user?.id ?? null);
+        setCurrentUserEmail(session?.user?.email ?? null);
+        sessionAccessTokenRef.current = session?.access_token ?? null;
+        if (session?.user?.id) {
+          setPendingLocalLogout(false);
+          setPendingLocalLogoutState(false);
         }
-      }
-      setIsRefreshing(false);
-      const resolvedAvatar = await withTimeout(
-        resolveAvatarForUser(
-          session?.user?.id ?? null,
-          (session?.user?.user_metadata as any)?.avatar_url ?? null
-        ),
-        1200,
-        null
-      );
-      if (resolvedAvatar) {
-        setAvatarUrl(resolvedAvatar);
-        cacheAvatar(session?.user?.id ?? null, resolvedAvatar);
-      } else {
-        setAvatarUrl(null);
-        cacheAvatar(session?.user?.id ?? null, null);
-      }
-      if (session?.user?.id) {
-        setPendingLocalLogout(false);
-        setPendingLocalLogoutState(false);
-        setIsGuestMode(false);
-        await setGuestModeEnabled(false);
-        if (authBootstrapUserIdRef.current === session.user.id) {
-          return;
-        }
-        try {
-          await hydrateSignedInHome(
-            session.user.id,
-            session.user.email ?? null,
-            session.access_token ?? null
-          );
-        } finally {
-          setAuthHydrating(false);
-        }
-      } else {
-        setAuthHydrating(false);
-        const guestModeEnabled = await loadGuestMode();
-        setIsGuestMode(guestModeEnabled);
-        if (guestModeEnabled) {
-          setFavorites({});
+        if (!session && skipLaunchParam === '1') {
+          setForceLoggedOut(true);
+          setPendingLocalLogoutState(true);
         } else {
-          resetAuthForm();
-          setDishAssociations([]);
-          setCompanyLogoUrl(null);
-          setOrderVendor(null);
-          setFavorites({});
-          rememberedHomeFeed = null;
+          if (!pendingLocalLogoutRef.current || session?.user?.id) {
+            setForceLoggedOut(false);
+          }
         }
+        setIsRefreshing(false);
+        const resolvedAvatar = await withTimeout(
+          resolveAvatarForUser(
+            session?.user?.id ?? null,
+            (session?.user?.user_metadata as any)?.avatar_url ?? null
+          ),
+          1200,
+          null
+        );
+        if (resolvedAvatar) {
+          setAvatarUrl(resolvedAvatar);
+          cacheAvatar(session?.user?.id ?? null, resolvedAvatar);
+        } else {
+          setAvatarUrl(null);
+          cacheAvatar(session?.user?.id ?? null, null);
+        }
+        if (session?.user?.id) {
+          setPendingLocalLogout(false);
+          setPendingLocalLogoutState(false);
+          setIsGuestMode(false);
+          await setGuestModeEnabled(false);
+          if (authBootstrapUserIdRef.current === session.user.id) {
+            return;
+          }
+          try {
+            await hydrateSignedInHome(
+              session.user.id,
+              session.user.email ?? null,
+              session.access_token ?? null
+            );
+          } finally {
+            setAuthHydrating(false);
+          }
+        } else {
+          setAuthHydrating(false);
+          const guestModeEnabled = await loadGuestMode();
+          setIsGuestMode(guestModeEnabled);
+          if (guestModeEnabled) {
+            setFavorites({});
+          } else {
+            resetAuthForm();
+            setDishAssociations([]);
+            setCompanyLogoUrl(null);
+            setOrderVendor(null);
+            setFavorites({});
+            rememberedHomeFeed = null;
+          }
+        }
+      } catch (authSyncError) {
+        console.warn('[home] auth state sync failed', authSyncError);
+        setAuthHydrating(false);
       }
     });
     return () => {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [ensureAppUserProfile, resetAuthForm, router, skipLaunchParam]);
+  }, [hydrateSignedInHome, resetAuthForm, skipLaunchParam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1505,7 +1510,9 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!currentUserId || !hasLoaded) return;
-      refreshContent();
+      void refreshContent().catch((refreshError) => {
+        console.warn('[home] focus refresh failed', refreshError);
+      });
     }, [currentUserId, hasLoaded, refreshContent])
   );
 
@@ -1513,7 +1520,9 @@ export default function HomeScreen() {
     const subscription = AppState.addEventListener('change', (nextState) => {
       const wasInactive = /inactive|background/.test(appStateRef.current);
       if (wasInactive && nextState === 'active' && currentUserId && hasLoaded) {
-        refreshContent();
+        void refreshContent().catch((refreshError) => {
+          console.warn('[home] app resume refresh failed', refreshError);
+        });
       }
       appStateRef.current = nextState;
     });

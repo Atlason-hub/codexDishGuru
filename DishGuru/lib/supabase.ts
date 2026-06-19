@@ -18,6 +18,10 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 const isInvalidRefreshTokenError = (message: string | undefined) =>
   typeof message === 'string' && /invalid refresh token|refresh token not found/i.test(message);
 
+const isTransientNetworkError = (message: string | undefined) =>
+  typeof message === 'string' &&
+  /network request failed|failed to fetch|networkerror|load failed/i.test(message);
+
 const decodeJwtPayload = (token: string | undefined | null) => {
   if (!token) return null;
   const parts = token.split('.');
@@ -74,6 +78,11 @@ const emptyUserResult = {
   error: null,
 } as unknown as Awaited<ReturnType<typeof rawGetUser>>;
 
+const emptyRefreshSessionResult = {
+  data: { session: null, user: null },
+  error: null,
+} as Awaited<ReturnType<typeof rawRefreshSession>>;
+
 supabase.auth.getSession = (async () => {
   try {
     const result = await rawGetSession();
@@ -90,6 +99,9 @@ supabase.auth.getSession = (async () => {
     const message = error instanceof Error ? error.message : String(error);
     if (isInvalidRefreshTokenError(message)) {
       await recoverInvalidStoredSession();
+      return emptySessionResult;
+    }
+    if (isTransientNetworkError(message)) {
       return emptySessionResult;
     }
     throw error;
@@ -114,9 +126,33 @@ supabase.auth.getUser = (async (jwt?: string) => {
       await recoverInvalidStoredSession();
       return emptyUserResult;
     }
+    if (isTransientNetworkError(message)) {
+      return emptyUserResult;
+    }
     throw error;
   }
 }) as typeof supabase.auth.getUser;
+
+supabase.auth.refreshSession = (async (currentSession) => {
+  try {
+    const result = await rawRefreshSession(currentSession);
+    if (isInvalidRefreshTokenError(result.error?.message)) {
+      await recoverInvalidStoredSession();
+      return emptyRefreshSessionResult;
+    }
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isInvalidRefreshTokenError(message)) {
+      await recoverInvalidStoredSession();
+      return emptyRefreshSessionResult;
+    }
+    if (isTransientNetworkError(message)) {
+      return emptyRefreshSessionResult;
+    }
+    throw error;
+  }
+}) as typeof supabase.auth.refreshSession;
 
 export async function clearInvalidStoredSession() {
   try {
@@ -178,11 +214,19 @@ export async function warmSupabaseSession() {
 export async function startSupabaseAutoRefresh() {
   if (autoRefreshStarted) return;
   autoRefreshStarted = true;
-  await supabase.auth.startAutoRefresh();
+  try {
+    await supabase.auth.startAutoRefresh();
+  } catch {
+    autoRefreshStarted = false;
+  }
 }
 
 export async function stopSupabaseAutoRefresh() {
   if (!autoRefreshStarted) return;
   autoRefreshStarted = false;
-  await supabase.auth.stopAutoRefresh();
+  try {
+    await supabase.auth.stopAutoRefresh();
+  } catch {
+    // Ignore stop errors during app state transitions.
+  }
 }

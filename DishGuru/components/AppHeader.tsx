@@ -340,7 +340,14 @@ export default function AppHeader({
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
-      await syncHeaderState(session);
+      try {
+        await syncHeaderState(session);
+      } catch (headerSyncError) {
+        if (mounted) {
+          console.warn('[header] auth state sync failed', headerSyncError);
+          applyResolvedLogo(null);
+        }
+      }
     });
 
     return () => {

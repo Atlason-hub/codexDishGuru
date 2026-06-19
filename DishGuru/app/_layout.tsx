@@ -3,13 +3,13 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { I18nManager, LogBox, Platform, StyleSheet, Text, TextInput, useColorScheme } from 'react-native';
+import { AppState, LogBox, Text, TextInput, useColorScheme } from 'react-native';
 import { Asset } from 'expo-asset';
 import AppHeader from '../components/AppHeader';
 import AppDialogHost from '../components/AppDialogHost';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Font from 'expo-font';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { subscribeTheme } from '../lib/theme';
@@ -60,6 +60,17 @@ export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [, setThemeTick] = useState(0);
+  const appStateRef = useRef(AppState.currentState);
+
+  const syncAuthOnForeground = async () => {
+    try {
+      await clearInvalidStoredSession();
+      await warmSupabaseSession();
+      await startSupabaseAutoRefresh();
+    } catch {
+      // Let screen-level session recovery continue without surfacing a redbox.
+    }
+  };
 
   useEffect(() => {
     LogBox.ignoreLogs([
@@ -82,12 +93,7 @@ export default function RootLayout() {
     let isMounted = true;
     const prepareAuth = async () => {
       try {
-        await clearInvalidStoredSession();
-        await warmSupabaseSession();
-        await startSupabaseAutoRefresh();
-      } catch {
-        // Let the app render immediately and allow the screen-level session
-        // bootstrap to recover gracefully if auth storage is stale.
+        await syncAuthOnForeground();
       } finally {
         if (isMounted) {
           setAuthReady(true);
@@ -99,6 +105,23 @@ export default function RootLayout() {
       isMounted = false;
       void stopSupabaseAutoRefresh();
     };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const wasInactive = /inactive|background/.test(appStateRef.current);
+      if (wasInactive && nextState === 'active') {
+        void syncAuthOnForeground();
+      }
+
+      if (/inactive|background/.test(nextState)) {
+        void stopSupabaseAutoRefresh();
+      }
+
+      appStateRef.current = nextState;
+    });
+
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -176,5 +199,3 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({});
