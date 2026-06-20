@@ -55,6 +55,7 @@ export default function MyDishesScreen() {
   const [avatarPreviewLabel, setAvatarPreviewLabel] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<{
     imageUrl: string | null;
+    imagePath: string | null;
     title: string | null;
     subtitle: string | null;
   } | null>(null);
@@ -425,6 +426,7 @@ export default function MyDishesScreen() {
         onPreviewImage={(dish) =>
           setImagePreview({
             imageUrl: dish.image_url ?? null,
+            imagePath: dish.image_path ?? null,
             title: dish.dish_name ?? null,
             subtitle: dish.restaurant_name ?? null,
           })
@@ -520,8 +522,9 @@ export default function MyDishesScreen() {
         }}
       />
       <ImagePreviewModal
-        visible={Boolean(imagePreview?.imageUrl)}
+        visible={Boolean(imagePreview?.imageUrl || imagePreview?.imagePath)}
         imageUrl={imagePreview?.imageUrl ?? null}
+        imagePath={imagePreview?.imagePath ?? null}
         title={imagePreview?.title ?? null}
         subtitle={imagePreview?.subtitle ?? null}
         onClose={() => setImagePreview(null)}
