@@ -296,6 +296,7 @@ export default function SearchScreen() {
   const { isRTL, t } = useLocale();
   const scrollRef = useRef<ScrollView | null>(null);
   const searchRequestIdRef = useRef(0);
+  const restaurantCollapsedBeforeSearchRef = useRef<Set<string> | null>(null);
   const menuRequestIdRef = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -403,8 +404,21 @@ export default function SearchScreen() {
   );
 
   useEffect(() => {
-    setCollapsedRestaurantCategories(new Set());
-  }, [restaurantCategories]);
+    const needle = restaurantQuery.trim();
+    if (!needle) {
+      if (restaurantCollapsedBeforeSearchRef.current) {
+        setCollapsedRestaurantCategories(restaurantCollapsedBeforeSearchRef.current);
+        restaurantCollapsedBeforeSearchRef.current = null;
+      } else {
+        setCollapsedRestaurantCategories(new Set());
+      }
+      return;
+    }
+    if (!restaurantCollapsedBeforeSearchRef.current) {
+      restaurantCollapsedBeforeSearchRef.current = new Set(collapsedRestaurantCategories);
+      setCollapsedRestaurantCategories(new Set());
+    }
+  }, [restaurantQuery]);
 
   useEffect(() => {
     setCollapsedDishCategories(new Set(dishCategories.map((cat) => cat.id)));
@@ -655,6 +669,9 @@ export default function SearchScreen() {
   const allApiCategoriesCollapsed =
     apiMenuCategories.length > 0 &&
     collapsedApiMenuCategories.size === apiMenuCategories.length;
+  const allRestaurantCategoriesCollapsed =
+    restaurantCategories.length > 0 &&
+    collapsedRestaurantCategories.size === restaurantCategories.length;
   const allDishCategoriesCollapsed =
     dishCategories.length > 0 &&
     collapsedDishCategories.size === dishCategories.length;
@@ -776,72 +793,112 @@ export default function SearchScreen() {
               ) : null}
             </View>
             {restaurantRows.length > 0 ? (
-              <View>
-                {restaurantRows.map((item) =>
-                  item.type === 'header' ? (
-                    <Pressable
-                      key={item.id}
-                      style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
-                      onPress={() =>
-                        setCollapsedRestaurantCategories((prev) => {
-                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                          const next = new Set(prev);
-                          const key = item.id.replace('header-', '');
-                          if (next.has(key)) {
-                            next.delete(key);
-                          } else {
-                            next.add(key);
-                          }
-                          return next;
-                        })
-                      }
+              <>
+                <View style={[styles.dropdownControlsRow, !isRTL && styles.dropdownControlsRowLtr]}>
+                  <Pressable
+                    style={[
+                      styles.dropdownControlButton,
+                      !allRestaurantCategoriesCollapsed && styles.dropdownControlButtonActive,
+                    ]}
+                    onPress={() => setCollapsedRestaurantCategories(new Set())}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownControlText,
+                        !allRestaurantCategoriesCollapsed && styles.dropdownControlTextActive,
+                      ]}
                     >
-                      <Text style={[styles.categoryHeaderText, !isRTL && styles.categoryHeaderTextLtr]}>
-                        {item.name}
-                      </Text>
-                      <View style={styles.categoryChevronCircle}>
-                        <Ionicons
-                          name={
-                            collapsedRestaurantCategories.has(item.id.replace('header-', ''))
-                              ? 'chevron-down'
-                              : 'chevron-up'
-                          }
-                          size={14}
-                          color={theme.colors.textMuted}
-                        />
-                      </View>
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      key={item.id}
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        if (mode === 'api') {
-                          setSelectedApiRestaurantId(item.item.RestaurantId);
-                          setSelectedApiRestaurantName(item.item.RestaurantName ?? '');
-                          setRestaurantQuery(item.item.RestaurantName ?? '');
-                          setDishQuery('');
-                          setRestaurantDropdownOpen(false);
-                          setDishDropdownOpen(true);
-                          return;
+                      {t('searchExpandAll')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.dropdownControlButton,
+                      allRestaurantCategoriesCollapsed && styles.dropdownControlButtonActive,
+                    ]}
+                    onPress={() =>
+                      setCollapsedRestaurantCategories(
+                        new Set(restaurantCategories.map((cat) => cat.id))
+                      )
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownControlText,
+                        allRestaurantCategoriesCollapsed && styles.dropdownControlTextActive,
+                      ]}
+                    >
+                      {t('searchCollapseAll')}
+                    </Text>
+                  </Pressable>
+                </View>
+                <View>
+                  {restaurantRows.map((item) =>
+                    item.type === 'header' ? (
+                      <Pressable
+                        key={item.id}
+                        style={[styles.categoryHeader, !isRTL && styles.categoryHeaderLtr]}
+                        onPress={() =>
+                          setCollapsedRestaurantCategories((prev) => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            const next = new Set(prev);
+                            const key = item.id.replace('header-', '');
+                            if (next.has(key)) {
+                              next.delete(key);
+                            } else {
+                              next.add(key);
+                            }
+                            return next;
+                          })
                         }
-                        setRestaurantDropdownOpen(false);
-                        router.push({
-                          pathname: '/restaurant',
-                          params: {
-                            restaurantId: String(item.item.RestaurantId ?? ''),
-                            restaurantName: item.item.RestaurantName ?? '',
-                          },
-                        });
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, !isRTL && styles.dropdownItemTextLtr]}>
-                        {item.item.RestaurantName}
-                      </Text>
-                    </Pressable>
-                  )
-                )}
-              </View>
+                      >
+                        <Text style={[styles.categoryHeaderText, !isRTL && styles.categoryHeaderTextLtr]}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.categoryChevronCircle}>
+                          <Ionicons
+                            name={
+                              collapsedRestaurantCategories.has(item.id.replace('header-', ''))
+                                ? 'chevron-down'
+                                : 'chevron-up'
+                            }
+                            size={14}
+                            color={theme.colors.textMuted}
+                          />
+                        </View>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        key={item.id}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          if (mode === 'api') {
+                            setSelectedApiRestaurantId(item.item.RestaurantId);
+                            setSelectedApiRestaurantName(item.item.RestaurantName ?? '');
+                            setRestaurantQuery(item.item.RestaurantName ?? '');
+                            setDishQuery('');
+                            setRestaurantDropdownOpen(false);
+                            setDishDropdownOpen(true);
+                            return;
+                          }
+                          setRestaurantDropdownOpen(false);
+                          router.push({
+                            pathname: '/restaurant',
+                            params: {
+                              restaurantId: String(item.item.RestaurantId ?? ''),
+                              restaurantName: item.item.RestaurantName ?? '',
+                            },
+                          });
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, !isRTL && styles.dropdownItemTextLtr]}>
+                          {item.item.RestaurantName}
+                        </Text>
+                      </Pressable>
+                    )
+                  )}
+                </View>
+              </>
             ) : loading && trimmedRestaurant.length > 0 ? (
               <View style={[styles.dropdownLoadingRow, !isRTL && styles.dropdownLoadingRowLtr]}>
                 <ActivityIndicator size="small" color={theme.colors.textMuted} />
@@ -1283,29 +1340,35 @@ const styles = StyleSheet.create({
   },
   modeRow: {
     flexDirection: 'row-reverse',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
     gap: 8,
     marginTop: 6,
     marginBottom: 16,
   },
   modeRowLtr: {
     flexDirection: 'row',
+    alignSelf: 'flex-start',
   },
   modeButton: {
-    paddingVertical: 6,
     paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.cardAlt,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,248,242,0.70)',
+    minWidth: 104,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modeButtonActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.accentSoft,
+    borderColor: 'rgba(244,135,34,0.40)',
+    backgroundColor: 'rgba(255,241,224,0.96)',
   },
   modeText: {
-    fontSize: 12,
+    fontSize: 10,
     color: theme.colors.textMuted,
-    fontWeight: '600',
+    fontFamily: theme.typography.semibold,
   },
   modeTextActive: {
     color: theme.colors.accent,
@@ -1334,30 +1397,36 @@ const styles = StyleSheet.create({
   },
   dropdownControlsRow: {
     flexDirection: 'row-reverse',
+    alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
+    alignSelf: 'flex-end',
+    paddingHorizontal: 6,
     paddingTop: 6,
     paddingBottom: 4,
     backgroundColor: theme.colors.card,
   },
   dropdownControlsRowLtr: {
     flexDirection: 'row',
+    alignSelf: 'flex-start',
   },
   dropdownControlButton: {
-    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.cardAlt,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,248,242,0.70)',
+    minWidth: 88,
   },
   dropdownControlButtonActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.accentSoft,
+    borderColor: 'rgba(244,135,34,0.40)',
+    backgroundColor: 'rgba(255,241,224,0.96)',
   },
   dropdownControlText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontFamily: theme.typography.semibold,
     color: theme.colors.textMuted,
   },
   dropdownControlTextActive: {

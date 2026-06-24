@@ -2,6 +2,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
 import { publishHomeTab, type HomeTabKey } from '../lib/homeTabs';
+import GlassToggle from './GlassToggle';
 
 type Props = {
   isRTL: boolean;
@@ -98,35 +99,17 @@ export default function HomeFeedHeader({
       ) : null}
       {shouldShowMainTabs ? (
         <View style={styles.tabsSection}>
-          <View style={[styles.tabsRail, !isRTL && styles.tabsRailLtr]}>
-            <View style={[styles.tabsRow, !isRTL && styles.tabsRowLtr]}>
-            {([
-              ['dishes', t('homeTabDishes')],
-              ['restaurants', t('homeTabRestaurants')],
-            ] as const).map(([tabKey, label]) => {
-              const isActive = activeHomeTab === tabKey;
-              return (
-                <Pressable
-                  key={tabKey}
-                  style={styles.tabChip}
-                  onPress={() => {
-                    publishHomeTab(tabKey);
-                    onSetActiveHomeTab(tabKey);
-                  }}
-                >
-                  <View style={styles.tabChipInner}>
-                    <Text style={[styles.tabChipText, isActive && styles.tabChipTextActive]}>
-                      {label}
-                    </Text>
-                    <View
-                      style={[styles.tabUnderline, isActive && styles.tabUnderlineActive]}
-                    />
-                  </View>
-                </Pressable>
-              );
-            })}
-            </View>
-          </View>
+          <GlassToggle
+            isRTL={isRTL}
+            selectedIndex={activeHomeTab === 'dishes' ? 0 : 1}
+            dishesLabel={t('homeTabDishes')}
+            restaurantsLabel={t('homeTabRestaurants')}
+            onTabChange={(selectedIndex) => {
+              const nextTab: HomeTabKey = selectedIndex === 0 ? 'dishes' : 'restaurants';
+              publishHomeTab(nextTab);
+              onSetActiveHomeTab(nextTab);
+            }}
+          />
           <View style={styles.tabsDivider} />
         </View>
       ) : null}
@@ -257,58 +240,8 @@ const styles = StyleSheet.create({
   tabsSection: {
     marginTop: 10,
   },
-  tabsRail: {
-    marginHorizontal: -4,
-    paddingTop: 0,
-    paddingBottom: 5,
-    borderRadius: 18,
-    backgroundColor: 'rgba(199, 93, 44, 0.04)',
-  },
-  tabsRailLtr: {
-    alignItems: 'stretch',
-  },
-  tabsRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    paddingHorizontal: 10,
-  },
-  tabsRowLtr: {
-    flexDirection: 'row',
-  },
-  tabChip: {
-    minWidth: 112,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  tabChipInner: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 2,
-    paddingHorizontal: 12,
-    paddingTop: 0,
-  },
-  tabChipText: {
-    fontSize: 16,
-    color: theme.colors.textMuted,
-    fontFamily: theme.typography.medium,
-    letterSpacing: 0.1,
-  },
-  tabChipTextActive: {
-    color: theme.colors.text,
-    fontFamily: theme.typography.bold,
-  },
-  tabUnderline: {
-    width: 34,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: 'transparent',
-  },
-  tabUnderlineActive: {
-    backgroundColor: theme.colors.accent,
-  },
   tabsDivider: {
-    marginTop: 0,
+    marginTop: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border,
     shadowColor: theme.colors.ink,

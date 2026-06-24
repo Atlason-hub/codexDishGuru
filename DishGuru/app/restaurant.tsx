@@ -113,11 +113,24 @@ export default function RestaurantScreen() {
     subtitle: string | null;
   } | null>(null);
   const appStateRef = useRef(AppState.currentState);
+  const loadRequestIdRef = useRef(0);
+  const loadAbortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const hasReviewedSection = useMemo(
+    () => summaries.some((dish) => dish.hasUploads),
+    [summaries]
+  );
 
   useEffect(() => {
     if (Platform.OS === 'android') {
       UIManager.setLayoutAnimationEnabledExperimental?.(true);
     }
+    return () => {
+      mountedRef.current = false;
+      loadRequestIdRef.current += 1;
+      loadAbortControllerRef.current?.abort();
+      loadAbortControllerRef.current = null;
+    };
   }, []);
 
   const loadRestaurantData = useCallback(async () => {
@@ -128,19 +141,39 @@ export default function RestaurantScreen() {
       setHasLoaded(true);
       return;
     }
+
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+    loadAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortControllerRef.current = controller;
+    const isCurrentRequest = () =>
+      mountedRef.current && loadRequestIdRef.current === requestId;
+
     try {
-      if (menuCategories.length === 0 && summaries.length === 0) {
+      if (!hasLoaded) {
         setHasLoaded(false);
       }
       setLoading(true);
       setError(null);
-      const { data: sessionData } = await supabase.auth.getSession();
+      const [{ data: sessionData }, cachedMenu] = await Promise.all([
+        supabase.auth.getSession(),
+        loadCachedRestaurantMenu<MenuCategory[]>(restaurantId),
+      ]);
+      if (!isCurrentRequest()) return;
+
       const userId = sessionData.session?.user?.id ?? null;
       const userEmail = sessionData.session?.user?.email ?? null;
-      const cachedMenu = await loadCachedRestaurantMenu<MenuCategory[]>(restaurantId);
+      if (cachedMenu?.length) {
+        setMenuCategories(cachedMenu);
+      }
+
       const fetchMenuPromise = fetch(
         `https://www.10bis.co.il/api/GetMenu?ResId=${restaurantId}&websiteID=10bis&domainID=10bis`,
-        { headers: { Accept: 'application/json' } }
+        {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        }
       )
         .then(async (response) => {
           if (!response.ok) throw new Error(`Request failed: ${response.status}`);
@@ -149,27 +182,25 @@ export default function RestaurantScreen() {
           const mappedMenu = mapMenuToCategories(menuData);
           await saveCachedRestaurantMenu(restaurantId, mappedMenu);
           return mappedMenu;
-        })
-        .catch(() => cachedMenu ?? []);
-
-      const curatedMenu = cachedMenu ?? (await fetchMenuPromise);
-      setMenuCategories(curatedMenu);
-      setCollapsedCategories(new Set());
+        });
 
       let list: DishAssociation[] = [];
       let hasScopedSource = false;
       if (userId) {
         const companyId = await fetchCompanyIdForUser(userId);
+        if (!isCurrentRequest()) return;
         if (companyId) {
           hasScopedSource = true;
           const emailDomain = userEmail?.includes('@')
             ? userEmail.split('@').pop()?.trim().toLowerCase() ?? null
             : null;
           const companyUserIds = await fetchCompanyUserIds(companyId, emailDomain);
+          if (!isCurrentRequest()) return;
           const [globalContext, visibleRowsRaw] = await Promise.all([
             fetchGlobalCompanyContext(),
             fetchVisibleDishes(companyId),
           ]);
+          if (!isCurrentRequest()) return;
           const visibleRows = (visibleRowsRaw as DishAssociation[]).filter((row) => row.restaurant_id === restaurantId);
           const { data: ownRows, error: ownRowsError } =
             companyUserIds.length > 0
@@ -181,6 +212,7 @@ export default function RestaurantScreen() {
                   .eq('restaurant_id', restaurantId)
                   .in('user_id', companyUserIds)
               : { data: [], error: null };
+          if (!isCurrentRequest()) return;
           list = mergeCompanyVisibleRows(
             visibleRows,
             !ownRowsError && Array.isArray(ownRows) ? (ownRows as DishAssociation[]) : [],
@@ -201,31 +233,43 @@ export default function RestaurantScreen() {
         if (fetchError) throw fetchError;
         list = (data as DishAssociation[]) ?? [];
       }
-      const safeMenu = curatedMenu.length > 0 ? curatedMenu : buildFallbackCategoriesFromDishes(list);
+
+      if (!isCurrentRequest()) return;
+      const fallbackMenu = buildFallbackCategoriesFromDishes(list);
+      let refreshedMenu: MenuCategory[] = [];
+      try {
+        refreshedMenu = await fetchMenuPromise;
+      } catch (error) {
+        if ((error as Error)?.name === 'AbortError') {
+          return;
+        }
+        refreshedMenu = cachedMenu ?? [];
+      }
+      if (!isCurrentRequest()) return;
+
+      const safeMenu =
+        refreshedMenu.length > 0
+          ? refreshedMenu
+          : cachedMenu?.length
+          ? cachedMenu
+          : fallbackMenu;
       setMenuCategories(safeMenu);
       setSummaries(summarizeMenuDishes(safeMenu, list));
-      if (cachedMenu) {
-        const refreshedMenu = await fetchMenuPromise;
-        const menuChanged = JSON.stringify(refreshedMenu) !== JSON.stringify(cachedMenu);
-        if (menuChanged) {
-          const refreshedSafeMenu =
-            refreshedMenu.length > 0 ? refreshedMenu : buildFallbackCategoriesFromDishes(list);
-          setMenuCategories(refreshedSafeMenu);
-          setCollapsedCategories(new Set());
-          setSummaries(summarizeMenuDishes(refreshedSafeMenu, list));
-        }
+    } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        return;
       }
-    } catch {
+      if (!isCurrentRequest()) return;
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
+      if (loadAbortControllerRef.current === controller) {
+        loadAbortControllerRef.current = null;
+      }
+      if (!isCurrentRequest()) return;
       setLoading(false);
       setHasLoaded(true);
     }
-  }, [menuCategories.length, restaurantId, summaries.length]);
-
-  useEffect(() => {
-    loadRestaurantData();
-  }, [loadRestaurantData]);
+  }, [hasLoaded, restaurantId]);
 
   const refreshContent = useCallback(async () => {
     setIsRefreshing(true);
@@ -238,7 +282,7 @@ export default function RestaurantScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshContent();
+      void refreshContent();
     }, [refreshContent])
   );
 
@@ -301,10 +345,12 @@ export default function RestaurantScreen() {
   const collapseAllSections = useCallback(() => {
     animateSectionChange();
     const all = new Set<string>();
-    all.add('reviewed');
+    if (hasReviewedSection) {
+      all.add('reviewed');
+    }
     menuCategories.forEach((cat) => all.add(cat.id));
     setCollapsedCategories(all);
-  }, [animateSectionChange, menuCategories]);
+  }, [animateSectionChange, hasReviewedSection, menuCategories]);
 
   const expandAllSections = useCallback(() => {
     animateSectionChange();
@@ -313,7 +359,7 @@ export default function RestaurantScreen() {
 
   const allSectionsCollapsed =
     menuCategories.length > 0 &&
-    collapsedCategories.size === menuCategories.length + (summaries.some((dish) => dish.hasUploads) ? 1 : 0);
+    collapsedCategories.size === menuCategories.length + (hasReviewedSection ? 1 : 0);
   const openDish = useCallback(
     (dish: DishSummary) => {
       if (dish.hasUploads) {
@@ -655,20 +701,20 @@ const styles = StyleSheet.create({
   controlButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.cardAlt,
-    minWidth: 98,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,248,242,0.70)',
+    minWidth: 88,
   },
   controlButtonActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.accentSoft,
+    borderColor: 'rgba(244,135,34,0.40)',
+    backgroundColor: 'rgba(255,241,224,0.96)',
   },
   controlText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: theme.typography.semibold,
     color: theme.colors.textMuted,
   },
@@ -680,11 +726,15 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   sectionHeader: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.60)',
+    backgroundColor: 'rgba(255, 250, 245, 0.92)',
   },
   sectionHeaderLtr: {
     flexDirection: 'row',

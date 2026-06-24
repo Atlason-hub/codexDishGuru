@@ -6,11 +6,15 @@ import {
   NativeScrollEvent,
   Platform,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
+  ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import CachedLogo from './CachedLogo';
 import DefaultAvatar from './DefaultAvatar';
@@ -40,6 +44,8 @@ const IMAGE_HEIGHT = 260;
 type DishCardProps = {
   items: DishCardItem[];
   reviewStackCount?: number;
+  style?: StyleProp<ViewStyle>;
+  intensity?: number;
   favorites?: Record<string, boolean>;
   currentUserId?: string | null;
   avatarUrl?: string | null;
@@ -63,6 +69,8 @@ type DishCardProps = {
 function DishCard({
   items,
   reviewStackCount,
+  style,
+  intensity = 58,
   favorites = {},
   currentUserId,
   avatarUrl,
@@ -83,6 +91,8 @@ function DishCard({
   preferNativeImage = true,
 }: DishCardProps) {
   const { isRTL, t } = useLocale();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const [imageWidth, setImageWidth] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
@@ -158,8 +168,35 @@ function DishCard({
   }, [currentIndex, imageWidth, items.length]);
 
   return (
-    <View style={styles.feedCardShadow}>
-      <View style={styles.feedCard}>
+    <View style={[styles.feedCardShadow, !isDark && styles.feedCardAmbientDepth, style]}>
+      <View
+        style={[
+          styles.feedCard,
+          isDark ? styles.feedCardDark : styles.feedCardLight,
+        ]}
+      >
+      <View
+        pointerEvents="none"
+        style={[
+          styles.feedCardGlassBase,
+          isDark ? styles.feedCardDark : styles.feedCardLight,
+        ]}
+      />
+      <BlurView
+        intensity={intensity}
+        tint={isDark ? 'dark' : 'light'}
+        style={styles.feedCardGlassLayer}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={
+          isDark
+            ? ['rgba(255,255,255,0.045)', 'rgba(255,255,255,0.015)']
+            : ['rgba(255,255,255,0.20)', 'rgba(255,255,255,0.08)']
+        }
+        style={styles.feedCardGlassHighlight}
+      />
+      <View style={styles.feedCardContent}>
       <View
         style={styles.feedImageWrap}
         pointerEvents="box-none"
@@ -210,12 +247,6 @@ function DishCard({
                     ) : (
                       <View style={styles.feedImagePlaceholder} />
                     )}
-                    {showMultiReviewMarker ? (
-                      <View style={styles.multiReviewBadge}>
-                        <Ionicons name="copy-outline" size={10} color={theme.colors.white} />
-                        <Text style={styles.multiReviewBadgeText}>{effectiveReviewStackCount}</Text>
-                      </View>
-                    ) : null}
                   </View>
                 </Pressable>
               </View>
@@ -246,12 +277,6 @@ function DishCard({
               ) : (
                 <View style={styles.feedImagePlaceholder} />
               )}
-              {showMultiReviewMarker ? (
-                <View style={styles.multiReviewBadge}>
-                  <Ionicons name="copy-outline" size={10} color={theme.colors.white} />
-                  <Text style={styles.multiReviewBadgeText}>{effectiveReviewStackCount}</Text>
-                </View>
-              ) : null}
             </View>
           </Pressable>
         )}
@@ -469,14 +494,16 @@ function DishCard({
         </View>
       </View>
       {shouldShowReview ? (
-        <View style={styles.reviewCard}>
+        <View style={styles.reviewWrap}>
           <View
             style={[
               styles.reviewTail,
               isRTL ? styles.reviewTailRtl : styles.reviewTailLtr,
             ]}
           />
-          <Text style={[styles.reviewText, !isRTL && styles.reviewTextLtr]}>{reviewValue}</Text>
+          <View style={styles.reviewCard}>
+            <Text style={[styles.reviewText, !isRTL && styles.reviewTextLtr]}>{reviewValue}</Text>
+          </View>
         </View>
       ) : null}
       <View
@@ -511,7 +538,7 @@ function DishCard({
             <RatingValueRow
               label={t('ratingTasty')}
               score={currentItem?.tasty_score}
-              iconSize={isRTL ? 30 : 27}
+              iconSize={isRTL ? 24 : 22}
               rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
               labelStyle={[styles.ratingLabelInline, !isRTL && styles.ratingLabelInlineLtr]}
               iconsWrapStyle={[
@@ -524,7 +551,7 @@ function DishCard({
             <RatingValueRow
               label={t('ratingSize')}
               score={currentItem?.filling_score}
-              iconSize={isRTL ? 30 : 27}
+              iconSize={isRTL ? 24 : 22}
               rowStyle={[styles.ratingInlineRow, !isRTL && styles.ratingInlineRowLtr]}
               labelStyle={[styles.ratingLabelInline, !isRTL && styles.ratingLabelInlineLtr]}
               iconsWrapStyle={[
@@ -534,6 +561,7 @@ function DishCard({
             />
           </View>
         </View>
+      </View>
       </View>
       </View>
     </View>
@@ -617,29 +645,60 @@ export default React.memo(DishCard, (prev, next) => {
 const styles = StyleSheet.create({
   feedCardShadow: {
     position: 'relative',
-    borderRadius: 16,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
+    borderRadius: 24,
+    marginHorizontal: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(198, 164, 132, 0.52)',
+    backgroundColor: 'rgba(232, 221, 210, 0.72)',
+  },
+  // Wide, low-opacity ambient occlusion to lift the card without muddying it.
+  feedCardAmbientDepth: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 7,
-    marginHorizontal: 2,
+    elevation: 0,
   },
   feedCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 16,
+    position: 'relative',
+    borderRadius: 22.5,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(50, 34, 20, 0.045)',
+  },
+  feedCardLight: {
+    // White interior so the card reads clearly against the slightly darker shell.
+    backgroundColor: 'rgba(255,255,255,0.97)',
+  },
+  feedCardDark: {
+    // Richer translucent gray to keep dark cards separated without black shadows.
+    backgroundColor: 'rgba(20,20,20,0.65)',
+  },
+  feedCardGlassBase: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  // The blur layer replaces the old solid card fill physics.
+  feedCardGlassLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  feedCardGlassHighlight: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  feedCardContent: {
+    position: 'relative',
+    zIndex: 2,
+    borderRadius: 24,
+    overflow: 'hidden',
+    padding: 8,
   },
   feedImageWrap: {
     position: 'relative',
     width: '100%',
     height: IMAGE_HEIGHT,
-    backgroundColor: theme.colors.card,
-    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
     overflow: 'hidden',
     margin: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.26)',
   },
   imageGradient: {
     position: 'absolute',
@@ -671,7 +730,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    borderRadius: 16,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.32)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.42)',
@@ -694,25 +753,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: theme.colors.cardAlt,
-  },
-  multiReviewBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(50, 34, 20, 0.82)',
-    zIndex: 4,
-  },
-  multiReviewBadgeText: {
-    color: theme.colors.white,
-    fontSize: 11,
-    fontFamily: theme.typography.bold,
-    lineHeight: 14,
   },
   imagePressable: {
     position: 'absolute',
@@ -768,17 +808,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: dishActionColor,
+    borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 20,
   },
   badgePressable: {
     width: '100%',
@@ -800,17 +835,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: dishActionColor,
+    borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 20,
   },
   editBadge: {
     position: 'absolute',
@@ -818,32 +848,30 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: dishActionColor,
+    borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 20,
   },
   imageDateText: {
     position: 'absolute',
     top: 10,
-    fontSize: 9,
-    color: theme.colors.text,
+    minHeight: 24,
+    fontSize: 10,
+    color: dishActionColor,
     fontFamily: theme.typography.bold,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: theme.colors.accentSoft,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 16,
-    textAlign: 'left',
+    borderColor: 'rgba(255,255,255,0.30)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 15,
+    textAlign: 'center',
+    textAlignVertical: 'center',
     zIndex: 4,
+    overflow: 'hidden',
   },
   imageDateTextRtl: {
     left: 12,
@@ -857,18 +885,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     zIndex: 7,
-    borderWidth: 2,
-    borderColor: theme.colors.accentSoft,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.16,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.34)',
   },
   avatarBadgeRtl: {
     right: 16,
@@ -882,17 +905,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: dishActionColor,
+    borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 7,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.16,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   reportBadgeRtl: {
     right: 16,
@@ -914,11 +932,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
   },
   imageTextBlock: {
     position: 'absolute',
@@ -959,14 +972,18 @@ const styles = StyleSheet.create({
   },
   ratingRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 8,
-    paddingBottom: 8,
+    justifyContent: 'flex-start',
+    paddingTop: 10,
+    paddingBottom: 10,
     alignSelf: 'flex-end',
     width: '100%',
-    paddingRight: Platform.OS === 'ios' ? 6 : 12,
-    paddingLeft: Platform.OS === 'ios' ? 18 : 12,
+    paddingRight: 12,
+    paddingLeft: 12,
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 16,
+    marginTop: 8,
+    gap: 8,
   },
   ratingRowIos: {
     width: '100%',
@@ -975,14 +992,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
   },
   ratingGroup: {
+    flex: 1,
     flexDirection: 'column',
     alignItems: 'flex-end',
     gap: 6,
+    paddingLeft: 0,
+    paddingRight: 12,
+    marginLeft: 10,
   },
   ratingGroupLtr: {
     alignItems: 'flex-start',
     paddingLeft: 0,
     paddingRight: 0,
+    marginLeft: 0,
+    marginRight: 10,
   },
   orderButton: {
     height: 38,
@@ -995,11 +1018,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 6,
     overflow: 'hidden',
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.14,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   orderButtonText: {
     color: theme.colors.white,
@@ -1008,31 +1028,36 @@ const styles = StyleSheet.create({
   },
   orderButtonLtr: {
     marginRight: 0,
-    marginLeft: 24,
+    marginLeft: 10,
   },
   orderButtonPressed: {
     opacity: 0.9,
   },
-  reviewCard: {
+  reviewWrap: {
     marginTop: 10,
-    marginHorizontal: 8,
+    paddingTop: 8,
+    position: 'relative',
+  },
+  reviewCard: {
+    marginHorizontal: 0,
     borderRadius: 18,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    backgroundColor: 'rgba(250, 244, 237, 0.84)',
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.035,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 0,
+    backgroundColor: '#FFF7F0',
+    borderWidth: 1,
+    borderColor: '#E9D8C7',
   },
   reviewTail: {
     position: 'absolute',
-    top: -5,
-    width: 12,
-    height: 12,
-    backgroundColor: 'rgba(250, 244, 237, 0.84)',
+    top: 2,
+    width: 14,
+    height: 14,
+    backgroundColor: '#FFF7F0',
     transform: [{ rotate: '45deg' }],
+    borderLeftWidth: 1,
+    borderTopWidth: 1,
+    borderColor: '#E9D8C7',
+    zIndex: 2,
   },
   reviewTailRtl: {
     right: 26,
@@ -1049,22 +1074,23 @@ const styles = StyleSheet.create({
   reviewText: {
     fontSize: 14,
     color: theme.colors.text,
+    backgroundColor: 'transparent',
     textAlign: 'right',
-    fontFamily: theme.typography.regular,
+    fontFamily: theme.typography.medium,
     lineHeight: 21,
   },
   reviewTextLtr: {
     textAlign: 'left',
   },
   ratingItem: {
-    flex: 0,
+    width: '100%',
     alignItems: 'flex-end',
     marginRight: 0,
-    alignSelf: 'flex-end',
+    alignSelf: 'stretch',
   },
   ratingItemLtr: {
     alignItems: 'flex-start',
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
   },
   ratingIcon: {
     marginBottom: 1,
@@ -1072,38 +1098,42 @@ const styles = StyleSheet.create({
   ratingStarWrap: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
+    flexShrink: 1,
   },
   ratingStarWrapLtr: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 0,
+    flexShrink: 1,
   },
   ratingInlineRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: Platform.OS === 'ios' ? 8 : 2,
-    alignSelf: 'flex-end',
-    justifyContent: 'flex-end',
-    paddingRight: Platform.OS === 'ios' ? 8 : 64,
-    width: Platform.OS === 'ios' ? 236 : undefined,
+    gap: 6,
+    alignSelf: 'stretch',
+    justifyContent: 'flex-start',
+    width: '100%',
+    paddingRight: 0,
   },
   ratingInlineRowLtr: {
     flexDirection: 'row',
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
     justifyContent: 'flex-start',
     paddingRight: 0,
     paddingLeft: 6,
+    width: '100%',
   },
   ratingLabelInline: {
     fontSize: 12,
-    color: theme.colors.textMuted,
+    color: theme.colors.text,
     alignSelf: 'flex-end',
-    paddingRight: Platform.OS === 'ios' ? 0 : 8,
-    minWidth: Platform.OS === 'ios' ? 68 : 60,
-    width: Platform.OS === 'ios' ? 68 : undefined,
+    paddingRight: 0,
+    minWidth: 56,
+    width: 56,
     textAlign: 'right',
-    lineHeight: 30,
+    lineHeight: 24,
     fontFamily: theme.typography.semibold,
+    flexShrink: 0,
   },
   ratingLabelInlineLtr: {
     alignSelf: 'center',

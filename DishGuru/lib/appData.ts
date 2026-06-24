@@ -37,6 +37,10 @@ const companyIdCache = new Map<string, TimedCacheEntry<string | null>>();
 const orderVendorCache = new Map<string, TimedCacheEntry<string | null>>();
 const companyUserIdsCache = new Map<string, TimedCacheEntry<string[]>>();
 let globalCompanyContextCache: TimedCacheEntry<GuestCompanyContext | null> | null = null;
+const restaurantMenuMemoryCache = new Map<
+  number,
+  { savedAt: number; data: unknown }
+>();
 
 export const primeCompanyIdForUser = (userId: string, companyId: string | null) => {
   companyIdCache.set(userId, writeTimedCache(companyId));
@@ -480,13 +484,25 @@ export const fetchUserAvatarMaps = async (userIds: string[]) => {
 
 export const loadCachedRestaurantMenu = async <T>(restaurantId: number) => {
   try {
+    const memoryEntry = restaurantMenuMemoryCache.get(restaurantId);
+    if (memoryEntry) {
+      if (Date.now() - memoryEntry.savedAt <= RESTAURANT_MENU_TTL_MS) {
+        return (memoryEntry.data as T) ?? null;
+      }
+      restaurantMenuMemoryCache.delete(restaurantId);
+    }
     const raw = await AsyncStorage.getItem(`${RESTAURANT_MENU_CACHE_PREFIX}${restaurantId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { savedAt?: number; data?: T };
     if (!parsed?.savedAt || Date.now() - parsed.savedAt > RESTAURANT_MENU_TTL_MS) {
       await AsyncStorage.removeItem(`${RESTAURANT_MENU_CACHE_PREFIX}${restaurantId}`);
+      restaurantMenuMemoryCache.delete(restaurantId);
       return null;
     }
+    restaurantMenuMemoryCache.set(restaurantId, {
+      savedAt: parsed.savedAt,
+      data: parsed.data,
+    });
     return parsed.data ?? null;
   } catch {
     return null;
@@ -495,6 +511,10 @@ export const loadCachedRestaurantMenu = async <T>(restaurantId: number) => {
 
 export const saveCachedRestaurantMenu = async <T>(restaurantId: number, data: T) => {
   try {
+    restaurantMenuMemoryCache.set(restaurantId, {
+      savedAt: Date.now(),
+      data,
+    });
     await AsyncStorage.setItem(
       `${RESTAURANT_MENU_CACHE_PREFIX}${restaurantId}`,
       JSON.stringify({

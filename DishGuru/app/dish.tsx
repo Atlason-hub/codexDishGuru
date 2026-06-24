@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
 import { loadCachedAvatar } from '../lib/avatar';
@@ -792,6 +793,8 @@ export default function DishScreen() {
             pointerEvents="box-none"
           >
             <View style={styles.reportModalCard}>
+              <BlurView intensity={54} tint="light" style={styles.reportModalCardBlur} />
+              <View style={styles.reportModalCardTint} />
               <ScrollView
                 ref={reportScrollRef}
                 style={styles.reportModalScroll}
@@ -900,7 +903,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
   },
   headerRow: {
     flexDirection: 'row',
@@ -970,11 +973,11 @@ const styles = StyleSheet.create({
   },
   avgCard: {
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: theme.colors.card,
+    borderColor: 'rgba(198, 164, 132, 0.52)',
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.97)',
     marginBottom: 8,
     alignItems: 'flex-end',
     alignSelf: 'stretch',
@@ -1063,12 +1066,12 @@ const styles = StyleSheet.create({
   ratingLabelInline: {
     fontSize: 12,
     color: theme.colors.textMuted,
-    minWidth: Platform.OS === 'ios' ? 30 : 44,
+    minWidth: Platform.OS === 'ios' ? 50 : 44,
     textAlign: 'right',
     alignSelf: 'flex-end',
-    width: Platform.OS === 'ios' ? 34 : 52,
+    width: Platform.OS === 'ios' ? 56 : 52,
     lineHeight: 30,
-    paddingRight: Platform.OS === 'ios' ? 0 : 8,
+    paddingRight: Platform.OS === 'ios' ? 4 : 8,
     fontFamily: theme.typography.semibold,
   },
   ratingLabelInlineLtr: {
@@ -1119,15 +1122,23 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     maxHeight: Platform.OS === 'ios' ? '68%' : '88%',
     borderRadius: 20,
-    backgroundColor: theme.colors.card,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,250,246,0.82)',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.42)',
     padding: 18,
     shadowColor: theme.colors.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  reportModalCardBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  reportModalCardTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,248,242,0.58)',
   },
   reportModalScroll: {
     width: '100%',
@@ -1176,15 +1187,15 @@ const styles = StyleSheet.create({
   },
   reportReasonButton: {
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.30)',
     borderRadius: 14,
-    backgroundColor: theme.colors.background,
+    backgroundColor: 'rgba(255,255,255,0.54)',
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
   reportReasonButtonSelected: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.accentSoft,
+    borderColor: 'rgba(244,135,34,0.40)',
+    backgroundColor: 'rgba(255,241,224,0.96)',
   },
   reportReasonText: {
     fontSize: 14,
@@ -1202,9 +1213,9 @@ const styles = StyleSheet.create({
     minHeight: 100,
     marginTop: 14,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.30)',
     borderRadius: 14,
-    backgroundColor: theme.colors.background,
+    backgroundColor: 'rgba(255,255,255,0.54)',
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: theme.colors.text,

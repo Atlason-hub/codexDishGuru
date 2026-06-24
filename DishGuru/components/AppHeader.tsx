@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { getCurrentAuthUser, SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
 import {
@@ -631,10 +632,14 @@ export default function AppHeader({
       <View style={styles.leftIcons} pointerEvents="none">
         {!isRTL ? (
           <View style={styles.iconButton}>
+            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
+            <View style={styles.iconButtonTint} />
             <Ionicons name="menu" size={28} color={theme.colors.ink} />
           </View>
         ) : (
           <View style={styles.iconButton}>
+            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
+            <View style={styles.iconButtonTint} />
             <Ionicons name="search" size={24} color={theme.colors.ink} />
           </View>
         )}
@@ -659,10 +664,14 @@ export default function AppHeader({
       <View style={styles.rightIcons} pointerEvents="none">
         {isRTL ? (
           <View style={styles.iconButton}>
+            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
+            <View style={styles.iconButtonTint} />
             <Ionicons name="menu" size={28} color={theme.colors.ink} />
           </View>
         ) : (
           <View style={styles.iconButton}>
+            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
+            <View style={styles.iconButtonTint} />
             <Ionicons name="search" size={24} color={theme.colors.ink} />
           </View>
         )}
@@ -800,6 +809,8 @@ export default function AppHeader({
             style={styles.feedbackKeyboard}
           >
             <View style={styles.feedbackCard}>
+              <BlurView intensity={54} tint="light" style={styles.feedbackCardBlur} />
+              <View style={styles.feedbackCardTint} />
               <Text style={[styles.feedbackTitle, !isRTL && styles.feedbackTitleLtr]}>
                 {t('feedbackTitle')}
               </Text>
@@ -886,7 +897,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: 'transparent',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  iconButtonBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  iconButtonTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,248,242,0.58)',
   },
   logoContainer: {
     flex: 1,
@@ -1030,18 +1051,26 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
-    backgroundColor: theme.colors.card,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,250,246,0.82)',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.42)',
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 18,
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  feedbackCardBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  feedbackCardTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,248,242,0.58)',
   },
   feedbackTitle: {
     fontSize: 21,

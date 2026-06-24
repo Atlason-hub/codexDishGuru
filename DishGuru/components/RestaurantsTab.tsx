@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList,
   LayoutAnimation,
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   UIManager,
@@ -83,11 +83,15 @@ function SectionChevron({ collapsed }: { collapsed: boolean }) {
 
 function RestaurantAccordionItem({
   group,
+  expanded,
+  onToggleExpand,
   canAddDish,
   onRequireLogin,
   onPreviewImage,
 }: {
   group: RestaurantGroup;
+  expanded: boolean;
+  onToggleExpand: () => void;
   canAddDish: boolean;
   onRequireLogin: () => void;
   onPreviewImage: (
@@ -99,14 +103,41 @@ function RestaurantAccordionItem({
 }) {
   const router = useRouter();
   const { isRTL, t } = useLocale();
-  const [expanded, setExpanded] = useState(false);
-  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const isMountedRef = useRef(true);
+  const expandedRef = useRef(expanded);
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const canUseAndroidLayoutAnimation =
     Platform.OS === 'android' && !(global as any)?.nativeFabricUIManager;
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    expandedRef.current = expanded;
+
+    if (expanded) {
+      return;
+    }
+
+    requestIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setLoading(false);
+    setError(null);
+    setCollapsedCategories(new Set());
+    setMenuCategories([]);
+  }, [expanded]);
 
   const animateLayout = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -134,26 +165,48 @@ function RestaurantAccordionItem({
   const loadMenu = useCallback(async () => {
     if (menuCategories.length > 0 || loading) return;
 
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const isCurrentRequest = () =>
+      isMountedRef.current && expandedRef.current && requestIdRef.current === requestId;
+
     try {
+      if (!isCurrentRequest()) return;
       setLoading(true);
       setError(null);
       const fallbackCategories = buildFallbackCategoriesFromDishes(group.items);
 
       if (!group.restaurantId) {
-        setMenuCategories(fallbackCategories);
+        if (isCurrentRequest()) {
+          setMenuCategories(fallbackCategories);
+        }
         return;
       }
 
       const cachedMenu = await loadCachedRestaurantMenu<MenuCategory[]>(group.restaurantId);
       if (cachedMenu?.length) {
-        setMenuCategories(cachedMenu);
-      } else if (fallbackCategories.length) {
-        setMenuCategories(fallbackCategories);
+        if (isCurrentRequest()) {
+          setMenuCategories(cachedMenu);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (fallbackCategories.length) {
+        if (isCurrentRequest()) {
+          setMenuCategories(fallbackCategories);
+        }
       }
 
       const response = await fetch(
         `https://www.10bis.co.il/api/GetMenu?ResId=${group.restaurantId}&websiteID=10bis&domainID=10bis`,
-        { headers: { Accept: 'application/json' } }
+        {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        }
       );
       if (!response.ok) {
         throw new Error(`Request failed: ${response.status}`);
@@ -162,19 +215,32 @@ function RestaurantAccordionItem({
       const menuData = JSON.parse(menuText);
       const mappedMenu = mapMenuToCategories(menuData);
       const safeMenu = mappedMenu.length > 0 ? mappedMenu : fallbackCategories;
+      if (!isCurrentRequest()) return;
       setMenuCategories(safeMenu);
       await saveCachedRestaurantMenu(group.restaurantId, safeMenu);
-    } catch {
+    } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        return;
+      }
       if (menuCategories.length === 0) {
         const fallbackCategories = buildFallbackCategoriesFromDishes(group.items);
         if (fallbackCategories.length > 0) {
-          setMenuCategories(fallbackCategories);
+          if (isCurrentRequest()) {
+            setMenuCategories(fallbackCategories);
+          }
         } else {
-          setError(t('authGenericError'));
+          if (isCurrentRequest()) {
+            setError(t('authGenericError'));
+          }
         }
       }
     } finally {
-      setLoading(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      if (isCurrentRequest()) {
+        setLoading(false);
+      }
     }
   }, [group.items, group.restaurantId, loading, menuCategories.length, t]);
 
@@ -187,29 +253,28 @@ function RestaurantAccordionItem({
     () => buildRowsFromMenu(menuCategories, summaries, collapsedCategories, t('restaurantWithReviews')),
     [collapsedCategories, menuCategories, summaries, t]
   );
+  const hasReviewedSection = summaries.some((item) => item.hasUploads);
 
   const collapseAllSections = useCallback(() => {
     animateLayout();
     const next = new Set<string>();
-    next.add('reviewed');
+    if (hasReviewedSection) {
+      next.add('reviewed');
+    }
     menuCategories.forEach((category) => next.add(category.id));
     setCollapsedCategories(next);
-  }, [animateLayout, menuCategories]);
+  }, [animateLayout, hasReviewedSection, menuCategories]);
 
   const expandAllSections = useCallback(() => {
     animateLayout();
     setCollapsedCategories(new Set());
   }, [animateLayout]);
 
-  const toggleExpanded = useCallback(async () => {
-    animateLayout();
-    const nextExpanded = !expanded;
-    setExpanded(nextExpanded);
-    if (nextExpanded) {
-      setHasOpenedOnce(true);
-      await loadMenu();
+  useEffect(() => {
+    if (expanded) {
+      void loadMenu();
     }
-  }, [animateLayout, expanded, loadMenu]);
+  }, [expanded, loadMenu]);
 
   const toggleSection = useCallback(
     (sectionKey: string) => {
@@ -228,8 +293,6 @@ function RestaurantAccordionItem({
   );
 
   const ratedCount = summaries.filter((item) => item.hasUploads).length;
-  const shouldRenderPanel = expanded || hasOpenedOnce || loading;
-  const hasReviewedSection = summaries.some((item) => item.hasUploads);
   const totalSectionCount = menuCategories.length + (hasReviewedSection ? 1 : 0);
   const canToggleAllSections = totalSectionCount > 1;
   const allSectionsCollapsed =
@@ -278,7 +341,7 @@ function RestaurantAccordionItem({
           !isRTL && styles.restaurantCardLtr,
           pressed && styles.restaurantCardPressed,
         ]}
-        onPress={() => void toggleExpanded()}
+        onPress={onToggleExpand}
       >
         <View style={[styles.restaurantCardTextWrap, !isRTL && styles.restaurantCardTextWrapLtr]}>
           <Text style={[styles.restaurantCardTitle, !isRTL && styles.restaurantCardTitleLtr]}>
@@ -293,14 +356,8 @@ function RestaurantAccordionItem({
         </View>
       </Pressable>
 
-      {shouldRenderPanel ? (
-        <View
-          style={[
-            styles.restaurantPanel,
-            expanded ? styles.restaurantPanelVisible : styles.restaurantPanelHidden,
-          ]}
-          pointerEvents={expanded ? 'auto' : 'none'}
-        >
+      {expanded ? (
+        <View style={styles.restaurantPanel}>
           {loading && menuCategories.length === 0 ? (
             <RestaurantScreenSkeleton />
           ) : error ? (
@@ -495,6 +552,7 @@ export default function RestaurantsTab({
   onScrollYChange,
 }: Props) {
   const { isRTL, t } = useLocale();
+  const [expandedRestaurantKey, setExpandedRestaurantKey] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<{
     imageUrl: string | null;
     imagePath: string | null;
@@ -574,27 +632,7 @@ export default function RestaurantsTab({
 
   return (
     <>
-      <FlatList
-        data={restaurantGroups}
-        keyExtractor={(item) => item.key}
-        renderItem={({ item }) => (
-          <RestaurantAccordionItem
-            group={item}
-            canAddDish={canAddDish}
-            onRequireLogin={onRequireLogin}
-            onPreviewImage={(imageUrl, imagePath, title, subtitle) =>
-              setImagePreview({ imageUrl, imagePath, title, subtitle })
-            }
-          />
-        )}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={
-          hasLoaded ? (
-            <Text style={[styles.stateText, !isRTL && styles.stateTextLtr]}>
-              {t('restaurantsTabEmpty')}
-            </Text>
-          ) : null
-        }
+      <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -605,17 +643,36 @@ export default function RestaurantsTab({
             colors={[theme.colors.accent]}
           />
         }
-        initialNumToRender={8}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={40}
-        windowSize={7}
-        removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
         onScroll={(event) => {
           onScrollYChange?.(event.nativeEvent.contentOffset.y);
         }}
         scrollEventThrottle={32}
-      />
+      >
+        {listHeader ? <View style={styles.listHeaderComponent}>{listHeader}</View> : null}
+        {restaurantGroups.length === 0 && hasLoaded ? (
+          <Text style={[styles.stateText, !isRTL && styles.stateTextLtr]}>
+            {t('restaurantsTabEmpty')}
+          </Text>
+        ) : (
+          restaurantGroups.map((item, index) => (
+            <View key={item.key} style={index > 0 ? styles.restaurantSeparator : undefined}>
+              <RestaurantAccordionItem
+                group={item}
+                expanded={expandedRestaurantKey === item.key}
+                onToggleExpand={() =>
+                  setExpandedRestaurantKey((current) => (current === item.key ? null : item.key))
+                }
+                canAddDish={canAddDish}
+                onRequireLogin={onRequireLogin}
+                onPreviewImage={(imageUrl, imagePath, title, subtitle) =>
+                  setImagePreview({ imageUrl, imagePath, title, subtitle })
+                }
+              />
+            </View>
+          ))
+        )}
+      </ScrollView>
       <ImagePreviewModal
         visible={Boolean(imagePreview?.imageUrl)}
         imageUrl={imagePreview?.imageUrl ?? null}
@@ -630,15 +687,20 @@ export default function RestaurantsTab({
 
 const styles = StyleSheet.create({
   content: {
-    gap: 14,
     paddingBottom: 180,
   },
   screenStateWrap: {
     gap: 14,
     paddingBottom: 180,
   },
+  listHeaderComponent: {
+    marginBottom: -15,
+  },
   accordionWrap: {
     gap: 10,
+  },
+  restaurantSeparator: {
+    marginTop: 14,
   },
   restaurantCard: {
     flexDirection: 'row-reverse',
@@ -646,10 +708,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.card,
+    borderColor: 'rgba(217, 193, 170, 0.72)',
+    backgroundColor: 'rgba(255, 250, 246, 0.96)',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    shadowColor: '#9a6b3f',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
   },
   restaurantCardLtr: {
     flexDirection: 'row',
@@ -690,16 +756,6 @@ const styles = StyleSheet.create({
   restaurantPanel: {
     paddingTop: 2,
   },
-  restaurantPanelVisible: {
-    opacity: 1,
-    maxHeight: 5000,
-    overflow: 'hidden',
-  },
-  restaurantPanelHidden: {
-    opacity: 0,
-    maxHeight: 0,
-    overflow: 'hidden',
-  },
   panelRows: {
     gap: 14,
   },
@@ -719,19 +775,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.cardAlt,
-    minWidth: 98,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,248,242,0.70)',
+    minWidth: 88,
   },
   panelControlButtonActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.accentSoft,
+    borderColor: 'rgba(244,135,34,0.40)',
+    backgroundColor: 'rgba(255,241,224,0.96)',
   },
   panelControlText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: theme.typography.semibold,
     color: theme.colors.textMuted,
   },
@@ -739,11 +795,15 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
   },
   sectionHeader: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.60)',
+    backgroundColor: 'rgba(255, 250, 245, 0.92)',
   },
   sectionHeaderLtr: {
     flexDirection: 'row',

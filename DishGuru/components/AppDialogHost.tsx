@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { theme } from '../lib/theme';
 import {
   AppDialogAction,
@@ -44,6 +45,8 @@ export default function AppDialogHost() {
       <View style={styles.backdrop}>
         <Pressable style={styles.overlay} onPress={closeDialog} />
         <View style={styles.card}>
+          <BlurView intensity={54} tint="light" style={styles.cardBlur} />
+          <View style={styles.cardTint} />
           <Text
             style={[
               styles.title,
@@ -128,18 +131,26 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: theme.colors.card,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,250,246,0.82)',
     borderRadius: 28,
     paddingHorizontal: 22,
     paddingTop: 22,
     paddingBottom: 18,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.42)',
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  cardBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cardTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,248,242,0.58)',
   },
   title: {
     color: theme.colors.text,
@@ -164,10 +175,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.32)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255,255,255,0.54)',
   },
   primaryAction: {
     backgroundColor: theme.colors.accent,

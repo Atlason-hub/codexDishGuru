@@ -75,6 +75,7 @@ export default function HomeAuthView({
         bounces={false}
       >
         <View style={styles.authScreen}>
+          <View pointerEvents="none" style={[styles.authGlow, styles.authGlowBottom]} />
           <View style={[styles.authLanguageRow, !isRTL && styles.authLanguageRowLtr]}>
             {([
               ['he', t('accountLanguageHebrew')],
@@ -101,6 +102,9 @@ export default function HomeAuthView({
           </View>
           <View style={styles.authHeaderWrap}>
             <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
+            <Text style={styles.authSubtitle}>
+              {showSignup ? t('authCreateAccount') : t('authSignIn')}
+            </Text>
           </View>
           <View style={styles.authCard}>
             <View style={styles.fieldGroup}>
@@ -230,6 +234,7 @@ export default function HomeAuthView({
                   onPress={onSignUp}
                   disabled={authLoading}
                 >
+                  <View pointerEvents="none" style={styles.primaryButtonGloss} />
                   {authLoading ? (
                     <ActivityIndicator color={theme.colors.white} />
                   ) : (
@@ -251,6 +256,7 @@ export default function HomeAuthView({
                   onPress={onSignIn}
                   disabled={authLoading}
                 >
+                  <View pointerEvents="none" style={styles.primaryButtonGloss} />
                   {authLoading ? (
                     <ActivityIndicator color={theme.colors.white} />
                   ) : (
@@ -287,10 +293,23 @@ const styles = StyleSheet.create({
   authScreen: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
     gap: 8,
-    paddingTop: 72,
-    paddingBottom: 28,
+    paddingTop: 56,
+    paddingBottom: 36,
+    overflow: 'hidden',
+  },
+  authGlow: {
+    position: 'absolute',
+    borderRadius: 999,
+    opacity: 0.8,
+  },
+  authGlowBottom: {
+    bottom: 48,
+    left: -52,
+    width: 170,
+    height: 170,
+    backgroundColor: 'rgba(214,180,140,0.08)',
   },
   authKeyboardAvoiding: {
     flex: 1,
@@ -321,17 +340,17 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.cardAlt,
+    backgroundColor: 'rgba(255,255,255,0.82)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   authLanguageChipActive: {
     borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.accentSoft,
+    backgroundColor: 'rgba(255,248,240,0.96)',
   },
   authLanguageChipText: {
     fontSize: 12,
-    color: theme.colors.textMuted,
+    color: 'rgba(100,70,44,0.78)',
     fontFamily: theme.typography.semibold,
   },
   authLanguageChipTextActive: {
@@ -341,10 +360,10 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
+    gap: 10,
     paddingHorizontal: 12,
-    marginTop: 18,
-    marginBottom: 28,
+    marginTop: 8,
+    marginBottom: 20,
   },
   authTitle: {
     fontSize: 34,
@@ -353,19 +372,26 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_700Bold',
     lineHeight: 40,
   },
+  authSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: 'rgba(106,77,49,0.82)',
+    textAlign: 'center',
+    fontFamily: theme.typography.medium,
+  },
   authCard: {
     alignSelf: 'stretch',
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 24,
+    padding: 22,
     gap: 16,
-    shadowColor: theme.colors.ink,
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
     width: '100%',
     maxWidth: 580,
   },
@@ -393,9 +419,9 @@ const styles = StyleSheet.create({
     height: 46,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    backgroundColor: theme.colors.cardAlt,
+    backgroundColor: 'rgba(250,246,241,0.96)',
   },
   inputField: {
     flex: 1,
@@ -434,7 +460,7 @@ const styles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 12,
-    color: theme.colors.danger,
+    color: theme.colors.accent,
     textAlign: 'right',
     marginTop: -2,
   },
@@ -449,8 +475,8 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.cardAlt,
-    borderRadius: 14,
+    backgroundColor: 'rgba(250,246,241,0.96)',
+    borderRadius: 16,
     paddingHorizontal: 14,
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -498,6 +524,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
     lineHeight: 20,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(231,90,90,0.16)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   authErrorTextLtr: {
     textAlign: 'left',
@@ -505,10 +537,25 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     height: 44,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#b75a1d',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  primaryButtonGloss: {
+    position: 'absolute',
+    top: 0,
+    left: 10,
+    right: 10,
+    height: '54%',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   loginButtonText: {
     color: '#ffffff',
@@ -517,11 +564,12 @@ const styles = StyleSheet.create({
   },
   signupButton: {
     height: 44,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,250,245,0.98)',
   },
   signupButtonText: {
     color: theme.colors.accent,
@@ -531,12 +579,12 @@ const styles = StyleSheet.create({
   guestButton: {
     marginTop: 10,
     minHeight: 44,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.white,
+    backgroundColor: 'rgba(255,255,255,0.96)',
   },
   guestButtonText: {
     color: theme.colors.accent,
