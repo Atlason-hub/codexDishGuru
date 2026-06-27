@@ -135,7 +135,7 @@ export default function MyDishesScreen() {
         { text: t('commonCancel'), style: 'cancel' },
         {
           text: t('commonDelete'),
-          style: 'destructive',
+          style: 'default',
           onPress: async () => {
             try {
               if (!currentUserId) {
