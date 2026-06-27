@@ -59,6 +59,7 @@ export default function MyDishesScreen() {
     title: string | null;
     subtitle: string | null;
   } | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const groupedMyDishes = useMemo(() => {
     const map = new Map<string, DishAssociation[]>();
@@ -221,6 +222,10 @@ export default function MyDishesScreen() {
   }, []);
 
   useEffect(() => {
+    hasLoadedRef.current = hasLoaded;
+  }, [hasLoaded]);
+
+  useEffect(() => {
     loadMyDishesRef.current = loadMyDishes;
   }, [loadMyDishes]);
 
@@ -257,7 +262,7 @@ export default function MyDishesScreen() {
       await refreshAvatar(userId);
       await loadFavorites(userId);
       await loadOrderVendor(userId);
-      await loadMyDishes(userId, { showLoading: dishAssociations.length === 0 });
+      await loadMyDishes(userId, { showLoading: !hasLoadedRef.current });
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       void (async () => {
@@ -267,9 +272,11 @@ export default function MyDishesScreen() {
         setCurrentUserEmail(authUser?.email ?? session?.user?.email ?? null);
         if (userId) {
           await refreshAvatar(userId);
-          loadFavorites(userId);
-          loadOrderVendor(userId);
-          loadMyDishes(userId);
+          await Promise.all([
+            loadFavorites(userId),
+            loadOrderVendor(userId),
+            loadMyDishes(userId, { showLoading: false }),
+          ]);
         } else {
           setAvatarUrl(null);
           setFavorites({});
@@ -283,13 +290,16 @@ export default function MyDishesScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [dishAssociations.length, loadFavorites, loadMyDishes, loadOrderVendor, refreshAvatar, router]);
+  }, [loadFavorites, loadMyDishes, loadOrderVendor, refreshAvatar, router]);
 
   const refreshContent = useCallback(async () => {
     if (!currentUserId) return;
     setIsRefreshing(true);
     try {
-      await Promise.all([loadFavorites(currentUserId), loadMyDishes(currentUserId)]);
+      await Promise.all([
+        loadFavorites(currentUserId),
+        loadMyDishes(currentUserId, { showLoading: false }),
+      ]);
     } finally {
       setIsRefreshing(false);
     }

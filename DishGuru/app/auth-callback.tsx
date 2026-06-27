@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseAuthRedirectUrl } from '../lib/authRedirect';
@@ -16,7 +16,7 @@ export default function AuthCallbackScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(true);
 
-  const handleIncomingUrl = async (incomingUrl: string | null) => {
+  const handleIncomingUrl = useCallback(async (incomingUrl: string | null) => {
     if (!incomingUrl || handledUrlRef.current === incomingUrl) return;
     handledUrlRef.current = incomingUrl;
     setIsProcessing(true);
@@ -55,18 +55,18 @@ export default function AuthCallbackScreen() {
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [router, setLocale, t]);
 
   useEffect(() => {
     void handleIncomingUrl(url);
-  }, [url]);
+  }, [handleIncomingUrl, url]);
 
   useEffect(() => {
     void (async () => {
       const initialUrl = await Linking.getInitialURL();
       await handleIncomingUrl(initialUrl);
     })();
-  }, []);
+  }, [handleIncomingUrl]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {

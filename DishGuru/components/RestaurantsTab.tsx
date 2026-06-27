@@ -46,10 +46,6 @@ type DishAssociation = {
   created_at: string | null;
 };
 
-type Row =
-  | { type: 'header'; id: string; title: string }
-  | { type: 'dish'; id: string; dish: DishSummary };
-
 type RestaurantGroup = {
   key: string;
   restaurantId: number | null;
@@ -330,7 +326,7 @@ function RestaurantAccordionItem({
         },
       });
     },
-    [canAddDish, group.restaurantId, group.restaurantName, onRequireLogin]
+    [canAddDish, group.restaurantId, group.restaurantName, onRequireLogin, router]
   );
 
   return (

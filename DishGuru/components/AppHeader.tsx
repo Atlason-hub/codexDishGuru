@@ -132,7 +132,7 @@ export default function AppHeader({
     setMenuAvatarLoadFailed(false);
   }, [avatarUrl]);
 
-  const applyResolvedLogo = (url: string | null) => {
+  const applyResolvedLogo = useCallback((url: string | null) => {
     setCompanyLogoUrl(url);
     lastKnownCompanyLogoUrl = url;
     if (url && lastPaletteLogoRef.current !== url) {
@@ -143,7 +143,7 @@ export default function AppHeader({
       lastPaletteLogoRef.current = null;
       applyPaletteFromLogo(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const applySessionLogo = (logo: ReturnType<typeof getSessionCompanyLogoSnapshot>) => {
@@ -153,7 +153,7 @@ export default function AppHeader({
 
     applySessionLogo(getSessionCompanyLogoSnapshot());
     return subscribeSessionCompanyLogo(applySessionLogo);
-  }, []);
+  }, [applyResolvedLogo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -305,7 +305,7 @@ export default function AppHeader({
     setSessionLogo(null);
     setResolvedSessionLogoUrl(null);
     applyResolvedLogo(null);
-  }, []);
+  }, [applyResolvedLogo]);
 
   useEffect(() => {
     if (pathname === '/' && skipLaunchParam === '1' && !currentUserId && !isAuthenticated) {
@@ -354,10 +354,24 @@ export default function AppHeader({
       syncRunIdRef.current += 1;
       subscription.subscription.unsubscribe();
     };
-  }, [guestModeParam, hasExternalAuthControl, headerSyncParam, refreshParam, skipLaunchParam, syncHeaderState]);
+  }, [
+    applyResolvedLogo,
+    guestModeParam,
+    hasExternalAuthControl,
+    headerSyncParam,
+    refreshParam,
+    skipLaunchParam,
+    syncHeaderState,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
+
+    if (!hasExternalAuthControl) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     if (!effectiveCurrentUserId) {
       setAvatarUrl(null);
@@ -366,19 +380,23 @@ export default function AppHeader({
       };
     }
 
-    const hydrateAvatar = async () => {
-      const resolvedAvatar = await hydrateAvatarForUser(effectiveCurrentUserId);
+    const hydrateControlledAvatar = async () => {
+      const authUser = await getCurrentAuthUser().catch(() => null);
+      const resolvedAvatar = await hydrateAvatarForUser(
+        effectiveCurrentUserId,
+        (authUser?.user_metadata as any)?.avatar_url ?? null
+      );
       if (!cancelled) {
         setAvatarUrl(resolvedAvatar);
       }
     };
 
-    void hydrateAvatar();
+    void hydrateControlledAvatar();
 
     return () => {
       cancelled = true;
     };
-  }, [effectiveCurrentUserId]);
+  }, [effectiveCurrentUserId, hasExternalAuthControl]);
 
   useEffect(() => {
     return subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {

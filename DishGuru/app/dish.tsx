@@ -94,6 +94,7 @@ export default function DishScreen() {
     title: string | null;
     subtitle: string | null;
   } | null>(null);
+  const hasLoadedRef = useRef(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const appStateRef = useRef(AppState.currentState);
@@ -108,6 +109,8 @@ export default function DishScreen() {
   const [reportSuccessPending, setReportSuccessPending] = useState<'success' | 'notify_failed' | null>(null);
   const [reportKeyboardHeight, setReportKeyboardHeight] = useState(0);
   const reportScrollRef = useRef<ScrollView | null>(null);
+  const mountedRef = useRef(true);
+  const loadRequestIdRef = useRef(0);
   const [avgScores, setAvgScores] = useState<{
     tasty: number;
     filling: number;
@@ -232,19 +235,24 @@ export default function DishScreen() {
     });
   }, [currentUserId, t]);
 
-  const loadUserAvatars = async (items: DishAssociation[]) => {
+  const loadUserAvatars = useCallback(async (items: DishAssociation[], requestId?: number) => {
     const ids = Array.from(
       new Set(items.map((item) => item.user_id).filter(Boolean) as string[])
     );
+    const isCurrentRequest = () =>
+      mountedRef.current &&
+      (typeof requestId !== 'number' || loadRequestIdRef.current === requestId);
     if (ids.length === 0) {
+      if (!isCurrentRequest()) return;
       setUserAvatars({});
       setUserLabels({});
       return;
     }
     const { avatars, labels } = await fetchUserAvatarMaps(ids);
+    if (!isCurrentRequest()) return;
     setUserAvatars(avatars);
     setUserLabels(labels);
-  };
+  }, []);
 
   const loadDishAssociations = useCallback(async (options?: { showLoading?: boolean }) => {
     if (!dishName && !dishQuery && dishIdParam === null) {
@@ -253,6 +261,9 @@ export default function DishScreen() {
       setAvgScores(null);
       return;
     }
+    const requestId = ++loadRequestIdRef.current;
+    const isCurrentRequest = () =>
+      mountedRef.current && loadRequestIdRef.current === requestId;
     try {
       const shouldShowLoading = options?.showLoading ?? true;
       if (shouldShowLoading) {
@@ -293,6 +304,7 @@ export default function DishScreen() {
           });
         }
       }
+      if (!isCurrentRequest()) return;
 
       if (list.length === 0) {
         let query = supabase
@@ -322,14 +334,17 @@ export default function DishScreen() {
         if (fetchError) throw fetchError;
         list = ((data as DishAssociation[]) ?? []).map(normalizeDishAssociation);
       }
+      if (!isCurrentRequest()) return;
 
       list.sort((a, b) => {
         const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
         const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
         return bTime - aTime;
       });
+      if (!isCurrentRequest()) return;
       setDishAssociations(list);
-      await loadUserAvatars(list);
+      await loadUserAvatars(list, requestId);
+      if (!isCurrentRequest()) return;
       if (list.length > 0) {
         let tastySum = 0;
         let tastyCount = 0;
@@ -353,14 +368,28 @@ export default function DishScreen() {
         setAvgScores(null);
       }
     } catch {
+      if (!isCurrentRequest()) return;
       setError('אירעה שגיאה. נסה שוב.');
     } finally {
+      if (!isCurrentRequest()) return;
       if (options?.showLoading ?? true) {
         setLoading(false);
       }
       setHasLoaded(true);
     }
-  }, [dishIdParam, dishName, dishQuery, restaurantIdParam, restaurantName]);
+  }, [dishIdParam, dishName, dishQuery, loadUserAvatars, restaurantIdParam, restaurantName]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      loadRequestIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    hasLoadedRef.current = hasLoaded;
+  }, [hasLoaded]);
 
   useEffect(() => {
     let mounted = true;
@@ -381,32 +410,39 @@ export default function DishScreen() {
         await loadFavorites(userId);
         await loadOrderVendor(userId);
       }
-      await loadDishAssociations({ showLoading: dishAssociations.length === 0 });
+      await loadDishAssociations({ showLoading: !hasLoadedRef.current });
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mountedRef.current) return;
       const userId = session?.user?.id ?? null;
       setCurrentUserId(userId);
       if (userId) {
         const cachedAvatar = await loadCachedAvatar(userId);
+        if (!mountedRef.current) return;
         if (cachedAvatar) setAvatarUrl(cachedAvatar);
         const resolvedAvatar = await hydrateAvatarForUser(
           userId,
           (session?.user?.user_metadata as any)?.avatar_url ?? null
         );
+        if (!mountedRef.current) return;
         setAvatarUrl(resolvedAvatar);
-        loadFavorites(userId);
-        loadOrderVendor(userId);
+        await Promise.all([
+          loadFavorites(userId),
+          loadOrderVendor(userId),
+          loadDishAssociations({ showLoading: false }),
+        ]);
       } else {
         setAvatarUrl(null);
         setFavorites({});
         setOrderVendor(null);
+        await loadDishAssociations({ showLoading: false });
       }
     });
     return () => {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [dishAssociations.length, loadDishAssociations, loadFavorites, loadOrderVendor, refreshParam]);
+  }, [loadDishAssociations, loadFavorites, loadOrderVendor, refreshParam]);
 
   useEffect(() => {
     return subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
@@ -422,7 +458,7 @@ export default function DishScreen() {
   const refreshContent = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await loadDishAssociations();
+      await loadDishAssociations({ showLoading: false });
       if (currentUserId) {
         await loadFavorites(currentUserId);
       }
@@ -433,7 +469,7 @@ export default function DishScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshContent();
+      void refreshContent();
     }, [refreshContent])
   );
 
@@ -638,7 +674,7 @@ export default function DishScreen() {
       setReportReason(null);
       setReportDetails('');
       setReportSuccessPending(notificationFailed ? 'notify_failed' : 'success');
-    } catch (error) {
+    } catch {
       showAppAlert(t('dishReportFailedTitle'), t('dishReportFailedMessage'));
     } finally {
       setIsSubmittingReport(false);

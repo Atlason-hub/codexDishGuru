@@ -14,7 +14,6 @@ import { getCurrentAuthUser, supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Buffer } from 'buffer';
 import { Image } from 'expo-image';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cacheAvatar, hydrateAvatarForUser, normalizeAvatarUrl } from '../lib/avatar';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
@@ -292,13 +291,16 @@ export default function AccountScreen() {
         authUser.id,
         (authUser.user_metadata as any)?.avatar_url ?? null
       );
+      if (!mounted) return;
       const normalizedMetaAvatar = normalizeAvatarUrl(
         (authUser.user_metadata as any)?.avatar_url ?? null
       );
       if (resolvedAvatar !== normalizedMetaAvatar) {
         await syncAuthAvatarMetadata(resolvedAvatar);
       }
+      if (!mounted) return;
       await cacheAvatar(authUser.id, resolvedAvatar);
+      if (!mounted) return;
       publishAvatarUpdate(authUser.id, resolvedAvatar);
       if (resolvedAvatar) {
         setAvatarUrl(resolvedAvatar);
@@ -307,6 +309,7 @@ export default function AccountScreen() {
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
       if (!session) {
         setEmail(null);
         setCurrentUserId(null);
@@ -324,13 +327,16 @@ export default function AccountScreen() {
         authUser?.id ?? null,
         (authUser?.user_metadata as any)?.avatar_url ?? null
       );
+      if (!mounted) return;
       const normalizedMetaAvatar = normalizeAvatarUrl(
         (authUser?.user_metadata as any)?.avatar_url ?? null
       );
       if (resolvedAvatar !== normalizedMetaAvatar) {
         await syncAuthAvatarMetadata(resolvedAvatar);
       }
+      if (!mounted) return;
       await cacheAvatar(authUser?.id ?? null, resolvedAvatar);
+      if (!mounted) return;
       if (authUser?.id) {
         publishAvatarUpdate(authUser.id, resolvedAvatar);
       }
@@ -349,7 +355,7 @@ export default function AccountScreen() {
       subscription.subscription.unsubscribe();
       unsubscribeAvatarUpdates();
     };
-  }, [routeToLoggedOutHome]);
+  }, [routeToLoggedOutHome, syncAuthAvatarMetadata]);
 
   useEffect(() => {
     void getCurrentAuthUser().then((user) => {

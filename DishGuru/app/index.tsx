@@ -33,7 +33,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { buildAuthRedirectUrl } from '../lib/authRedirect';
 import {
   cacheAvatar,
-  fetchAvatarFromAuth,
   loadCachedAvatar,
   normalizeAvatarUrl,
   resolveAvatarForUser,
@@ -126,20 +125,6 @@ const buildBootstrapHeaders = (accessToken?: string | null) => ({
   'Content-Type': 'application/json',
 });
 
-const fetchBootstrapCompanyIdByDomain = async (domain: string, accessToken?: string | null) => {
-  const url =
-    `${BOOTSTRAP_SUPABASE_URL}/rest/v1/companies?` +
-    new URLSearchParams({
-      select: 'id',
-      domain: `ilike.${domain}`,
-      limit: '1',
-    }).toString();
-  const response = await fetch(url, { headers: buildBootstrapHeaders(accessToken) });
-  if (!response.ok) return null;
-  const rows = (await response.json()) as Array<{ id?: string | null }>;
-  return rows[0]?.id ?? null;
-};
-
 const fetchBootstrapCompanyByDomain = async (domain: string, accessToken?: string | null) => {
   const url =
     `${BOOTSTRAP_SUPABASE_URL}/rest/v1/companies?` +
@@ -150,11 +135,11 @@ const fetchBootstrapCompanyByDomain = async (domain: string, accessToken?: strin
     }).toString();
   const response = await fetch(url, { headers: buildBootstrapHeaders(accessToken) });
   if (!response.ok) return null;
-  const rows = (await response.json()) as Array<{
+  const rows = (await response.json()) as {
     id?: string | null;
     logo_url?: string | null;
     order_vendor?: string | null;
-  }>;
+  }[];
   return rows[0] ?? null;
 };
 
@@ -168,11 +153,11 @@ const fetchBootstrapCompanyById = async (companyId: string, accessToken?: string
     }).toString();
   const response = await fetch(url, { headers: buildBootstrapHeaders(accessToken) });
   if (!response.ok) return null;
-  const rows = (await response.json()) as Array<{
+  const rows = (await response.json()) as {
     id?: string | null;
     logo_url?: string | null;
     order_vendor?: string | null;
-  }>;
+  }[];
   return rows[0] ?? null;
 };
 
@@ -284,7 +269,7 @@ export default function HomeScreen() {
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
   const [orderVendor, setOrderVendor] = useState<string | null>(null);
-  const [resolvedGlobalUserId, setResolvedGlobalUserId] = useState<string | null>(null);
+  const [, setResolvedGlobalUserId] = useState<string | null>(null);
   const [resolvedGlobalDishIds, setResolvedGlobalDishIds] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
@@ -313,6 +298,7 @@ export default function HomeScreen() {
   const skipNextSignedInAutoLoadUserRef = useRef<string | null>(null);
   const sessionAccessTokenRef = useRef<string | null>(null);
   const startupRecoveryTriedRef = useRef(false);
+  const userAvatarsRef = useRef<Record<string, string>>({});
   const loadDishAssociationsRef = useRef<
     ((options?: { useCache?: boolean; showLoading?: boolean }) => Promise<void>) | null
   >(null);
@@ -357,7 +343,7 @@ export default function HomeScreen() {
     setAuthLoading(false);
   }, []);
 
-  const loadUserAvatars = async (items: DishAssociation[]) => {
+  const loadUserAvatars = useCallback(async (items: DishAssociation[]) => {
     const ids = Array.from(
       new Set(items.map((item) => item.user_id).filter(Boolean) as string[])
     );
@@ -365,7 +351,7 @@ export default function HomeScreen() {
     if (
       avatarKey &&
       avatarKey === avatarIdsKeyRef.current &&
-      Object.keys(userAvatars).length > 0
+      Object.keys(userAvatarsRef.current).length > 0
     ) {
       return;
     }
@@ -376,18 +362,23 @@ export default function HomeScreen() {
       return;
     }
     const { avatars, labels } = await fetchUserAvatarMaps(ids);
-    if (ids.length > 0 && Object.keys(avatars).length === 0 && Object.keys(userAvatars).length > 0) {
+    if (ids.length > 0 && Object.keys(avatars).length === 0 && Object.keys(userAvatarsRef.current).length > 0) {
       return;
     }
     setUserAvatars(avatars);
     setUserLabels(labels);
-  };
+  }, []);
 
   useEffect(() => {
     avatarIdsKeyRef.current = '';
+    userAvatarsRef.current = {};
     setUserAvatars({});
     setUserLabels({});
   }, [currentUserId]);
+
+  useEffect(() => {
+    userAvatarsRef.current = userAvatars;
+  }, [userAvatars]);
 
 
   const loadDishAssociations = useCallback(async (options?: {
@@ -615,12 +606,12 @@ export default function HomeScreen() {
         setHasLoaded(true);
       }
     }
-  }, [currentUserEmail, currentUserId, hasLoaded, isGuestMode]);
+  }, [currentUserEmail, currentUserId, hasLoaded, isGuestMode, loadUserAvatars]);
 
   useEffect(() => {
-    dishAssociationsCountRef.current = dishAssociations.length;
     dishAssociationsRef.current = dishAssociations;
-  }, [dishAssociations.length]);
+    dishAssociationsCountRef.current = dishAssociations.length;
+  }, [dishAssociations]);
 
   useEffect(() => {
     if (isAuthenticated && currentUserId && dishAssociations.length > 0) {
@@ -682,7 +673,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, dishAssociations.length, hasLoaded]);
+  }, [currentUserId, dishAssociations.length, hasLoaded, loadUserAvatars]);
 
   const loadFavorites = useCallback(async (userId: string) => {
     try {
@@ -966,9 +957,10 @@ export default function HomeScreen() {
               setUserAvatars(bootstrapAvatarMaps.avatars);
               setUserLabels(bootstrapAvatarMaps.labels);
               avatarIdsKeyRef.current = [...bootstrapAvatarIds].sort().join(',');
-              if (!avatarUrl && bootstrapAvatarMaps.avatars[userId]) {
-                setAvatarUrl(bootstrapAvatarMaps.avatars[userId]);
-                await cacheAvatar(userId, bootstrapAvatarMaps.avatars[userId]);
+              const bootstrapAvatar = bootstrapAvatarMaps.avatars[userId] ?? null;
+              if (bootstrapAvatar) {
+                setAvatarUrl((current) => current ?? bootstrapAvatar);
+                await cacheAvatar(userId, bootstrapAvatar);
               }
               setResolvedGlobalUserId(null);
               setResolvedGlobalDishIds([]);
@@ -998,7 +990,7 @@ export default function HomeScreen() {
         setAuthHydrating(false);
       }
     },
-    [dishAssociationsCountRef, ensureAppUserProfile, loadDishAssociations, loadFavorites]
+    [ensureAppUserProfile, loadDishAssociations, loadFavorites]
   );
 
   useEffect(() => {
@@ -1366,7 +1358,7 @@ export default function HomeScreen() {
     if (!currentUserId || dishAssociations.length === 0) return;
 
     void loadUserAvatars(dishAssociations);
-  }, [currentUserId, dishAssociations, userAvatars]);
+  }, [currentUserId, dishAssociations, loadUserAvatars]);
 
   useEffect(() => {
     if (!currentUserId || dishAssociations.length === 0) return;
@@ -1381,12 +1373,15 @@ export default function HomeScreen() {
       setUserAvatars(directMaps.avatars);
       setUserLabels(directMaps.labels);
       avatarIdsKeyRef.current = [...ids].sort().join(',');
-      if (!avatarUrl && directMaps.avatars[currentUserId]) {
-        setAvatarUrl(directMaps.avatars[currentUserId]);
-        await cacheAvatar(currentUserId, directMaps.avatars[currentUserId]);
+      const directAvatar = directMaps.avatars[currentUserId] ?? null;
+      if (directAvatar) {
+        setAvatarUrl((current) => current ?? directAvatar);
+        if (!avatarUrl) {
+          await cacheAvatar(currentUserId, directAvatar);
+        }
       }
     })();
-  }, [avatarUrl, currentUserId, dishAssociations, userAvatars]);
+  }, [avatarUrl, currentUserId, dishAssociations]);
 
   useEffect(() => {
     if (!isAuthenticated || !currentUserId || !currentUserEmail) return;
@@ -1613,7 +1608,7 @@ export default function HomeScreen() {
       guestActivationInFlightRef.current = false;
       setAuthLoading(false);
     }
-  }, [loadDishAssociations, resetAuthForm, t]);
+  }, [loadDishAssociations, resetAuthForm, router, t]);
 
   const showGuestLoginDialog = useCallback(() => {
     showAppDialog({

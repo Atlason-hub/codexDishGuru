@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ImageResizeMode,
+  Image as NativeImage,
   Platform,
   StyleProp,
 } from 'react-native';
-import { Image as NativeImage } from 'react-native';
 import { Image, ImageContentFit, ImageStyle } from 'expo-image';
 import { resolveDishImageUrl } from '../lib/dishImage';
 

@@ -409,16 +409,18 @@ export default function SearchScreen() {
       if (restaurantCollapsedBeforeSearchRef.current) {
         setCollapsedRestaurantCategories(restaurantCollapsedBeforeSearchRef.current);
         restaurantCollapsedBeforeSearchRef.current = null;
-      } else {
+      } else if (collapsedRestaurantCategories.size > 0) {
         setCollapsedRestaurantCategories(new Set());
       }
       return;
     }
     if (!restaurantCollapsedBeforeSearchRef.current) {
       restaurantCollapsedBeforeSearchRef.current = new Set(collapsedRestaurantCategories);
+    }
+    if (collapsedRestaurantCategories.size > 0) {
       setCollapsedRestaurantCategories(new Set());
     }
-  }, [restaurantQuery]);
+  }, [collapsedRestaurantCategories, restaurantQuery]);
 
   useEffect(() => {
     setCollapsedDishCategories(new Set(dishCategories.map((cat) => cat.id)));

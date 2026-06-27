@@ -58,10 +58,6 @@ type DishAssociation = {
   created_at: string | null;
 };
 
-type Row =
-  | { type: 'header'; id: string; title: string }
-  | { type: 'dish'; id: string; dish: DishSummary };
-
 function SectionChevron({ collapsed }: { collapsed: boolean }) {
   const rotation = useRef(new Animated.Value(collapsed ? 0 : 1)).current;
 
@@ -388,7 +384,7 @@ export default function RestaurantScreen() {
         },
       });
     },
-    [restaurantId, restaurantName]
+    [restaurantId, restaurantName, router]
   );
 
   return (

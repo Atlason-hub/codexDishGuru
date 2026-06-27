@@ -424,14 +424,18 @@ export default function CameraDetailsScreen() {
       if (restaurantCollapsedBeforeSearchRef.current) {
         setCollapsedRestaurantCategories(restaurantCollapsedBeforeSearchRef.current);
         restaurantCollapsedBeforeSearchRef.current = null;
+      } else if (collapsedRestaurantCategories.size > 0) {
+        setCollapsedRestaurantCategories(new Set());
       }
       return;
     }
     if (!restaurantCollapsedBeforeSearchRef.current) {
       restaurantCollapsedBeforeSearchRef.current = new Set(collapsedRestaurantCategories);
+    }
+    if (collapsedRestaurantCategories.size > 0) {
       setCollapsedRestaurantCategories(new Set());
     }
-  }, [search]);
+  }, [collapsedRestaurantCategories, search]);
 
   useEffect(() => {
     const needle = dishSearch.trim();
@@ -496,7 +500,7 @@ export default function CameraDetailsScreen() {
       const categories = mapRestaurantsToCategories(list, t('cameraRestaurantsGroup'));
       setRestaurantCategories(categories);
       setCollapsedRestaurantCategories(new Set(categories.map((cat) => cat.id)));
-    } catch (err) {
+    } catch {
       if (restaurantsRequestIdRef.current !== requestId) return;
       setRestaurants([]);
       setRestaurantCategories([]);
