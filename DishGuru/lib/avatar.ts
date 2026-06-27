@@ -91,13 +91,13 @@ export const hydrateAvatarForUser = async (
   authAvatarUrl?: string | null | undefined
 ): Promise<string | null> => {
   const cachedAvatar = await loadCachedAvatar(userId);
-  if (cachedAvatar) {
-    return cachedAvatar;
-  }
 
   const resolvedAvatar = await resolveAvatarForUser(userId, authAvatarUrl);
   if (resolvedAvatar) {
-    await cacheAvatar(userId, resolvedAvatar);
+    if (resolvedAvatar !== cachedAvatar) {
+      await cacheAvatar(userId, resolvedAvatar);
+    }
+    return resolvedAvatar;
   }
-  return resolvedAvatar;
+  return cachedAvatar;
 };

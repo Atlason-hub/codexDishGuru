@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     paddingBottom: 180,
   },
   listHeaderComponent: {
-    marginBottom: -15,
+    marginBottom: -1,
   },
   accordionWrap: {
     gap: 10,

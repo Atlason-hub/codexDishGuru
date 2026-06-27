@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
-import { loadCachedAvatar } from '../lib/avatar';
+import { hydrateAvatarForUser, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
@@ -30,6 +30,7 @@ import { openVendorDish } from '../lib/orderVendor';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { fetchCompanyIdForUser, fetchFavoritesMap, fetchOrderVendorForUser, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
 import { useLocale } from '../lib/locale';
+import { subscribeAvatarUpdates } from '../lib/avatarEvents';
 
 type DishAssociation = {
   id: string;
@@ -365,21 +366,38 @@ export default function DishScreen() {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
-      setCurrentUserId(data.session?.user?.id ?? null);
-      const cachedAvatar = await loadCachedAvatar(data.session?.user?.id ?? null);
+      const userId = data.session?.user?.id ?? null;
+      setCurrentUserId(userId);
+      const cachedAvatar = await loadCachedAvatar(userId);
       if (cachedAvatar) setAvatarUrl(cachedAvatar);
-      if (data.session?.user?.id) {
-        await loadFavorites(data.session.user.id);
-        await loadOrderVendor(data.session.user.id);
+      if (userId) {
+        const resolvedAvatar = await hydrateAvatarForUser(
+          userId,
+          (data.session?.user?.user_metadata as any)?.avatar_url ?? null
+        );
+        if (mounted) {
+          setAvatarUrl(resolvedAvatar);
+        }
+        await loadFavorites(userId);
+        await loadOrderVendor(userId);
       }
       await loadDishAssociations({ showLoading: dishAssociations.length === 0 });
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      setCurrentUserId(session?.user?.id ?? null);
-      if (session?.user?.id) {
-        loadFavorites(session.user.id);
-        loadOrderVendor(session.user.id);
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const userId = session?.user?.id ?? null;
+      setCurrentUserId(userId);
+      if (userId) {
+        const cachedAvatar = await loadCachedAvatar(userId);
+        if (cachedAvatar) setAvatarUrl(cachedAvatar);
+        const resolvedAvatar = await hydrateAvatarForUser(
+          userId,
+          (session?.user?.user_metadata as any)?.avatar_url ?? null
+        );
+        setAvatarUrl(resolvedAvatar);
+        loadFavorites(userId);
+        loadOrderVendor(userId);
       } else {
+        setAvatarUrl(null);
         setFavorites({});
         setOrderVendor(null);
       }
@@ -389,6 +407,13 @@ export default function DishScreen() {
       subscription.subscription.unsubscribe();
     };
   }, [dishAssociations.length, loadDishAssociations, loadFavorites, loadOrderVendor, refreshParam]);
+
+  useEffect(() => {
+    return subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
+      if (!currentUserId || userId !== currentUserId) return;
+      setAvatarUrl(nextAvatarUrl);
+    });
+  }, [currentUserId]);
 
   useEffect(() => {
     loadDishAssociationsRef.current = loadDishAssociations;

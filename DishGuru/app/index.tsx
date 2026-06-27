@@ -1364,14 +1364,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!currentUserId || dishAssociations.length === 0) return;
-    if (Object.keys(userAvatars).length > 0) return;
 
     void loadUserAvatars(dishAssociations);
   }, [currentUserId, dishAssociations, userAvatars]);
 
   useEffect(() => {
     if (!currentUserId || dishAssociations.length === 0) return;
-    if (Object.keys(userAvatars).length > 0) return;
     if (!sessionAccessTokenRef.current) return;
 
     void (async () => {

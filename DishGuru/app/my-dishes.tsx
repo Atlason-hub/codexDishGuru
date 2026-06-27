@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AppHeader from '../components/AppHeader';
 import { getCurrentAuthUser, supabase } from '../lib/supabase';
-import { fetchAvatarFromAuth, fetchAvatarFromProfile, loadCachedAvatar } from '../lib/avatar';
+import { hydrateAvatarForUser } from '../lib/avatar';
 import DishCard from '../components/DishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
@@ -208,18 +208,16 @@ export default function MyDishesScreen() {
       setAvatarUrl(null);
       return;
     }
-    const cachedAvatar = await loadCachedAvatar(userId);
-    if (cachedAvatar) {
-      setAvatarUrl(cachedAvatar);
-    }
-    const resolvedAvatar = (await fetchAvatarFromAuth()) ?? (await fetchAvatarFromProfile(userId));
+    const authUser = await getCurrentAuthUser();
+    const resolvedAvatar = await hydrateAvatarForUser(
+      userId,
+      (authUser?.user_metadata as any)?.avatar_url ?? null
+    );
     if (resolvedAvatar) {
-      setAvatarUrl(resolvedAvatar);
+      setAvatarUrl((current) => (current === resolvedAvatar ? current : resolvedAvatar));
       return;
     }
-    if (!cachedAvatar) {
-      setAvatarUrl(null);
-    }
+    setAvatarUrl(null);
   }, []);
 
   useEffect(() => {

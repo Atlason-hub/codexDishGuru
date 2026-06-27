@@ -9,7 +9,6 @@ import {
   StyleProp,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
   ViewStyle,
 } from 'react-native';
@@ -91,8 +90,6 @@ function DishCard({
   preferNativeImage = true,
 }: DishCardProps) {
   const { isRTL, t } = useLocale();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const [imageWidth, setImageWidth] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
@@ -118,6 +115,7 @@ function DishCard({
     () => (currentItem?.user_id ? userLabels[currentItem.user_id] ?? null : null),
     [currentItem?.user_id, userLabels]
   );
+  const avatarStateKey = `${currentItem?.id ?? 'none'}:${resolvedAvatarUrl ?? 'none'}`;
   const shouldShowAvatarImage = Boolean(resolvedAvatarUrl && !avatarLoadFailed);
   const hasRestaurantTarget = Boolean(
     currentItem && (currentItem.restaurant_id || currentItem.restaurant_name)
@@ -136,7 +134,7 @@ function DishCard({
 
   React.useEffect(() => {
     setAvatarLoadFailed(false);
-  }, [resolvedAvatarUrl]);
+  }, [avatarStateKey]);
 
   const bouncePress = (scale: Animated.Value) => {
     Animated.sequence([
@@ -168,32 +166,28 @@ function DishCard({
   }, [currentIndex, imageWidth, items.length]);
 
   return (
-    <View style={[styles.feedCardShadow, !isDark && styles.feedCardAmbientDepth, style]}>
+    <View style={[styles.feedCardShadow, styles.feedCardAmbientDepth, style]}>
       <View
         style={[
           styles.feedCard,
-          isDark ? styles.feedCardDark : styles.feedCardLight,
+          styles.feedCardLight,
         ]}
       >
       <View
         pointerEvents="none"
         style={[
           styles.feedCardGlassBase,
-          isDark ? styles.feedCardDark : styles.feedCardLight,
+          styles.feedCardLight,
         ]}
       />
       <BlurView
         intensity={intensity}
-        tint={isDark ? 'dark' : 'light'}
+        tint="light"
         style={styles.feedCardGlassLayer}
       />
       <LinearGradient
         pointerEvents="none"
-        colors={
-          isDark
-            ? ['rgba(255,255,255,0.045)', 'rgba(255,255,255,0.015)']
-            : ['rgba(255,255,255,0.20)', 'rgba(255,255,255,0.08)']
-        }
+        colors={['rgba(255,255,255,0.20)', 'rgba(255,255,255,0.08)']}
         style={styles.feedCardGlassHighlight}
       />
       <View style={styles.feedCardContent}>
@@ -402,6 +396,7 @@ function DishCard({
             >
               {shouldShowAvatarImage ? (
                 <CachedLogo
+                  key={avatarStateKey}
                   uri={resolvedAvatarUrl!}
                   style={styles.avatarImage}
                   onError={() => setAvatarLoadFailed(true)}

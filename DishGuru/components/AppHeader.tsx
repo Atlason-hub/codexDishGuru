@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,7 +24,7 @@ import {
   resolveLogoUrl,
   subscribeSessionCompanyLogo,
 } from '../lib/logo';
-import { cacheAvatar, hydrateAvatarForUser, loadCachedAvatar, resolveAvatarForUser } from '../lib/avatar';
+import { cacheAvatar, hydrateAvatarForUser } from '../lib/avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LegalModal from './LegalModal';
 import CachedLogo from './CachedLogo';
@@ -40,6 +41,7 @@ import { setPendingLocalLogout } from '../lib/logoutGate';
 import { clearUserSessionArtifacts } from '../lib/sessionCleanup';
 
 let lastKnownCompanyLogoUrl: string | null = null;
+const guestHeaderIcon = require('../assets/images/guest-header-icon.png');
 
 const getSessionAvatarUrl = (session: any) =>
   ((session?.user?.user_metadata as any)?.avatar_url as string | null | undefined) ?? null;
@@ -246,22 +248,18 @@ export default function AppHeader({
     setCurrentUserEmail(sessionEmail);
 
     if (options?.useCachedAssets) {
-      const [cached, cachedAvatar] = await Promise.all([
+      const [cached] = await Promise.all([
         loadCachedLogo(logoCacheScope),
-        loadCachedAvatar(userId),
       ]);
       if (!isCurrentRun()) return;
       if (cached.logoUrl || cached.logoPath) {
         const resolved = cached.logoUrl ?? resolveLogoUrl(cached.logoPath);
         applyResolvedLogo(resolved);
       }
-      if (cachedAvatar) {
-        setAvatarUrl(cachedAvatar);
-      }
     }
 
     const metaAvatar = getSessionAvatarUrl(session);
-    const resolvedAvatar = await resolveAvatarForUser(userId, metaAvatar);
+    const resolvedAvatar = await hydrateAvatarForUser(userId, metaAvatar);
     if (!isCurrentRun()) return;
     if (resolvedAvatar) {
       setAvatarUrl(resolvedAvatar);
@@ -369,11 +367,6 @@ export default function AppHeader({
     }
 
     const hydrateAvatar = async () => {
-      const cachedAvatar = await loadCachedAvatar(effectiveCurrentUserId);
-      if (!cancelled && cachedAvatar) {
-        setAvatarUrl(cachedAvatar);
-      }
-
       const resolvedAvatar = await hydrateAvatarForUser(effectiveCurrentUserId);
       if (!cancelled) {
         setAvatarUrl(resolvedAvatar);
@@ -614,6 +607,7 @@ export default function AppHeader({
     : companyLogoUrl;
   const effectiveLogoDisplayUrl = effectiveCompanyLogoUrl;
   const shouldShowCompanyLogo = hasSignedInSession && Boolean(effectiveLogoDisplayUrl) && !logoLoadFailed;
+  const shouldShowGuestHeaderIcon = isGuestHeader && !hasSignedInSession;
   const headerVisualKey = hasSignedInSession
     ? `auth:${effectiveCurrentUserId ?? 'anon'}:${effectiveCurrentUserEmail ?? ''}:${skipLaunchParam}`
     : isGuestHeader
@@ -648,7 +642,14 @@ export default function AppHeader({
         style={styles.logoContainer}
         pointerEvents="none"
       >
-        <Text style={[styles.logoText, shouldShowCompanyLogo && styles.logoTextHidden]}>DishGuru</Text>
+        <Text
+          style={[
+            styles.logoText,
+            (shouldShowCompanyLogo || shouldShowGuestHeaderIcon) && styles.logoTextHidden,
+          ]}
+        >
+          DishGuru
+        </Text>
         {shouldShowCompanyLogo ? (
           <CachedLogo
             uri={effectiveLogoDisplayUrl!}
@@ -659,6 +660,10 @@ export default function AppHeader({
             cachePolicy="memory-disk"
             onError={() => setLogoLoadFailed(true)}
           />
+        ) : shouldShowGuestHeaderIcon ? (
+          <View style={styles.guestHeaderIconFrame}>
+            <Image source={guestHeaderIcon} style={styles.guestHeaderIcon} resizeMode="cover" />
+          </View>
         ) : null}
       </View>
       <View style={styles.rightIcons} pointerEvents="none">
@@ -720,8 +725,12 @@ export default function AppHeader({
                   t('headerMenuAccount'),
                   shouldShowMenuAvatar ? (
                     <CachedLogo
+                      key={avatarUrl!}
                       uri={avatarUrl!}
                       style={styles.menuAvatar}
+                      cachePolicy="none"
+                      transition={0}
+                      priority="high"
                       onError={() => setMenuAvatarLoadFailed(true)}
                     />
                   ) : (
@@ -931,6 +940,17 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 172,
     height: 44,
+  },
+  guestHeaderIconFrame: {
+    position: 'absolute',
+    alignSelf: 'center',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  guestHeaderIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
   },
   headerTapLayer: {
     ...StyleSheet.absoluteFillObject,

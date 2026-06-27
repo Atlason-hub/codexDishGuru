@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Buffer } from 'buffer';
 import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { cacheAvatar, hydrateAvatarForUser, loadCachedAvatar } from '../lib/avatar';
+import { cacheAvatar, hydrateAvatarForUser, normalizeAvatarUrl } from '../lib/avatar';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -27,6 +27,25 @@ import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { Locale, useLocale } from '../lib/locale';
 import { setGuestModeEnabled } from '../lib/guestMode';
 import { publishAvatarUpdate, subscribeAvatarUpdates } from '../lib/avatarEvents';
+
+const extractAvatarStoragePath = (rawUrl: string | null | undefined) => {
+  if (!rawUrl) return null;
+
+  const objectPublicMarker = '/storage/v1/object/public/avatars/';
+  const renderPublicMarker = '/storage/v1/render/image/public/avatars/';
+  const marker = rawUrl.includes(objectPublicMarker)
+    ? objectPublicMarker
+    : rawUrl.includes(renderPublicMarker)
+      ? renderPublicMarker
+      : null;
+
+  if (!marker) return null;
+  const [, tail] = rawUrl.split(marker);
+  if (!tail) return null;
+  const [pathPart] = tail.split('?');
+  const decodedPath = decodeURIComponent(pathPart).trim();
+  return decodedPath.length > 0 ? decodedPath : null;
+};
 
 export default function AccountScreen() {
   const FRAME_SIZE = 180;
@@ -87,6 +106,18 @@ export default function AccountScreen() {
     if (typeof error === 'string' && error.trim()) return error;
     return t('commonUnexpectedError');
   };
+
+  const syncAuthAvatarMetadata = useCallback(async (nextAvatarUrl: string | null) => {
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        avatar_url: nextAvatarUrl,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+  }, []);
 
   const ensureAvatarSavedToProfile = useCallback(
     async (userId: string, emailAddress: string | null, avatarUrlToSave: string) => {
@@ -257,12 +288,18 @@ export default function AccountScreen() {
       setEmail(authUser.email ?? session.user?.email ?? null);
       setCurrentUserId(authUser.id ?? null);
       authUserIdRef.current = authUser.id ?? null;
-      const cached = await loadCachedAvatar(authUser.id);
-      if (cached) setAvatarUrl(cached);
       const resolvedAvatar = await hydrateAvatarForUser(
         authUser.id,
         (authUser.user_metadata as any)?.avatar_url ?? null
       );
+      const normalizedMetaAvatar = normalizeAvatarUrl(
+        (authUser.user_metadata as any)?.avatar_url ?? null
+      );
+      if (resolvedAvatar !== normalizedMetaAvatar) {
+        await syncAuthAvatarMetadata(resolvedAvatar);
+      }
+      await cacheAvatar(authUser.id, resolvedAvatar);
+      publishAvatarUpdate(authUser.id, resolvedAvatar);
       if (resolvedAvatar) {
         setAvatarUrl(resolvedAvatar);
       } else {
@@ -283,12 +320,20 @@ export default function AccountScreen() {
       setEmail(authUser?.email ?? session.user?.email ?? null);
       setCurrentUserId(authUser?.id ?? session.user?.id ?? null);
       authUserIdRef.current = authUser?.id ?? null;
-      const cached = await loadCachedAvatar(authUser?.id ?? null);
-      if (cached) setAvatarUrl(cached);
       const resolvedAvatar = await hydrateAvatarForUser(
         authUser?.id ?? null,
         (authUser?.user_metadata as any)?.avatar_url ?? null
       );
+      const normalizedMetaAvatar = normalizeAvatarUrl(
+        (authUser?.user_metadata as any)?.avatar_url ?? null
+      );
+      if (resolvedAvatar !== normalizedMetaAvatar) {
+        await syncAuthAvatarMetadata(resolvedAvatar);
+      }
+      await cacheAvatar(authUser?.id ?? null, resolvedAvatar);
+      if (authUser?.id) {
+        publishAvatarUpdate(authUser.id, resolvedAvatar);
+      }
       if (resolvedAvatar) {
         setAvatarUrl(resolvedAvatar);
       } else {
@@ -459,6 +504,11 @@ export default function AccountScreen() {
                                 .eq('user_id', userId);
                               if (updateError) throw updateError;
 
+                              await syncAuthAvatarMetadata(null);
+                              const previousAvatarPath = extractAvatarStoragePath(avatarUrl);
+                              if (previousAvatarPath) {
+                                await supabase.storage.from('avatars').remove([previousAvatarPath]);
+                              }
                               await cacheAvatar(userId, null);
                               publishAvatarUpdate(userId, null);
                               setAvatarUrl(null);
@@ -641,10 +691,19 @@ export default function AccountScreen() {
                   const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(filePath);
                   const url = publicData?.publicUrl ?? null;
                   if (url) {
+                    const previousAvatarPath = extractAvatarStoragePath(avatarUrl);
                     const persistedAvatarUrl = await ensureAvatarSavedToProfile(userId, userEmail, url);
+                    await syncAuthAvatarMetadata(persistedAvatarUrl);
                     setAvatarUrl(persistedAvatarUrl);
                     await cacheAvatar(userId, persistedAvatarUrl);
                     publishAvatarUpdate(userId, persistedAvatarUrl);
+                    const nextAvatarPath = extractAvatarStoragePath(persistedAvatarUrl);
+                    if (
+                      previousAvatarPath &&
+                      previousAvatarPath !== nextAvatarPath
+                    ) {
+                      await supabase.storage.from('avatars').remove([previousAvatarPath]);
+                    }
                     setPendingAsset(null);
                     setTempAvatarUrl(null);
                     setAvatarOffset({ x: 0, y: 0 });

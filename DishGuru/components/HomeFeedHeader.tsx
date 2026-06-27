@@ -110,7 +110,6 @@ export default function HomeFeedHeader({
               onSetActiveHomeTab(nextTab);
             }}
           />
-          <View style={styles.tabsDivider} />
         </View>
       ) : null}
       {shouldShowSkeleton ? (
@@ -239,15 +238,5 @@ const styles = StyleSheet.create({
   },
   tabsSection: {
     marginTop: 10,
-  },
-  tabsDivider: {
-    marginTop: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.border,
-    shadowColor: theme.colors.ink,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
   },
 });

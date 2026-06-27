@@ -2,15 +2,15 @@
   "expo": {
     "name": "DishGuru",
     "slug": "hello-world-app",
-    "version": "7.7.1",
+    "version": "7.7.2",
     "orientation": "portrait",
     "icon": "./assets/images/app-store-icon.png",
     "scheme": "dishguru",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.dishguru.app",
-      "buildNumber": "17",
+      "buildNumber": "19",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.dishguru.app",
-      "versionCode": 17,
+      "versionCode": 18,
       "icon": "./assets/images/play-store-icon.png",
       "adaptiveIcon": {
         "backgroundColor": "#f48722",
@@ -44,10 +44,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#ffffff"
         }
       ],
       "expo-web-browser"

@@ -78,8 +78,6 @@ export default function GlassToggle({
 
   return (
     <View style={[styles.trackWrap, style]} onLayout={handleLayout}>
-      <BlurView intensity={intensity} tint="light" style={StyleSheet.absoluteFillObject} />
-      <View style={styles.trackTint} />
       {segmentWidth > 0 ? (
         <Animated.View
           style={[
@@ -117,20 +115,16 @@ export default function GlassToggle({
 const styles = StyleSheet.create({
   trackWrap: {
     borderRadius: 30,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)', // crisp outer glass rim replacing the old underline rail
-    backgroundColor: 'rgba(255,255,255,0.15)', // low-opacity tint layer over the blur for frosted glass depth
-    minHeight: 36,
-  },
-  trackTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    overflow: 'visible',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+    minHeight: 38,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 36,
+    minHeight: 38,
     position: 'relative',
     zIndex: 2,
   },
@@ -141,8 +135,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 36,
-    paddingHorizontal: 8,
+    minHeight: 38,
+    paddingHorizontal: 10,
   },
   indicator: {
     position: 'absolute',
@@ -150,19 +144,17 @@ const styles = StyleSheet.create({
     bottom: TRACK_PADDING,
     borderRadius: 18,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.52)', // stronger reflective rim for the selected pill
-    backgroundColor: 'rgba(255,250,245,0.82)',
+    backgroundColor: 'rgba(255,252,249,0.92)',
     zIndex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
+    shadowColor: '#5b2e15',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
     elevation: 2,
   },
   indicatorTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(244,135,34,0.24)',
+    backgroundColor: 'rgba(244,135,34,0.18)',
   },
   label: {
     fontSize: 15,
@@ -174,6 +166,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.bold,
   },
   labelInactive: {
-    color: 'rgba(75,42,27,0.46)',
+    color: 'rgba(75,42,27,0.54)',
   },
 });

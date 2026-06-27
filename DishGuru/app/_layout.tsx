@@ -1,9 +1,9 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { AppState, LogBox, Text, TextInput, useColorScheme } from 'react-native';
+import { AppState, LogBox, Text, TextInput } from 'react-native';
 import { Asset } from 'expo-asset';
 import AppHeader from '../components/AppHeader';
 import AppDialogHost from '../components/AppDialogHost';
@@ -23,11 +23,10 @@ import { LocaleProvider, useLocale } from '../lib/locale';
 import { RATING_IMAGES } from '../lib/ratings';
 
 function AppShell() {
-  const colorScheme = useColorScheme();
   useLocale();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <Stack
         screenOptions={{
           header: () => <AppHeader />,
@@ -51,7 +50,7 @@ function AppShell() {
         <Stack.Screen name="camera/details" options={{ headerShown: false }} />
       </Stack>
       <AppDialogHost />
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
     </ThemeProvider>
   );
 }
