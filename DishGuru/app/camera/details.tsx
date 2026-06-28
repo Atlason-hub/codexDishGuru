@@ -18,11 +18,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../lib/theme';
-import { starsToScore } from '../../lib/ratings';
+import { scoreToStars, starsToScore } from '../../lib/ratings';
 import EmojiRatingInput from '../../components/EmojiRatingInput';
 import { showAppAlert } from '../../lib/appDialog';
 import { useLocale } from '../../lib/locale';
-import { fetchCompanyIdForUser } from '../../lib/appData';
+import {
+  fetchCompanyIdForUser,
+  fetchDishDraftById,
+  saveDishDraft,
+  updateDishDraft,
+} from '../../lib/appData';
 import { getImageContentType, loadImageBytesFromUri } from '../../lib/localImage';
 import {
   useEnableAndroidLayoutAnimation,
@@ -253,6 +258,7 @@ export default function CameraDetailsScreen() {
   const dishSearchFocusedRef = useRef(false);
   const keyboardVisibleRef = useRef(false);
   const saveInFlightRef = useRef(false);
+  const preserveSelectedDishOnNextMenuLoadRef = useRef(false);
   const draftSubmissionKeyRef = useRef(
     `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
   );
@@ -272,7 +278,13 @@ export default function CameraDetailsScreen() {
     typeof params.defaultImageUrl === 'string' && params.defaultImageUrl
       ? params.defaultImageUrl
       : null;
+  const draftIdParam = typeof params.draftId === 'string' && params.draftId ? params.draftId : null;
   const lockSelection = params.lockSelection === '1';
+  const reviewTextParam = typeof params.reviewText === 'string' ? params.reviewText : '';
+  const tastyScoreParam = typeof params.tastyScore === 'string' ? Number(params.tastyScore) : NaN;
+  const fillingScoreParam = typeof params.fillingScore === 'string' ? Number(params.fillingScore) : NaN;
+  const hasTastyScoreParam = Number.isFinite(tastyScoreParam);
+  const hasFillingScoreParam = Number.isFinite(fillingScoreParam);
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [restaurantCategories, setRestaurantCategories] = useState<RestaurantCategory[]>([]);
@@ -294,22 +306,29 @@ export default function CameraDetailsScreen() {
   const [collapsedRestaurantCategories, setCollapsedRestaurantCategories] = useState<Set<string>>(
     () => new Set()
   );
-  const [tastyScore, setTastyScore] = useState(2.5);
-  const [fillingScore, setFillingScore] = useState(2.5);
-  const [reviewText, setReviewText] = useState('');
+  const [tastyScore, setTastyScore] = useState(hasTastyScoreParam ? tastyScoreParam : 2.5);
+  const [fillingScore, setFillingScore] = useState(hasFillingScoreParam ? fillingScoreParam : 2.5);
+  const [reviewText, setReviewText] = useState(reviewTextParam);
   const [saving, setSaving] = useState(false);
+  const [storedImageUrl, setStoredImageUrl] = useState<string | null>(defaultImageUrl);
+  const [storedImagePath, setStoredImagePath] = useState<string | null>(null);
   const allRestaurantCategoriesCollapsed =
     restaurantCategories.length > 0 &&
     restaurantCategories.every((cat) => collapsedRestaurantCategories.has(cat.id));
   const allDishCategoriesCollapsed =
     dishCategories.length > 0 &&
     dishCategories.every((cat) => collapsedDishCategories.has(cat.id));
+  const hasDisplayImage = Boolean(photoUri || storedImageUrl);
+  const canFinalizeSave = hasDisplayImage && Boolean(selectedRestaurantId && selectedDish && selectedDish.id > 0);
+  const canSaveDraft = hasDisplayImage;
 
   useEnableAndroidLayoutAnimation();
 
   useEffect(() => {
-    draftSubmissionKeyRef.current = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  }, [photoUri, photoBase64, selectedRestaurantId, selectedDish?.id]);
+    draftSubmissionKeyRef.current = draftIdParam
+      ? `draft-${draftIdParam}`
+      : `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }, [draftIdParam, photoUri, photoBase64]);
 
   useEffect(() => {
     let mounted = true;
@@ -330,6 +349,55 @@ export default function CameraDetailsScreen() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUserId || !draftIdParam) return;
+    let active = true;
+    const hydrateDraft = async () => {
+      try {
+        const draft = await fetchDishDraftById(draftIdParam, currentUserId);
+        if (!active || !draft) return;
+        setStoredImageUrl((current) => current ?? draft.image_url ?? null);
+        setStoredImagePath(draft.image_path ?? null);
+        if (!presetRestaurantId && draft.restaurant_id) {
+          setSelectedRestaurantId(Number(draft.restaurant_id));
+        }
+        if (!presetRestaurantName && draft.restaurant_name) {
+          setSelectedName(draft.restaurant_name);
+        }
+        if (!reviewTextParam && draft.review_text) {
+          setReviewText(draft.review_text);
+        }
+        if (!hasTastyScoreParam && typeof draft.tasty_score === 'number') {
+          setTastyScore(scoreToStars(draft.tasty_score));
+        }
+        if (!hasFillingScoreParam && typeof draft.filling_score === 'number') {
+          setFillingScore(scoreToStars(draft.filling_score));
+        }
+        if (!presetDishId && !presetDishName && (draft.dish_id || draft.dish_name)) {
+          preserveSelectedDishOnNextMenuLoadRef.current = true;
+          setSelectedDish({
+            id: draft.dish_id ? Number(draft.dish_id) : -1,
+            name: draft.dish_name ?? '',
+          });
+        }
+      } catch {}
+    };
+    void hydrateDraft();
+    return () => {
+      active = false;
+    };
+  }, [
+    currentUserId,
+    draftIdParam,
+    hasFillingScoreParam,
+    hasTastyScoreParam,
+    presetDishId,
+    presetDishName,
+    presetRestaurantId,
+    presetRestaurantName,
+    reviewTextParam,
+  ]);
 
   const keyboardInset = useKeyboardInset({
     onShow: () => {
@@ -361,7 +429,10 @@ export default function CameraDetailsScreen() {
     const fetchMenu = async () => {
       try {
         setMenuLoading(true);
-        if (!presetDishId) setSelectedDish(null);
+        if (!presetDishId && !preserveSelectedDishOnNextMenuLoadRef.current) {
+          setSelectedDish(null);
+        }
+        preserveSelectedDishOnNextMenuLoadRef.current = false;
         setDishCategories([]);
         const response = await fetch(
           `https://www.10bis.co.il/api/GetMenu?ResId=${selectedRestaurantId}&websiteID=10bis&domainID=10bis`,
@@ -525,42 +596,27 @@ export default function CameraDetailsScreen() {
     await fetchRestaurants(company?.city_id, company?.street_id);
   }, [currentUserId, fetchRestaurants]);
 
-  useEffect(() => {
-    if (currentUserId) {
-      void fetchCompanyRestaurants();
-    }
-    if (presetRestaurantId) {
-      setSelectedRestaurantId(presetRestaurantId);
-      setSelectedName(presetRestaurantName);
-    }
-  }, [currentUserId, fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
-
-  const handleSave = async () => {
-    if (saving || saveInFlightRef.current) return;
-    if (!photoUri) {
-      showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
-      return;
-    }
-    if (!selectedRestaurantId) {
-      showAppAlert(t('cameraMissingRestaurantTitle'), t('cameraChooseRestaurant'));
-      return;
-    }
-    if (!selectedDish?.id) {
-      showAppAlert(t('cameraMissingDishTitle'), t('cameraChooseDish'));
-      return;
-    }
-    try {
-      saveInFlightRef.current = true;
-      setSaving(true);
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      const authenticatedUserId = authData.user?.id ?? null;
-      if (authError || !authenticatedUserId) {
-        showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
+  const navigateAfterPersist = useCallback(
+    (refreshToken: string) => {
+      if (draftIdParam) {
+        router.replace({ pathname: '/my-dishes', params: { refresh: refreshToken } });
         return;
       }
-      if (authenticatedUserId !== currentUserId) {
-        setCurrentUserId(authenticatedUserId);
-      }
+      router.replace({
+        pathname: '/',
+        params: {
+          refresh: refreshToken,
+          headerSync: refreshToken,
+          homeTab: 'dishes',
+          scrollY: '0',
+        },
+      });
+    },
+    [draftIdParam, router]
+  );
+
+  const ensureStoredImage = useCallback(async (authenticatedUserId: string) => {
+    if (photoUri && (photoBase64 || photoUri.startsWith('file://'))) {
       const { ext, contentType } = getImageContentType(photoUri);
       const filePath = `${authenticatedUserId}/${draftSubmissionKeyRef.current}.${ext}`;
       const bytes = photoBase64
@@ -579,26 +635,75 @@ export default function CameraDetailsScreen() {
         .upload(filePath, bytes, {
           contentType,
           upsert: true,
-      });
+        });
       if (upload.error) throw upload.error;
       const { data: publicData } = supabase.storage.from('dish-images').getPublicUrl(filePath);
+      const publicUrl = publicData?.publicUrl ?? null;
+      setStoredImageUrl(publicUrl);
+      setStoredImagePath(filePath);
+      return { imageUrl: publicUrl, imagePath: filePath };
+    }
+
+    if (storedImageUrl || storedImagePath) {
+      return { imageUrl: storedImageUrl, imagePath: storedImagePath };
+    }
+
+    throw new Error(t('cameraTakePhotoFirst'));
+  }, [photoBase64, photoUri, storedImagePath, storedImageUrl, t]);
+
+  useEffect(() => {
+    if (currentUserId) {
+      void fetchCompanyRestaurants();
+    }
+    if (presetRestaurantId) {
+      setSelectedRestaurantId(presetRestaurantId);
+      setSelectedName(presetRestaurantName);
+    }
+  }, [currentUserId, fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
+
+  const handleSave = async () => {
+    if (saving || saveInFlightRef.current) return;
+    if (!hasDisplayImage) {
+      showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
+      return;
+    }
+    if (!selectedRestaurantId) {
+      showAppAlert(t('cameraMissingRestaurantTitle'), t('cameraChooseRestaurant'));
+      return;
+    }
+    if (!selectedDish || selectedDish.id <= 0) {
+      showAppAlert(t('cameraMissingDishTitle'), t('cameraChooseDish'));
+      return;
+    }
+    try {
+      saveInFlightRef.current = true;
+      setSaving(true);
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const authenticatedUserId = authData.user?.id ?? null;
+      if (authError || !authenticatedUserId) {
+        showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
+        return;
+      }
+      if (authenticatedUserId !== currentUserId) {
+        setCurrentUserId(authenticatedUserId);
+      }
+      const { imageUrl, imagePath } = await ensureStoredImage(authenticatedUserId);
       const { data: existingRows, error: existingRowsError } = await supabase
         .from('dish_associations')
         .select('id')
         .eq('user_id', authenticatedUserId)
-        .eq('image_path', filePath)
+        .eq('image_path', imagePath ?? '')
         .limit(1);
       if (existingRowsError) throw existingRowsError;
       if ((existingRows ?? []).length > 0) {
-        router.replace({
-          pathname: '/',
-          params: {
-            refresh: String(Date.now()),
-            headerSync: String(Date.now()),
-            homeTab: 'dishes',
-            scrollY: '0',
-          },
-        });
+        if (draftIdParam) {
+          await supabase
+            .from('dish_association_drafts')
+            .delete()
+            .eq('id', draftIdParam)
+            .eq('user_id', authenticatedUserId);
+        }
+        navigateAfterPersist(String(Date.now()));
         return;
       }
       const insert = await supabase.from('dish_associations').insert({
@@ -611,25 +716,71 @@ export default function CameraDetailsScreen() {
         review_text: reviewText,
         tasty_score: starsToScore(tastyScore),
         filling_score: starsToScore(fillingScore),
-        image_url: publicData?.publicUrl ?? null,
-        image_path: filePath,
+        image_url: imageUrl,
+        image_path: imagePath,
         created_at: new Date().toISOString(),
       });
       if (insert.error) throw insert.error;
-      draftSubmissionKeyRef.current = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      router.replace({
-        pathname: '/',
-        params: {
-          refresh: String(Date.now()),
-          headerSync: String(Date.now()),
-          homeTab: 'dishes',
-          scrollY: '0',
-        },
-      });
+      if (draftIdParam) {
+        await supabase
+          .from('dish_association_drafts')
+          .delete()
+          .eq('id', draftIdParam)
+          .eq('user_id', authenticatedUserId);
+      }
+      navigateAfterPersist(String(Date.now()));
     } catch (error) {
       showAppAlert(
         t('cameraSaveFailed'),
         error instanceof Error ? error.message : t('cameraSaveFailed')
+      );
+    } finally {
+      saveInFlightRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (saving || saveInFlightRef.current) return;
+    if (!hasDisplayImage) {
+      showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
+      return;
+    }
+    try {
+      saveInFlightRef.current = true;
+      setSaving(true);
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const authenticatedUserId = authData.user?.id ?? null;
+      if (authError || !authenticatedUserId) {
+        showAppAlert(t('cameraNotSignedInTitle'), t('cameraSignInAgain'));
+        return;
+      }
+      if (authenticatedUserId !== currentUserId) {
+        setCurrentUserId(authenticatedUserId);
+      }
+      const { imageUrl, imagePath } = await ensureStoredImage(authenticatedUserId);
+      const payload = {
+        user_id: authenticatedUserId,
+        image_url: imageUrl,
+        image_path: imagePath,
+        restaurant_id: selectedRestaurantId,
+        restaurant_name: selectedName ?? null,
+        dish_id: selectedDish && selectedDish.id > 0 ? selectedDish.id : null,
+        dish_name: selectedDish?.name ?? null,
+        review_text: reviewText.trim() ? reviewText : null,
+        tasty_score: starsToScore(tastyScore),
+        filling_score: starsToScore(fillingScore),
+      };
+      if (draftIdParam) {
+        await updateDishDraft(draftIdParam, authenticatedUserId, payload);
+      } else {
+        await saveDishDraft(payload);
+      }
+      router.replace({ pathname: '/my-dishes', params: { refresh: String(Date.now()) } });
+    } catch (error) {
+      showAppAlert(
+        t('cameraDraftSaveFailed'),
+        error instanceof Error ? error.message : t('cameraDraftSaveFailed')
       );
     } finally {
       saveInFlightRef.current = false;
@@ -655,7 +806,10 @@ export default function CameraDetailsScreen() {
       >
         <Pressable onPress={Keyboard.dismiss}>
         <View style={styles.headerRow}>
-          <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => (draftIdParam ? router.replace('/my-dishes') : router.replace('/'))}
+          >
             <Ionicons name="chevron-back" size={18} color={theme.colors.ink} />
             <Text style={styles.backText}>{t('cameraDetailsBack')}</Text>
           </Pressable>
@@ -675,14 +829,18 @@ export default function CameraDetailsScreen() {
                   dishId: selectedDish?.id ? String(selectedDish.id) : '',
                   dishName: selectedDish?.name ?? '',
                   lockSelection: lockSelection ? '1' : '',
+                  draftId: draftIdParam ?? '',
+                  reviewText,
+                  tastyScore: String(tastyScore),
+                  fillingScore: String(fillingScore),
                 },
               })
             }
           >
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photo} />
-            ) : defaultImageUrl ? (
-              <Image source={{ uri: defaultImageUrl }} style={styles.photo} />
+            ) : storedImageUrl ? (
+              <Image source={{ uri: storedImageUrl }} style={styles.photo} />
             ) : (
               <View style={styles.photoPlaceholderInner}>
                 <Ionicons
@@ -698,7 +856,7 @@ export default function CameraDetailsScreen() {
             <View style={styles.cameraOverlay}>
               <Ionicons name="camera" size={20} color="#ffffff" />
               <Text style={styles.cameraOverlayText}>
-                {photoUri ? t('cameraRetake') : t('cameraTakeDishPhoto')}
+                {hasDisplayImage ? t('cameraRetake') : t('cameraTakeDishPhoto')}
               </Text>
             </View>
           </Pressable>
@@ -1055,15 +1213,31 @@ export default function CameraDetailsScreen() {
         </Pressable>
       </ScrollView>
       <View style={[styles.saveFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {!canFinalizeSave ? (
+          <Text style={styles.saveHintText}>{t('cameraAssociationRequiredToSave')}</Text>
+        ) : null}
+        <View style={[styles.footerActionsRow, !isRTL && styles.footerActionsRowLtr]}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondarySaveButton,
+            !isRTL && styles.secondarySaveButtonLtr,
+            pressed && !saving && canSaveDraft && styles.secondarySaveButtonPressed,
+            (saving || !canSaveDraft) && styles.secondarySaveButtonDisabled,
+          ]}
+          onPress={handleSaveDraft}
+          disabled={saving || saveInFlightRef.current || !canSaveDraft}
+        >
+          <Text style={styles.secondarySaveButtonText}>{t('cameraSaveForLater')}</Text>
+        </Pressable>
         <Pressable
           style={({ pressed }) => [
             styles.saveButton,
             !isRTL && styles.saveButtonLtr,
-            pressed && !saving && photoUri && styles.saveButtonPressed,
-            (saving || !photoUri) && styles.saveButtonDisabled,
+            pressed && !saving && canFinalizeSave && styles.saveButtonPressed,
+            (saving || !canFinalizeSave) && styles.saveButtonDisabled,
           ]}
           onPress={handleSave}
-          disabled={saving || saveInFlightRef.current || !photoUri}
+          disabled={saving || saveInFlightRef.current || !canFinalizeSave}
         >
           {saving ? (
             <ActivityIndicator color={theme.colors.accent} />
@@ -1071,6 +1245,7 @@ export default function CameraDetailsScreen() {
             <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
           )}
         </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -1096,6 +1271,20 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+  },
+  saveHintText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  footerActionsRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  footerActionsRowLtr: {
+    flexDirection: 'row',
   },
   scrollHint: {
     alignSelf: 'flex-start',
@@ -1497,15 +1686,19 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   saveButton: {
+    flex: 1,
+    minHeight: 48,
     paddingVertical: 10,
     paddingHorizontal: 28,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    alignSelf: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF4E8',
   },
   saveButtonLtr: {
-    alignSelf: 'flex-end',
+    alignSelf: 'auto',
   },
   saveButtonPressed: {
     opacity: 0.85,
@@ -1518,5 +1711,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.text,
     fontWeight: '600',
+  },
+  secondarySaveButton: {
+    flex: 1,
+    minHeight: 48,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(199, 93, 44, 0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.card,
+  },
+  secondarySaveButtonLtr: {
+    alignSelf: 'auto',
+  },
+  secondarySaveButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
+  },
+  secondarySaveButtonDisabled: {
+    opacity: 0.6,
+  },
+  secondarySaveButtonText: {
+    fontSize: 15,
+    color: theme.colors.accent,
+    fontWeight: '700',
   },
 });

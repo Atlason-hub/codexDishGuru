@@ -23,6 +23,10 @@ export default function CameraScreen() {
   const returnTo = typeof params.returnTo === 'string' ? params.returnTo : '';
   const returnScroll = typeof params.scrollY === 'string' ? params.scrollY : '';
   const lockSelection = typeof params.lockSelection === 'string' ? params.lockSelection : '';
+  const draftId = typeof params.draftId === 'string' ? params.draftId : '';
+  const reviewText = typeof params.reviewText === 'string' ? params.reviewText : '';
+  const tastyScore = typeof params.tastyScore === 'string' ? params.tastyScore : '';
+  const fillingScore = typeof params.fillingScore === 'string' ? params.fillingScore : '';
 
   const cameraRef = useRef<CameraView | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -154,6 +158,10 @@ export default function CameraScreen() {
             dishId,
             dishName,
             lockSelection,
+            draftId,
+            reviewText,
+            tastyScore,
+            fillingScore,
           },
         });
       }

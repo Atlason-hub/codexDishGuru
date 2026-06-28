@@ -7,6 +7,7 @@ import AppHeader from '../components/AppHeader';
 import { getCurrentAuthUser, supabase } from '../lib/supabase';
 import { hydrateAvatarForUser } from '../lib/avatar';
 import DishCard from '../components/DishCard';
+import DraftDishCard from '../components/DraftDishCard';
 import AvatarPreviewModal from '../components/AvatarPreviewModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import CrossfadeView from '../components/CrossfadeView';
@@ -14,7 +15,13 @@ import { theme } from '../lib/theme';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
 import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
-import { fetchFavoritesMap, fetchOrderVendorForUser } from '../lib/appData';
+import {
+  deleteDishDraft,
+  DishAssociationDraft,
+  fetchDishDrafts,
+  fetchFavoritesMap,
+  fetchOrderVendorForUser,
+} from '../lib/appData';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { useLocale } from '../lib/locale';
 import { loadGuestMode } from '../lib/guestMode';
@@ -42,6 +49,7 @@ export default function MyDishesScreen() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dishAssociations, setDishAssociations] = useState<DishAssociation[]>([]);
+  const [dishDrafts, setDishDrafts] = useState<DishAssociationDraft[]>([]);
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -98,6 +106,12 @@ export default function MyDishesScreen() {
   const loadFavorites = useCallback(async (userId: string) => {
     try {
       setFavorites(await fetchFavoritesMap(userId));
+    } catch {}
+  }, []);
+
+  const loadDrafts = useCallback(async (userId: string) => {
+    try {
+      setDishDrafts(await fetchDishDrafts(userId));
     } catch {}
   }, []);
 
@@ -260,6 +274,7 @@ export default function MyDishesScreen() {
         return;
       }
       await refreshAvatar(userId);
+      await loadDrafts(userId);
       await loadFavorites(userId);
       await loadOrderVendor(userId);
       await loadMyDishes(userId, { showLoading: !hasLoadedRef.current });
@@ -273,6 +288,7 @@ export default function MyDishesScreen() {
         if (userId) {
           await refreshAvatar(userId);
           await Promise.all([
+            loadDrafts(userId),
             loadFavorites(userId),
             loadOrderVendor(userId),
             loadMyDishes(userId, { showLoading: false }),
@@ -280,6 +296,7 @@ export default function MyDishesScreen() {
         } else {
           setAvatarUrl(null);
           setFavorites({});
+          setDishDrafts([]);
           setDishAssociations([]);
           setOrderVendor(null);
           router.replace('/');
@@ -290,20 +307,21 @@ export default function MyDishesScreen() {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [loadFavorites, loadMyDishes, loadOrderVendor, refreshAvatar, router]);
+  }, [loadDrafts, loadFavorites, loadMyDishes, loadOrderVendor, refreshAvatar, router]);
 
   const refreshContent = useCallback(async () => {
     if (!currentUserId) return;
     setIsRefreshing(true);
     try {
       await Promise.all([
+        loadDrafts(currentUserId),
         loadFavorites(currentUserId),
         loadMyDishes(currentUserId, { showLoading: false }),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [currentUserId, loadFavorites, loadMyDishes]);
+  }, [currentUserId, loadDrafts, loadFavorites, loadMyDishes]);
 
   useFocusEffect(
     useCallback(() => {
@@ -419,6 +437,78 @@ export default function MyDishesScreen() {
     [orderVendor]
   );
 
+  const handleEditDraft = useCallback(
+    (draft: DishAssociationDraft) => {
+      router.push({
+        pathname: '/camera/details',
+        params: {
+          draftId: draft.id,
+          defaultImageUrl: draft.image_url ?? '',
+        },
+      });
+    },
+    [router]
+  );
+
+  const handleDeleteDraft = useCallback(
+    (draft: DishAssociationDraft) => {
+      showAppDialog({
+        title: t('draftDeleteTitle'),
+        message: t('draftDeleteMessage'),
+        actions: [
+          { text: t('commonCancel'), style: 'cancel' },
+          {
+            text: t('commonDelete'),
+            style: 'default',
+            onPress: async () => {
+              try {
+                if (!currentUserId) {
+                  showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
+                  return;
+                }
+                if (draft.image_path) {
+                  await supabase.storage.from('dish-images').remove([draft.image_path]);
+                }
+                await deleteDishDraft(draft.id, currentUserId);
+                setDishDrafts((prev) => prev.filter((item) => item.id !== draft.id));
+              } catch {
+                showAppAlert(t('accountDeleteFailed'), t('accountDeleteFailed'));
+              }
+            },
+          },
+        ],
+      });
+    },
+    [currentUserId, t]
+  );
+
+  const renderDraftSection = useMemo(() => {
+    if (dishDrafts.length === 0) return null;
+    return (
+      <View style={styles.draftSection}>
+        <View style={styles.draftList}>
+          {dishDrafts.map((draft) => (
+            <View key={draft.id} style={styles.draftCardWrap}>
+              <DraftDishCard
+                draft={draft}
+                onEdit={handleEditDraft}
+                onDelete={handleDeleteDraft}
+                onPreviewImage={(item) =>
+                  setImagePreview({
+                    imageUrl: item.image_url ?? null,
+                    imagePath: item.image_path ?? null,
+                    title: item.dish_name ?? null,
+                    subtitle: item.restaurant_name ?? null,
+                  })
+                }
+              />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }, [dishDrafts, handleDeleteDraft, handleEditDraft, isRTL, t]);
+
   const renderMyDish = useCallback(
     ({ item }: { item: DishAssociation[] }) => (
       <DishCard
@@ -502,6 +592,7 @@ export default function MyDishesScreen() {
                 </Text>
               </View>
             </View>
+            {renderDraftSection}
           </View>
         }
         ListEmptyComponent={
@@ -509,7 +600,7 @@ export default function MyDishesScreen() {
             <CrossfadeView style={styles.results}>
               <HomeFeedSkeleton />
             </CrossfadeView>
-          ) : !loading && !error && hasLoaded ? (
+          ) : !loading && !error && hasLoaded && dishDrafts.length === 0 ? (
             <View style={styles.results}>
               <Text style={[styles.placeholderText, !isRTL && styles.placeholderTextLtr]}>
                 {t('commonNoDishesToShow')}
@@ -557,6 +648,16 @@ const styles = StyleSheet.create({
   listHeader: {
     paddingTop: 15,
     paddingBottom: 15,
+  },
+  draftSection: {
+    marginTop: 10,
+    gap: 12,
+  },
+  draftList: {
+    gap: 12,
+  },
+  draftCardWrap: {
+    width: '100%',
   },
   headerRowLtr: {
     flexDirection: 'row-reverse',

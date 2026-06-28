@@ -32,7 +32,7 @@ import DefaultAvatar from './DefaultAvatar';
 import { theme } from '../lib/theme';
 import { applyPaletteFromLogo } from '../lib/brandPalette';
 import { getLegalUrl, useLocale } from '../lib/locale';
-import { fetchGlobalCompanyContext } from '../lib/appData';
+import { fetchDishDraftCount, fetchGlobalCompanyContext } from '../lib/appData';
 import { loadGuestMode, setGuestModeEnabled } from '../lib/guestMode';
 import { publishHomeTab } from '../lib/homeTabs';
 import { showAppAlert } from '../lib/appDialog';
@@ -104,12 +104,14 @@ export default function AppHeader({
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
+  const [pendingDraftCount, setPendingDraftCount] = useState(0);
   const [sessionLogo, setSessionLogo] = useState<ReturnType<typeof getSessionCompanyLogoSnapshot>>(
     getSessionCompanyLogoSnapshot()
   );
   const [resolvedSessionLogoUrl, setResolvedSessionLogoUrl] = useState<string | null>(null);
   const lastPaletteLogoRef = useRef<string | null>(null);
   const syncRunIdRef = useRef(0);
+  const draftCountRequestIdRef = useRef(0);
   const isMenuControlled = typeof menuVisibleOverride === 'boolean';
   const resolvedMenuVisible = isMenuControlled ? menuVisibleOverride : menuVisible;
 
@@ -131,6 +133,22 @@ export default function AppHeader({
   useEffect(() => {
     setMenuAvatarLoadFailed(false);
   }, [avatarUrl]);
+
+  const loadPendingDraftCount = useCallback(async (userId: string | null) => {
+    const requestId = ++draftCountRequestIdRef.current;
+    if (!userId) {
+      setPendingDraftCount(0);
+      return;
+    }
+    try {
+      const nextCount = await fetchDishDraftCount(userId);
+      if (draftCountRequestIdRef.current !== requestId) return;
+      setPendingDraftCount(nextCount);
+    } catch {
+      if (draftCountRequestIdRef.current !== requestId) return;
+      setPendingDraftCount(0);
+    }
+  }, []);
 
   const applyResolvedLogo = useCallback((url: string | null) => {
     setCompanyLogoUrl(url);
@@ -583,20 +601,64 @@ export default function AppHeader({
     setResolvedMenuVisible(true);
   };
 
-  const renderMenuItem = (label: string, icon: React.ReactNode, onPress: () => void) => (
+  const renderHeaderIconFrame = (iconName: 'menu' | 'search', size: number, showBadge = false) => (
+    <View style={styles.headerIconWrap}>
+      <View style={styles.iconButton}>
+        <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
+        <View style={styles.iconButtonTint} />
+        <Ionicons name={iconName} size={size} color={theme.colors.ink} />
+      </View>
+      {showBadge ? (
+        <View style={styles.headerIconBadge}>
+          <Text style={styles.headerIconBadgeText}>
+            {pendingDraftCount > 9 ? '9+' : String(pendingDraftCount)}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const renderMenuItem = (
+    label: string,
+    icon: React.ReactNode,
+    onPress: () => void,
+    options?: { badgeCount?: number }
+  ) => (
     <Pressable
       style={[styles.menuOptionRow, !isRTL && styles.menuOptionRowLtr]}
       onPress={onPress}
     >
       {isRTL ? (
         <>
-          <Text style={[styles.menuOption, { textAlign: 'right' }]}>{label}</Text>
-          {icon}
+          <View style={styles.menuLabelWrap}>
+            <Text style={[styles.menuOption, { textAlign: 'right' }]}>{label}</Text>
+          </View>
+          <View style={styles.menuIconWrap}>
+            {icon}
+            {options?.badgeCount && options.badgeCount > 0 ? (
+              <View style={styles.menuCountBadgeOnIcon}>
+                <Text style={styles.menuCountBadgeOnIconText}>
+                  {options.badgeCount > 9 ? '9+' : String(options.badgeCount)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </>
       ) : (
         <>
-          {icon}
-          <Text style={[styles.menuOption, { textAlign: 'left' }]}>{label}</Text>
+          <View style={styles.menuIconWrap}>
+            {icon}
+            {options?.badgeCount && options.badgeCount > 0 ? (
+              <View style={styles.menuCountBadgeOnIcon}>
+                <Text style={styles.menuCountBadgeOnIconText}>
+                  {options.badgeCount > 9 ? '9+' : String(options.badgeCount)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={[styles.menuLabelWrap, styles.menuLabelWrapLtr]}>
+            <Text style={[styles.menuOption, { textAlign: 'left' }]}>{label}</Text>
+          </View>
         </>
       )}
     </Pressable>
@@ -632,6 +694,10 @@ export default function AppHeader({
       ? `guest:${guestModeParam || '0'}:${skipLaunchParam}`
       : `logged-out:${skipLaunchParam}`;
 
+  useEffect(() => {
+    void loadPendingDraftCount(effectiveCurrentUserId ?? null);
+  }, [effectiveCurrentUserId, loadPendingDraftCount, pathname, refreshParam, headerSyncParam]);
+
   if (!shouldShowHeader) {
     return null;
   }
@@ -643,17 +709,9 @@ export default function AppHeader({
     >
       <View style={styles.leftIcons} pointerEvents="none">
         {!isRTL ? (
-          <View style={styles.iconButton}>
-            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
-            <View style={styles.iconButtonTint} />
-            <Ionicons name="menu" size={28} color={theme.colors.ink} />
-          </View>
+          renderHeaderIconFrame('menu', 28, shouldShowAuthenticatedMenu && pendingDraftCount > 0)
         ) : (
-          <View style={styles.iconButton}>
-            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
-            <View style={styles.iconButtonTint} />
-            <Ionicons name="search" size={24} color={theme.colors.ink} />
-          </View>
+          renderHeaderIconFrame('search', 24)
         )}
       </View>
       <View
@@ -686,17 +744,9 @@ export default function AppHeader({
       </View>
       <View style={styles.rightIcons} pointerEvents="none">
         {isRTL ? (
-          <View style={styles.iconButton}>
-            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
-            <View style={styles.iconButtonTint} />
-            <Ionicons name="menu" size={28} color={theme.colors.ink} />
-          </View>
+          renderHeaderIconFrame('menu', 28, shouldShowAuthenticatedMenu && pendingDraftCount > 0)
         ) : (
-          <View style={styles.iconButton}>
-            <BlurView intensity={42} tint="light" style={styles.iconButtonBlur} />
-            <View style={styles.iconButtonTint} />
-            <Ionicons name="search" size={24} color={theme.colors.ink} />
-          </View>
+          renderHeaderIconFrame('search', 24)
         )}
       </View>
       {!externalTouchHandling ? (
@@ -767,7 +817,8 @@ export default function AppHeader({
                   () => {
                     setResolvedMenuVisible(false);
                     router.push('/my-dishes');
-                  }
+                  },
+                  { badgeCount: pendingDraftCount }
                 )
               : null}
             {renderMenuItem(
@@ -918,6 +969,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 4,
   },
+  headerIconWrap: {
+    width: 40,
+    height: 40,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   iconButton: {
     height: 40,
     width: 40,
@@ -928,6 +986,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.30)',
     backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  headerIconBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    minWidth: Platform.OS === 'ios' ? 16 : 14,
+    height: Platform.OS === 'ios' ? 16 : 14,
+    borderRadius: Platform.OS === 'ios' ? 8 : 7,
+    paddingHorizontal: Platform.OS === 'ios' ? 2 : 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.accent,
+    borderWidth: 1,
+    borderColor: theme.colors.card,
+  },
+  headerIconBadgeText: {
+    color: theme.colors.white,
+    fontSize: Platform.OS === 'ios' ? 7 : 8,
+    fontFamily: Platform.OS === 'ios' ? undefined : theme.typography.bold,
+    fontWeight: Platform.OS === 'ios' ? '700' : undefined,
+    lineHeight: Platform.OS === 'ios' ? 9 : 9,
+    textAlign: 'center',
+    transform: [{ translateY: Platform.OS === 'ios' ? 0.25 : 0 }],
   },
   iconButtonBlur: {
     ...StyleSheet.absoluteFillObject,
@@ -1039,6 +1120,45 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     flex: 1,
     fontFamily: theme.typography.semibold,
+  },
+  menuLabelWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  menuLabelWrapLtr: {
+    justifyContent: 'flex-start',
+  },
+  menuIconWrap: {
+    width: 24,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuCountBadgeOnIcon: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? -4 : -5,
+    right: Platform.OS === 'ios' ? -7 : -8,
+    minWidth: Platform.OS === 'ios' ? 16 : 14,
+    height: Platform.OS === 'ios' ? 16 : 14,
+    borderRadius: Platform.OS === 'ios' ? 8 : 7,
+    paddingHorizontal: Platform.OS === 'ios' ? 2 : 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.accent,
+    borderWidth: 1,
+    borderColor: theme.colors.card,
+  },
+  menuCountBadgeOnIconText: {
+    color: theme.colors.white,
+    fontSize: Platform.OS === 'ios' ? 7 : 8,
+    fontFamily: Platform.OS === 'ios' ? undefined : theme.typography.bold,
+    fontWeight: Platform.OS === 'ios' ? '700' : undefined,
+    lineHeight: Platform.OS === 'ios' ? 9 : 9,
+    textAlign: 'center',
+    transform: [{ translateY: Platform.OS === 'ios' ? 0.25 : 0 }],
   },
   menuOptionDanger: {
     color: theme.colors.danger,

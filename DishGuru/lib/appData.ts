@@ -25,6 +25,22 @@ type GuestFeedSnapshot = {
   source?: string;
 };
 
+export type DishAssociationDraft = {
+  id: string;
+  user_id: string | null;
+  image_url: string | null;
+  image_path: string | null;
+  restaurant_id: number | null;
+  restaurant_name: string | null;
+  dish_id: number | null;
+  dish_name: string | null;
+  review_text: string | null;
+  tasty_score: number | null;
+  filling_score: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 let guestFeedSnapshotPromise: Promise<GuestFeedSnapshot | null> | null = null;
 const SIMPLE_CACHE_TTL_MS = 60 * 1000;
 
@@ -140,6 +156,90 @@ export const fetchFavoritesMap = async (userId: string) => {
     if (row?.dish_association_id) map[String(row.dish_association_id)] = true;
   });
   return map;
+};
+
+export const fetchDishDrafts = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('dish_association_drafts')
+    .select(
+      'id, user_id, image_url, image_path, restaurant_id, restaurant_name, dish_id, dish_name, review_text, tasty_score, filling_score, created_at, updated_at'
+    )
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+  return (data as DishAssociationDraft[]) ?? [];
+};
+
+export const fetchDishDraftCount = async (userId: string) => {
+  const { count, error } = await supabase
+    .from('dish_association_drafts')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) throw error;
+  return count ?? 0;
+};
+
+export const fetchDishDraftById = async (draftId: string, userId: string) => {
+  const { data, error } = await supabase
+    .from('dish_association_drafts')
+    .select(
+      'id, user_id, image_url, image_path, restaurant_id, restaurant_name, dish_id, dish_name, review_text, tasty_score, filling_score, created_at, updated_at'
+    )
+    .eq('id', draftId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data as DishAssociationDraft | null) ?? null;
+};
+
+export const saveDishDraft = async (
+  payload: Omit<DishAssociationDraft, 'id' | 'created_at' | 'updated_at'>
+) => {
+  const { data, error } = await supabase
+    .from('dish_association_drafts')
+    .insert(payload)
+    .select(
+      'id, user_id, image_url, image_path, restaurant_id, restaurant_name, dish_id, dish_name, review_text, tasty_score, filling_score, created_at, updated_at'
+    )
+    .single();
+
+  if (error) throw error;
+  return data as DishAssociationDraft;
+};
+
+export const updateDishDraft = async (
+  draftId: string,
+  userId: string,
+  payload: Partial<Omit<DishAssociationDraft, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+) => {
+  const { data, error } = await supabase
+    .from('dish_association_drafts')
+    .update({
+      ...payload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', draftId)
+    .eq('user_id', userId)
+    .select(
+      'id, user_id, image_url, image_path, restaurant_id, restaurant_name, dish_id, dish_name, review_text, tasty_score, filling_score, created_at, updated_at'
+    )
+    .single();
+
+  if (error) throw error;
+  return data as DishAssociationDraft;
+};
+
+export const deleteDishDraft = async (draftId: string, userId: string) => {
+  const { error } = await supabase
+    .from('dish_association_drafts')
+    .delete()
+    .eq('id', draftId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
 };
 
 export const fetchCompanyIdForUser = async (userId: string) => {

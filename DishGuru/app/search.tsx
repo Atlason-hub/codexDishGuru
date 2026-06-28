@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { fetchCompanyIdForUser, fetchGlobalCompanyContext, fetchVisibleDishes } from '../lib/appData';
 import { showAppDialog } from '../lib/appDialog';
+import { loadGuestMode } from '../lib/guestMode';
 import { useLocale } from '../lib/locale';
 import {
   useDebouncedValue,
@@ -299,6 +300,7 @@ export default function SearchScreen() {
   const restaurantCollapsedBeforeSearchRef = useRef<Set<string> | null>(null);
   const menuRequestIdRef = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [restaurantDropdownOpen, setRestaurantDropdownOpen] = useState(false);
@@ -342,18 +344,28 @@ export default function SearchScreen() {
     const syncAuthState = async () => {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
-      setIsAuthenticated(Boolean(data.session?.user));
-      setCurrentUserId(data.session?.user?.id ?? null);
-      setCurrentUserEmail(data.session?.user?.email ?? null);
+      const sessionUser = data.session?.user ?? null;
+      const guestEnabled = !sessionUser ? await loadGuestMode() : false;
+      if (!mounted) return;
+      setIsAuthenticated(Boolean(sessionUser));
+      setIsGuestMode(guestEnabled);
+      setCurrentUserId(sessionUser?.id ?? null);
+      setCurrentUserEmail(sessionUser?.email ?? null);
     };
-    syncAuthState();
+    void syncAuthState();
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setIsAuthenticated(Boolean(session?.user));
-      setCurrentUserId(session?.user?.id ?? null);
-      setCurrentUserEmail(session?.user?.email ?? null);
+      void (async () => {
+        if (!mounted) return;
+        const sessionUser = session?.user ?? null;
+        const guestEnabled = !sessionUser ? await loadGuestMode() : false;
+        if (!mounted) return;
+        setIsAuthenticated(Boolean(sessionUser));
+        setIsGuestMode(guestEnabled);
+        setCurrentUserId(sessionUser?.id ?? null);
+        setCurrentUserEmail(sessionUser?.email ?? null);
+      })();
     });
     return () => {
       mounted = false;
@@ -683,6 +695,7 @@ export default function SearchScreen() {
       <View style={styles.headerShell}>
         <AppHeader
           isAuthenticatedOverride={isAuthenticated}
+          isGuestModeOverride={isGuestMode}
           currentUserIdOverride={currentUserId}
           currentUserEmailOverride={currentUserEmail}
         />
