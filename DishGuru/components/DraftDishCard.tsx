@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import CachedLogo from './CachedLogo';
 import { DishAssociationDraft } from '../lib/appData';
 import { theme } from '../lib/theme';
@@ -47,6 +48,11 @@ export default function DraftDishCard({
             <Text style={styles.datePillText}>{createdAt}</Text>
           </View>
         ) : null}
+          <LinearGradient
+            colors={['rgba(0,0,0,0.7)', 'rgba(0,0,0,0.0)']}
+            style={styles.imageGradient}
+            pointerEvents="none"
+          />
           <View style={[styles.imageTextOverlay, !isRTL && styles.imageTextOverlayLtr]}>
             <Text style={[styles.title, !isRTL && styles.titleLtr]}>
               {t('draftUntitledDish')}
@@ -95,6 +101,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  imageGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    zIndex: 1,
+  },
   imagePlaceholder: {
     flex: 1,
     alignItems: 'center',
@@ -114,6 +128,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.30)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
   datePillLtr: {
     left: 'auto',
@@ -131,6 +146,7 @@ const styles = StyleSheet.create({
     right: 12,
     maxWidth: '62%',
     alignItems: 'flex-end',
+    zIndex: 2,
   },
   imageTextOverlayLtr: {
     right: 'auto',
