@@ -280,6 +280,7 @@ export default function CameraDetailsScreen() {
       : null;
   const draftIdParam = typeof params.draftId === 'string' && params.draftId ? params.draftId : null;
   const lockSelection = params.lockSelection === '1';
+  const disableDrafts = params.disableDrafts === '1' && !draftIdParam;
   const reviewTextParam = typeof params.reviewText === 'string' ? params.reviewText : '';
   const tastyScoreParam = typeof params.tastyScore === 'string' ? Number(params.tastyScore) : NaN;
   const fillingScoreParam = typeof params.fillingScore === 'string' ? Number(params.fillingScore) : NaN;
@@ -320,7 +321,7 @@ export default function CameraDetailsScreen() {
     dishCategories.every((cat) => collapsedDishCategories.has(cat.id));
   const hasDisplayImage = Boolean(photoUri || storedImageUrl);
   const canFinalizeSave = hasDisplayImage && Boolean(selectedRestaurantId && selectedDish && selectedDish.id > 0);
-  const canSaveDraft = hasDisplayImage;
+  const canSaveDraft = hasDisplayImage && !disableDrafts;
 
   useEnableAndroidLayoutAnimation();
 
@@ -829,6 +830,7 @@ export default function CameraDetailsScreen() {
                   dishId: selectedDish?.id ? String(selectedDish.id) : '',
                   dishName: selectedDish?.name ?? '',
                   lockSelection: lockSelection ? '1' : '',
+                  disableDrafts: disableDrafts ? '1' : '',
                   draftId: draftIdParam ?? '',
                   reviewText,
                   tastyScore: String(tastyScore),
@@ -1217,22 +1219,25 @@ export default function CameraDetailsScreen() {
           <Text style={styles.saveHintText}>{t('cameraAssociationRequiredToSave')}</Text>
         ) : null}
         <View style={[styles.footerActionsRow, !isRTL && styles.footerActionsRowLtr]}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.secondarySaveButton,
-            !isRTL && styles.secondarySaveButtonLtr,
-            pressed && !saving && canSaveDraft && styles.secondarySaveButtonPressed,
-            (saving || !canSaveDraft) && styles.secondarySaveButtonDisabled,
-          ]}
-          onPress={handleSaveDraft}
-          disabled={saving || saveInFlightRef.current || !canSaveDraft}
-        >
-          <Text style={styles.secondarySaveButtonText}>{t('cameraSaveForLater')}</Text>
-        </Pressable>
+        {!disableDrafts ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.secondarySaveButton,
+              !isRTL && styles.secondarySaveButtonLtr,
+              pressed && !saving && canSaveDraft && styles.secondarySaveButtonPressed,
+              (saving || !canSaveDraft) && styles.secondarySaveButtonDisabled,
+            ]}
+            onPress={handleSaveDraft}
+            disabled={saving || saveInFlightRef.current || !canSaveDraft}
+          >
+            <Text style={styles.secondarySaveButtonText}>{t('cameraSaveForLater')}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           style={({ pressed }) => [
             styles.saveButton,
             !isRTL && styles.saveButtonLtr,
+            disableDrafts && styles.saveButtonSingle,
             pressed && !saving && canFinalizeSave && styles.saveButtonPressed,
             (saving || !canFinalizeSave) && styles.saveButtonDisabled,
           ]}
@@ -1706,6 +1711,9 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.6,
+  },
+  saveButtonSingle: {
+    flex: 1,
   },
   saveButtonText: {
     fontSize: 16,

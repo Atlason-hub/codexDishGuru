@@ -542,6 +542,7 @@ export default function DishScreen() {
           dishId: dish.dish_id !== null ? String(dish.dish_id) : '',
           dishName: dish.dish_name ?? '',
           lockSelection: '1',
+          disableDrafts: '1',
         },
       });
     },
