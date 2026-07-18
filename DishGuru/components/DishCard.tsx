@@ -306,11 +306,6 @@ function DishCard({
             style={styles.imageGradient}
             pointerEvents="none"
           />
-          <LinearGradient
-            colors={['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.45)']}
-            style={styles.imageGradientBottom}
-            pointerEvents="none"
-          />
           <View
             style={[
               styles.leftButtonStack,
@@ -700,14 +695,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 100,
-    zIndex: 2,
-  },
-  imageGradientBottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     height: 100,
     zIndex: 2,
   },
