@@ -198,7 +198,7 @@ export default function MyDishesScreen() {
       const { data, error: fetchError } = await supabase
         .from('dish_associations')
         .select(
-          'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at'
+          'id, user_id, dish_id, image_url, image_path, dish_name, restaurant_name, restaurant_id, tasty_score, filling_score, created_at, review_text'
         )
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
@@ -508,7 +508,7 @@ export default function MyDishesScreen() {
         </View>
       </View>
     );
-  }, [dishDrafts, handleDeleteDraft, handleEditDraft, isRTL, t]);
+  }, [dishDrafts, handleDeleteDraft, handleEditDraft]);
 
   const renderMyDish = useCallback(
     ({ item }: { item: DishAssociation[] }) => (
@@ -519,6 +519,7 @@ export default function MyDishesScreen() {
         avatarUrl={avatarUrl}
         userAvatars={{}}
         userLabels={{}}
+        showReview
         onAvatarPress={handleAvatarPress}
         onToggleFavorite={handleToggleFavorite}
         onOpenPhoto={handleOpenDish}
