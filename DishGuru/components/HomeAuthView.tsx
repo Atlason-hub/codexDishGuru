@@ -161,26 +161,24 @@ export default function HomeAuthView({
                 </Pressable>
               </View>
             </View>
-            {showSignup ? (
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                  {t('authGroupCode')}
-                </Text>
-                <View style={styles.inputRow}>
-                  <TextInput
-                    style={styles.inputField}
-                    autoCapitalize="characters"
-                    value={groupCode}
-                    onChangeText={onGroupCodeChange}
-                    placeholder={t('authGroupCodeOptional')}
-                    textAlign="left"
-                    autoCorrect={false}
-                    selectionColor={theme.colors.accent}
-                    cursorColor={theme.colors.accent}
-                  />
-                </View>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                {t('authGroupCode')}
+              </Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.inputField}
+                  autoCapitalize="characters"
+                  value={groupCode}
+                  onChangeText={onGroupCodeChange}
+                  placeholder={t('authGroupCodeOptional')}
+                  textAlign="left"
+                  autoCorrect={false}
+                  selectionColor={theme.colors.accent}
+                  cursorColor={theme.colors.accent}
+                />
               </View>
-            ) : null}
+            </View>
             {showSignup ? (
               <View style={styles.fieldGroup}>
                 <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>

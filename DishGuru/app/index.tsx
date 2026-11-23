@@ -784,12 +784,14 @@ export default function HomeScreen() {
       throw existingProfileError;
     }
 
-    if (existingProfile?.user_id && existingProfile.group_id) {
+    const explicitlyRequestedGroupCode = requestedGroupCode?.trim() ?? '';
+
+    if (existingProfile?.user_id && existingProfile.group_id && !explicitlyRequestedGroupCode) {
       primeCompanyIdForUser(userId, existingProfile.group_id ?? null);
       return;
     }
 
-    let normalizedGroupCode = requestedGroupCode?.trim() ?? '';
+    let normalizedGroupCode = explicitlyRequestedGroupCode;
     if (!normalizedGroupCode) {
       const { data: authData } = await supabase.auth.getUser();
       normalizedGroupCode = String(authData.user?.user_metadata?.group_code ?? '').trim();
@@ -1670,6 +1672,18 @@ export default function HomeScreen() {
     try {
       setAuthLoading(true);
       setAuthError(null);
+      const normalizedGroupCode = groupCode.trim().toUpperCase();
+      if (normalizedGroupCode) {
+        const { data: matchedGroups, error: groupError } = await supabase.rpc('resolve_group_code', {
+          p_code: normalizedGroupCode,
+        });
+        if (groupError) throw groupError;
+        const matchedGroup = Array.isArray(matchedGroups) ? matchedGroups[0] : matchedGroups;
+        if (!matchedGroup?.id) {
+          setAuthError(t('authGroupCodeInvalid'));
+          return;
+        }
+      }
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: pass,
@@ -1699,12 +1713,16 @@ export default function HomeScreen() {
       setShowSignup(false);
       if (sessionUser?.id) {
         await waitForStableSessionUser(sessionUser.id);
+        if (normalizedGroupCode) {
+          await ensureAppUserProfile(sessionUser.id, sessionUser.email ?? null, normalizedGroupCode);
+        }
         await hydrateSignedInHome(
           sessionUser.id,
           sessionUser.email ?? null,
           data.session?.access_token ?? null
         );
       }
+      setGroupCode('');
     } catch (err) {
       setAuthHydrating(false);
       const message = err instanceof Error ? err.message : t('authLoginFailed');
