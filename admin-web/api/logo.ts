@@ -54,12 +54,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { companyId, filename, contentType, dataBase64 } = req.body || {};
+    const { companyId, entityType, filename, contentType, dataBase64 } = req.body || {};
     if (!companyId || !filename || !dataBase64) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const path = `companies/${companyId}/${filename}`;
+    const folder = entityType === "groups" ? "groups" : "companies";
+    const path = `${folder}/${companyId}/${filename}`;
     const buffer = Buffer.from(dataBase64, "base64");
 
     try {

@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === "GET") {
-      const response = await fetch(`${base}?select=*`, {
+      const response = await fetch(`${base}?select=*&group_type=eq.domain`, {
         headers: {
           apikey: SERVICE_ROLE,
           Authorization: `Bearer ${SERVICE_ROLE}`
@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const companies = JSON.parse(text) as Array<Record<string, unknown>>;
       const usersResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/${APP_USERS_TABLE}?select=company_id`,
+        `${SUPABASE_URL}/rest/v1/${APP_USERS_TABLE}?select=company_id,group_id`,
         {
           headers: {
             apikey: SERVICE_ROLE,
@@ -44,10 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(usersResponse.status).send(usersText);
       }
 
-      const appUsers = JSON.parse(usersText) as Array<{ company_id?: string | null }>;
+      const appUsers = JSON.parse(usersText) as Array<{ company_id?: string | null; group_id?: string | null }>;
       const counts = new Map<string, number>();
 
       for (const user of appUsers) {
+        if (user.group_id) continue;
         const companyId = user.company_id;
         if (!companyId) continue;
         counts.set(companyId, (counts.get(companyId) ?? 0) + 1);

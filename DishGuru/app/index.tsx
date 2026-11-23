@@ -131,6 +131,7 @@ const fetchBootstrapCompanyByDomain = async (domain: string, accessToken?: strin
     new URLSearchParams({
       select: 'id,logo_url,order_vendor',
       domain: `ilike.${domain}`,
+      group_type: 'eq.domain',
       limit: '1',
     }).toString();
   const response = await fetch(url, { headers: buildBootstrapHeaders(accessToken) });
@@ -236,6 +237,7 @@ export default function HomeScreen() {
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
+  const [groupCode, setGroupCode] = useState('');
   const [showSignup, setShowSignup] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [legalModal, setLegalModal] = useState<{ title: string; url: string } | null>(null);
@@ -336,6 +338,7 @@ export default function HomeScreen() {
     setEmail('');
     setPass('');
     setConfirmPass('');
+    setGroupCode('');
     setShowPass(false);
     setShowConfirmPass(false);
     setAcceptedTerms(false);
@@ -465,6 +468,7 @@ export default function HomeScreen() {
                   .from('companies')
                   .select('id')
                   .ilike('domain', domain)
+                  .eq('group_type', 'domain')
                   .limit(1)
                   .maybeSingle())(),
               HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
@@ -765,13 +769,13 @@ export default function HomeScreen() {
     });
   }, [currentUserId, t]);
 
-  const ensureAppUserProfile = useCallback(async (userId: string, emailAddress: string | null | undefined) => {
+  const ensureAppUserProfile = useCallback(async (userId: string, emailAddress: string | null | undefined, requestedGroupCode?: string | null) => {
     const normalizedEmail = emailAddress?.trim().toLowerCase() ?? '';
     if (!userId || !normalizedEmail) return;
 
     const { data: existingProfile, error: existingProfileError } = await supabase
       .from('AppUsers')
-      .select('user_id, email, company_id')
+      .select('user_id, email, company_id, group_id')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -779,6 +783,36 @@ export default function HomeScreen() {
 
     if (existingProfileError) {
       throw existingProfileError;
+    }
+
+    if (existingProfile?.user_id && existingProfile.group_id) {
+      primeCompanyIdForUser(userId, existingProfile.group_id ?? null);
+      return;
+    }
+
+    let normalizedGroupCode = requestedGroupCode?.trim() ?? '';
+    if (!normalizedGroupCode) {
+      const { data: authData } = await supabase.auth.getUser();
+      normalizedGroupCode = String(authData.user?.user_metadata?.group_code ?? '').trim();
+    }
+    if (normalizedGroupCode) {
+      const { data: matchedGroups, error: groupError } = await supabase.rpc('resolve_group_code', {
+        p_code: normalizedGroupCode,
+      });
+      if (groupError) throw groupError;
+      const matchedGroup = Array.isArray(matchedGroups) ? matchedGroups[0] : matchedGroups;
+      if (!matchedGroup?.id) throw new Error('invalid group code');
+      const profileValues = { user_id: userId, email: normalizedEmail, group_id: matchedGroup.id };
+      if (existingProfile?.user_id) {
+        const { error: updateError } = await supabase.from('AppUsers').update(profileValues).eq('user_id', userId);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase.from('AppUsers').insert(profileValues);
+        if (insertError) throw insertError;
+      }
+      clearUserScopedCaches(userId);
+      primeCompanyIdForUser(userId, matchedGroup.id);
+      return;
     }
 
     if (existingProfile?.user_id && existingProfile.company_id) {
@@ -795,6 +829,7 @@ export default function HomeScreen() {
       .from('companies')
       .select('id')
       .ilike('domain', domain)
+      .eq('group_type', 'domain')
       .limit(1)
       .maybeSingle();
 
@@ -869,8 +904,24 @@ export default function HomeScreen() {
         let companyIdFromDomain: string | null = null;
         let bootstrapCompanyLogoPath: string | null = null;
         let bootstrapOrderVendor: string | null = null;
+        const groupLookup = await withTimeout(
+          (async () => await supabase.from('AppUsers').select('group_id').eq('user_id', userId).not('group_id', 'is', null).order('updated_at', { ascending: false }).limit(1).maybeSingle())(),
+          2000,
+          { data: null, error: null } as any
+        );
+        const savedGroupId = groupLookup.data?.group_id ?? null;
+        if (savedGroupId) {
+          companyIdFromDomain = savedGroupId;
+          primeCompanyIdForUser(userId, savedGroupId);
+          const bootstrapGroup = await withTimeout(fetchBootstrapCompanyById(savedGroupId, accessToken), HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS, null);
+          bootstrapCompanyLogoPath = bootstrapGroup?.logo_url ?? null;
+          bootstrapOrderVendor = bootstrapGroup?.order_vendor ?? null;
+          setCompanyLogoPath(bootstrapCompanyLogoPath);
+          setCompanyLogoUrl(resolveLogoUrl(bootstrapCompanyLogoPath));
+          setOrderVendor(bootstrapOrderVendor);
+        }
         const domain = getEmailDomain(emailAddress ?? null);
-        if (domain) {
+        if (!companyIdFromDomain && domain) {
           const bootstrapCompany = await withTimeout(
             fetchBootstrapCompanyByDomain(domain, accessToken),
             HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
@@ -891,16 +942,15 @@ export default function HomeScreen() {
             (async () =>
               await supabase
                 .from('AppUsers')
-                .select('company_id')
+                .select('group_id,company_id')
                 .or(`user_id.eq.${userId},email.ilike.${(emailAddress ?? '').trim().toLowerCase()}`)
-                .not('company_id', 'is', null)
                 .order('updated_at', { ascending: false })
                 .limit(1)
                 .maybeSingle())(),
             2000,
             { data: null, error: null } as any
           );
-          const appUserCompanyId = appUserLookup.data?.company_id ?? null;
+          const appUserCompanyId = appUserLookup.data?.group_id ?? appUserLookup.data?.company_id ?? null;
           if (appUserCompanyId) {
             companyIdFromDomain = appUserCompanyId;
             primeCompanyIdForUser(userId, appUserCompanyId);
@@ -1391,22 +1441,7 @@ export default function HomeScreen() {
     startupRecoveryTriedRef.current = true;
     void (async () => {
       try {
-        const domain = getEmailDomain(currentUserEmail);
-        if (!domain) {
-          return;
-        }
-        const domainLookup = await withTimeout(
-          (async () =>
-            await supabase
-              .from('companies')
-              .select('id')
-              .ilike('domain', domain)
-              .limit(1)
-              .maybeSingle())(),
-          HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS,
-          { data: null, error: null } as any
-        );
-        const companyId = domainLookup.data?.id ?? null;
+        const companyId = await fetchCompanyIdForUser(currentUserId);
         if (!companyId) {
           return;
         }
@@ -1706,14 +1741,20 @@ export default function HomeScreen() {
     try {
       setAuthLoading(true);
       setAuthError(null);
-      const { data: companyMatch, error: companyError } = await supabase
-        .from('companies')
-        .select('id')
-        .ilike('domain', domainPart)
-        .limit(1)
-        .maybeSingle();
-      if (companyError) {
-        throw companyError;
+      const normalizedGroupCode = groupCode.trim().toUpperCase();
+      let companyMatch: { id: string } | null = null;
+      if (normalizedGroupCode) {
+        const { data: matchedGroups, error: groupError } = await supabase.rpc('resolve_group_code', { p_code: normalizedGroupCode });
+        if (groupError) throw groupError;
+        companyMatch = (Array.isArray(matchedGroups) ? matchedGroups[0] : matchedGroups) ?? null;
+        if (!companyMatch?.id) {
+          setAuthError(t('authGroupCodeInvalid'));
+          return;
+        }
+      } else {
+        const { data, error: companyError } = await supabase.from('companies').select('id').ilike('domain', domainPart).eq('group_type', 'domain').limit(1).maybeSingle();
+        if (companyError) throw companyError;
+        companyMatch = data;
       }
       if (!companyMatch?.id) {
         setAuthError(t('authEmailDomainUnknown'));
@@ -1755,7 +1796,7 @@ export default function HomeScreen() {
         password: pass,
         options: {
           emailRedirectTo: redirectTo,
-          data: { preferred_locale: locale },
+          data: { preferred_locale: locale, group_code: normalizedGroupCode || null },
         },
       });
       if (error) {
@@ -1775,7 +1816,7 @@ export default function HomeScreen() {
         throw new Error(t('authSignupFailed'));
       }
       if (supabaseUserId && data.session) {
-        await ensureAppUserProfile(supabaseUserId, trimmedEmail);
+        await ensureAppUserProfile(supabaseUserId, trimmedEmail, normalizedGroupCode);
       }
       if (!data.session && data.user) {
         showAppDialog({
@@ -1790,6 +1831,7 @@ export default function HomeScreen() {
       setShowSignup(false);
       setPass('');
       setConfirmPass('');
+      setGroupCode('');
       setAcceptedTerms(false);
     } catch (err) {
       const authApiError =
@@ -2151,6 +2193,7 @@ export default function HomeScreen() {
           email={email}
           pass={pass}
           confirmPass={confirmPass}
+          groupCode={groupCode}
           showSignup={showSignup}
           acceptedTerms={acceptedTerms}
           showPass={showPass}
@@ -2161,6 +2204,7 @@ export default function HomeScreen() {
           onEmailChange={setEmail}
           onPassChange={setPass}
           onConfirmPassChange={setConfirmPass}
+          onGroupCodeChange={setGroupCode}
           onToggleShowPass={() => setShowPass((v) => !v)}
           onToggleShowConfirmPass={() => setShowConfirmPass((v) => !v)}
           onToggleAcceptedTerms={() => setAcceptedTerms((value) => !value)}

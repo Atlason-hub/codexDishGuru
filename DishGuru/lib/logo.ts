@@ -211,6 +211,7 @@ const fetchCompanyByDomain = async (domain: string | null) => {
     .from('companies')
     .select('id, domain, logo_url, order_vendor')
     .ilike('domain', domain)
+    .eq('group_type', 'domain')
     .limit(1)
     .maybeSingle();
   return (company as CompanyRow | null) ?? null;
@@ -234,19 +235,24 @@ export const resolveCompanyLogoForUser = async (
     return emptyCompanyLogo(email);
   }
 
+  const { data: profile } = await supabase
+    .from('AppUsers')
+    .select('group_id,company_id')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const groupId = profile?.group_id ?? null;
+  if (groupId) {
+    return toCompanyLogo(await fetchCompanyById(groupId), email, 'company_id', groupId);
+  }
+
   const domain = getEmailDomain(email);
   const companyByDomain = await fetchCompanyByDomain(domain);
   if (companyByDomain) {
     return toCompanyLogo(companyByDomain, email, 'domain', null);
   }
 
-  const { data: profile } = await supabase
-    .from('AppUsers')
-    .select('company_id')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
   const appUserCompanyId = profile?.company_id ?? null;
   const companyById = await fetchCompanyById(appUserCompanyId);
   return toCompanyLogo(companyById, email, appUserCompanyId ? 'company_id' : 'none', appUserCompanyId);

@@ -9,6 +9,7 @@ type Props = {
   email: string;
   pass: string;
   confirmPass: string;
+  groupCode: string;
   showSignup: boolean;
   acceptedTerms: boolean;
   showPass: boolean;
@@ -19,6 +20,7 @@ type Props = {
   onEmailChange: (value: string) => void;
   onPassChange: (value: string) => void;
   onConfirmPassChange: (value: string) => void;
+  onGroupCodeChange: (value: string) => void;
   onToggleShowPass: () => void;
   onToggleShowConfirmPass: () => void;
   onToggleAcceptedTerms: () => void;
@@ -38,6 +40,7 @@ export default function HomeAuthView({
   email,
   pass,
   confirmPass,
+  groupCode,
   showSignup,
   acceptedTerms,
   showPass,
@@ -48,6 +51,7 @@ export default function HomeAuthView({
   onEmailChange,
   onPassChange,
   onConfirmPassChange,
+  onGroupCodeChange,
   onToggleShowPass,
   onToggleShowConfirmPass,
   onToggleAcceptedTerms,
@@ -157,6 +161,26 @@ export default function HomeAuthView({
                 </Pressable>
               </View>
             </View>
+            {showSignup ? (
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                  {t('authGroupCode')}
+                </Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.inputField}
+                    autoCapitalize="characters"
+                    value={groupCode}
+                    onChangeText={onGroupCodeChange}
+                    placeholder={t('authGroupCodeOptional')}
+                    textAlign="left"
+                    autoCorrect={false}
+                    selectionColor={theme.colors.accent}
+                    cursorColor={theme.colors.accent}
+                  />
+                </View>
+              </View>
+            ) : null}
             {showSignup ? (
               <View style={styles.fieldGroup}>
                 <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>

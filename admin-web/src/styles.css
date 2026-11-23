@@ -436,6 +436,27 @@ h1 {
   padding: 1rem 1.1rem;
 }
 
+.group-table .company-table-row {
+  grid-template-columns: minmax(180px, 1.25fr) minmax(70px, 0.42fr) minmax(100px, 0.7fr) minmax(100px, 0.72fr) minmax(130px, 0.95fr) minmax(110px, 0.85fr) minmax(140px, 0.95fr) minmax(170px, 1fr);
+}
+
+.group-code-cell {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.inline-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+}
+
+.inline-field .ghost {
+  min-width: auto;
+  padding-inline: 0.85rem;
+}
+
 .company-table-header {
   background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
   border-bottom: 1px solid var(--line);

@@ -11,7 +11,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   try {
     const rows = await fetchSupabaseJson<Array<{ user_id?: string | null; email?: string | null }>>(
       env,
-      `${APP_USERS_TABLE}?select=user_id,email&company_id=eq.${encodeURIComponent(companyId)}&order=email.asc.nullslast`
+      `${APP_USERS_TABLE}?select=user_id,email&company_id=eq.${encodeURIComponent(companyId)}&group_id=is.null&order=email.asc.nullslast`
     );
 
     return json(

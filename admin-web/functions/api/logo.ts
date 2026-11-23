@@ -48,17 +48,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
 export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
   const body = (await request.json()) as {
     companyId?: string;
+    entityType?: string;
     filename?: string;
     contentType?: string;
     dataBase64?: string;
   };
 
-  const { companyId, filename, contentType, dataBase64 } = body;
+  const { companyId, entityType, filename, contentType, dataBase64 } = body;
   if (!companyId || !filename || !dataBase64) {
     return json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  const path = `companies/${companyId}/${filename}`;
+  const folder = entityType === "groups" ? "groups" : "companies";
+  const path = `${folder}/${companyId}/${filename}`;
 
   try {
     const { supabaseUrl, serviceRole } = requireSupabase(env);

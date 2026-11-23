@@ -8,14 +8,15 @@ export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
 
   try {
     if (request.method === "GET") {
-      const companies = await fetchSupabaseJson<Array<Record<string, unknown>>>(env, `${base}?select=*`);
+      const companies = await fetchSupabaseJson<Array<Record<string, unknown>>>(env, `${base}?select=*&group_type=eq.domain`);
       const appUsers = await fetchSupabaseJson<Array<{ company_id?: string | null }>>(
         env,
-        `${APP_USERS_TABLE}?select=company_id`
+        `${APP_USERS_TABLE}?select=company_id,group_id`
       );
 
       const counts = new Map<string, number>();
       for (const user of appUsers) {
+        if ((user as { group_id?: string | null }).group_id) continue;
         const companyId = user.company_id;
         if (!companyId) continue;
         counts.set(companyId, (counts.get(companyId) ?? 0) + 1);

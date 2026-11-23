@@ -249,24 +249,23 @@ export const fetchCompanyIdForUser = async (userId: string) => {
   }
   const { data: preferredProfile, error: preferredProfileError } = await supabase
     .from('AppUsers')
-    .select('company_id')
+    .select('group_id,company_id')
     .eq('user_id', userId)
-    .not('company_id', 'is', null)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (preferredProfileError) return null;
-  let companyId = preferredProfile?.company_id ?? null;
+  let companyId = preferredProfile?.group_id ?? preferredProfile?.company_id ?? null;
   if (!companyId) {
     const { data: profile, error: profileError } = await supabase
       .from('AppUsers')
-      .select('company_id')
+      .select('group_id,company_id')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (profileError) return null;
-    companyId = profile?.company_id ?? null;
+    companyId = profile?.group_id ?? profile?.company_id ?? null;
   }
   if (!companyId) {
     try {
@@ -279,6 +278,7 @@ export const fetchCompanyIdForUser = async (userId: string) => {
           .from('companies')
           .select('id')
           .ilike('domain', domain)
+          .eq('group_type', 'domain')
           .limit(1)
           .maybeSingle();
         if (!companyByDomainError) {
@@ -465,7 +465,7 @@ export const fetchCompanyUserIds = async (
     const { data: companyUsers, error: usersError } = await supabase
       .from('AppUsers')
       .select('user_id')
-      .eq('company_id', companyId);
+      .or(`group_id.eq.${companyId},company_id.eq.${companyId}`);
 
     if (usersError) {
       throw usersError;

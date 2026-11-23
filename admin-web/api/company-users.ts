@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/${APP_USERS_TABLE}?select=user_id,email&company_id=eq.${encodeURIComponent(companyId)}&order=email.asc.nullslast`,
+      `${SUPABASE_URL}/rest/v1/${APP_USERS_TABLE}?select=user_id,email&company_id=eq.${encodeURIComponent(companyId)}&group_id=is.null&order=email.asc.nullslast`,
       {
         headers: {
           apikey: SERVICE_ROLE,
