@@ -7,7 +7,6 @@
     "icon": "./assets/images/app-store-icon.png",
     "scheme": "dishguru",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.dishguru.app",
       "buildNumber": "22",
@@ -29,7 +28,6 @@
         "backgroundColor": "#f48722",
         "foregroundImage": "./assets/images/android-adaptive-foreground.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -48,7 +46,9 @@
         }
       ],
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      "expo-image",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,

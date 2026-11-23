@@ -88,7 +88,7 @@ export default function GlassToggle({
             },
           ]}
         >
-          <BlurView intensity={28} tint="light" style={StyleSheet.absoluteFillObject} />
+          <BlurView intensity={28} tint="light" style={StyleSheet.absoluteFill} />
           <View style={styles.indicatorTint} />
         </Animated.View>
       ) : null}
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   indicatorTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(244,135,34,0.18)',
   },
   label: {

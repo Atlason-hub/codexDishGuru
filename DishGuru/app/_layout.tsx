@@ -1,5 +1,4 @@
-import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
@@ -108,7 +107,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      const wasInactive = /inactive|background/.test(appStateRef.current);
+      const wasInactive = /inactive|background/.test(appStateRef.current ?? '');
       if (wasInactive && nextState === 'active') {
         void syncAuthOnForeground();
       }

@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import CachedLogo from '../components/CachedLogo';
 import CrossfadeView from '../components/CrossfadeView';
 import ImagePreviewModal from '../components/ImagePreviewModal';
@@ -33,7 +33,6 @@ import {
   mergeCompanyVisibleRows,
   saveCachedRestaurantMenu,
 } from '../lib/appData';
-import { useFocusEffect } from '@react-navigation/native';
 import { useLocale } from '../lib/locale';
 import {
   buildFallbackCategoriesFromDishes,
@@ -284,7 +283,7 @@ export default function RestaurantScreen() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      const wasInactive = /inactive|background/.test(appStateRef.current);
+      const wasInactive = /inactive|background/.test(appStateRef.current ?? '');
       if (wasInactive && nextState === 'active') {
         refreshContent();
       }

@@ -5,11 +5,13 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { Buffer } from 'buffer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,7 +42,7 @@ type DishAssociation = {
 export default function EditDishScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
   const params = useLocalSearchParams();
   const associationId = typeof params.id === 'string' ? params.id : '';
   const photoUriParam = typeof params.photoUri === 'string' ? params.photoUri : '';

@@ -277,10 +277,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   camera: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'flex-start',
   },
   middleRow: {
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',

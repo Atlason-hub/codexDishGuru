@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -244,7 +245,7 @@ export default function CameraDetailsScreen() {
   const { isRTL, t } = useLocale();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
   const reviewInputYRef = useRef(0);
   const restaurantDropdownYRef = useRef(0);
   const dishDropdownYRef = useRef(0);

@@ -29,7 +29,7 @@ import {
   resolveLogoUrl,
 } from '../lib/logo';
 import { openVendorDish } from '../lib/orderVendor';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { buildAuthRedirectUrl } from '../lib/authRedirect';
 import {
   cacheAvatar,
@@ -43,7 +43,6 @@ import LegalModal from '../components/LegalModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import RestaurantsTab from '../components/RestaurantsTab';
 import { theme } from '../lib/theme';
-import { useFocusEffect } from '@react-navigation/native';
 import {
   clearUserScopedCaches,
   fetchCompanyDishes,
@@ -1546,7 +1545,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      const wasInactive = /inactive|background/.test(appStateRef.current);
+      const wasInactive = /inactive|background/.test(appStateRef.current ?? '');
       if (wasInactive && nextState === 'active' && currentUserId && hasLoaded) {
         void refreshContent().catch((refreshError) => {
           console.warn('[home] app resume refresh failed', refreshError);
@@ -2275,7 +2274,7 @@ export default function HomeScreen() {
                       {showFavoritesOnly ? t('favoritesEmpty') : t('commonNoDishesToShow')}
                     </Text>
                   </View>
-                ) : null
+                ) : undefined
               }
               renderItem={renderDishGroup}
             />

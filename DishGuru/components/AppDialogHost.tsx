@@ -146,10 +146,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   cardBlur: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   cardTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,248,242,0.58)',
   },
   title: {

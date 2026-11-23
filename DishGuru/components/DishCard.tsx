@@ -663,14 +663,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(20,20,20,0.65)',
   },
   feedCardGlassBase: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   // The blur layer replaces the old solid card fill physics.
   feedCardGlassLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   feedCardGlassHighlight: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   feedCardContent: {
     position: 'relative',
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 5,
     elevation: 12,
   },

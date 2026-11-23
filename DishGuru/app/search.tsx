@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -295,7 +296,7 @@ const buildMenuRows = (
 export default function SearchScreen() {
   const router = useRouter();
   const { isRTL, t } = useLocale();
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
   const searchRequestIdRef = useRef(0);
   const restaurantCollapsedBeforeSearchRef = useRef<Set<string> | null>(null);
   const menuRequestIdRef = useRef(0);

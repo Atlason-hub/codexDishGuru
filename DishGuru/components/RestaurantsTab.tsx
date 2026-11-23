@@ -108,7 +108,7 @@ function RestaurantAccordionItem({
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const canUseAndroidLayoutAnimation =
-    Platform.OS === 'android' && !(global as any)?.nativeFabricUIManager;
+    Platform.OS === 'android' && !(globalThis as any)?.nativeFabricUIManager;
 
   useEffect(() => {
     return () => {
@@ -556,7 +556,7 @@ export default function RestaurantsTab({
     subtitle: string | null;
   } | null>(null);
   const canUseAndroidLayoutAnimation =
-    Platform.OS === 'android' && !(global as any)?.nativeFabricUIManager;
+    Platform.OS === 'android' && !(globalThis as any)?.nativeFabricUIManager;
 
   useEffect(() => {
     if (canUseAndroidLayoutAnimation) {

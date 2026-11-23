@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Buffer } from 'buffer';
 
 // Expo Router renders web routes on the server, where AsyncStorage cannot access
 // `window`. Keep SSR stateless so a web request cannot crash the Metro process.

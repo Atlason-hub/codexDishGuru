@@ -2,7 +2,7 @@ import { AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, View }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import AppHeader from '../components/AppHeader';
 import { getCurrentAuthUser, supabase } from '../lib/supabase';
 import { hydrateAvatarForUser } from '../lib/avatar';
@@ -13,7 +13,6 @@ import ImagePreviewModal from '../components/ImagePreviewModal';
 import CrossfadeView from '../components/CrossfadeView';
 import { theme } from '../lib/theme';
 import { HomeFeedSkeleton } from '../components/LoadingSkeleton';
-import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
 import {
   deleteDishDraft,
@@ -347,7 +346,7 @@ export default function MyDishesScreen() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      const wasInactive = /inactive|background/.test(appStateRef.current);
+      const wasInactive = /inactive|background/.test(appStateRef.current ?? '');
       if (wasInactive && nextState === 'active') {
         refreshContent();
       }
@@ -608,7 +607,7 @@ export default function MyDishesScreen() {
                 {t('commonNoDishesToShow')}
               </Text>
             </View>
-          ) : null
+          ) : undefined
         }
         renderItem={renderMyDish}
       />

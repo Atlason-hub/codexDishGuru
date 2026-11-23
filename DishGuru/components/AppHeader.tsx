@@ -1011,10 +1011,10 @@ const styles = StyleSheet.create({
     transform: [{ translateY: Platform.OS === 'ios' ? 0.25 : 0 }],
   },
   iconButtonBlur: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   iconButtonTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,248,242,0.58)',
   },
   logoContainer: {
@@ -1052,7 +1052,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   headerTapLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1224,10 +1224,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   feedbackCardBlur: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   feedbackCardTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,248,242,0.58)',
   },
   feedbackTitle: {

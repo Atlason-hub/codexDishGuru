@@ -6,6 +6,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -15,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
 import { hydrateAvatarForUser, loadCachedAvatar } from '../lib/avatar';
 import DishCard from '../components/DishCard';
@@ -25,7 +26,6 @@ import CrossfadeView from '../components/CrossfadeView';
 import RatingValueRow from '../components/RatingValueRow';
 import { DishScreenSkeleton } from '../components/LoadingSkeleton';
 import { theme } from '../lib/theme';
-import { useFocusEffect } from '@react-navigation/native';
 import { openVendorDish } from '../lib/orderVendor';
 import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { fetchCompanyIdForUser, fetchFavoritesMap, fetchOrderVendorForUser, fetchUserAvatarMaps, fetchVisibleDishes } from '../lib/appData';
@@ -108,7 +108,7 @@ export default function DishScreen() {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportSuccessPending, setReportSuccessPending] = useState<'success' | 'notify_failed' | null>(null);
   const [reportKeyboardHeight, setReportKeyboardHeight] = useState(0);
-  const reportScrollRef = useRef<ScrollView | null>(null);
+  const reportScrollRef = useRef<ScrollViewInstance | null>(null);
   const mountedRef = useRef(true);
   const loadRequestIdRef = useRef(0);
   const [avgScores, setAvgScores] = useState<{
@@ -475,7 +475,7 @@ export default function DishScreen() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      const wasInactive = /inactive|background/.test(appStateRef.current);
+      const wasInactive = /inactive|background/.test(appStateRef.current ?? '');
       if (wasInactive && nextState === 'active') {
         refreshContent();
       }
@@ -1160,12 +1160,12 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   reportOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 40,
     elevation: 40,
   },
   reportOverlayBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
   reportOverlayContent: {
@@ -1196,10 +1196,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   reportModalCardBlur: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   reportModalCardTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,248,242,0.58)',
   },
   reportModalScroll: {
