@@ -1,13 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Expo Router renders web routes on the server, where AsyncStorage cannot access
+// `window`. Keep SSR stateless so a web request cannot crash the Metro process.
+const serverStorage = {
+  getItem: async (_key: string) => null,
+  setItem: async (_key: string, _value: string) => {},
+  removeItem: async (_key: string) => {},
+};
+
+const authStorage = typeof window === 'undefined' ? serverStorage : AsyncStorage;
+
 export const SUPABASE_URL = 'https://pcamdhbgjbsnfwicyiqa.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_7JyR16-ZDFnkOPYMHZrczA_oE10ympy';
 const expectedJwtIssuer = `${SUPABASE_URL}/auth/v1`;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: AsyncStorage,
+    storage: authStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
