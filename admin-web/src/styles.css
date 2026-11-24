@@ -968,7 +968,33 @@ h1 {
   background: #f8fafc;
 }
 
+.error-monitoring { display: grid; gap: 1rem; }
+.error-monitoring-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.error-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
+.error-summary-grid > div { display: grid; gap: 0.15rem; padding: 0.9rem 1rem; border: 1px solid var(--line); border-radius: 16px; background: #f8fafc; }
+.error-summary-grid strong { font-size: 1.45rem; }
+.error-summary-grid span { color: var(--muted); font-size: 0.82rem; }
+.error-filters { display: grid; grid-template-columns: minmax(220px, 1fr) 180px 160px; gap: 0.7rem; }
+.error-list { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: white; }
+.error-list-item { width: 100%; display: grid; grid-template-columns: 110px minmax(260px, 1.8fr) 120px 100px 180px; align-items: center; gap: 0.8rem; padding: 0.9rem 1rem; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: white; color: inherit; text-align: left; box-shadow: none; }
+.error-list-item:last-child { border-bottom: 0; }
+.error-list-item:hover { background: #f8fafc; transform: none; }
+.error-list-item span { min-width: 0; display: grid; gap: 0.2rem; }
+.error-list-item small { color: var(--muted); overflow-wrap: anywhere; }
+.error-message-cell strong { overflow-wrap: anywhere; }
+.error-status { display: inline-flex !important; justify-self: start; padding: 0.28rem 0.58rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; }
+.error-status-new { background: #fee2e2; color: #991b1b; }
+.error-status-investigating { background: #fef3c7; color: #92400e; }
+.error-status-resolved { background: #dcfce7; color: #166534; }
+.error-status-ignored { background: #e5e7eb; color: #4b5563; }
+.error-detail-modal { width: min(820px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; }
+.error-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+.error-detail-grid span { display: grid; gap: 0.2rem; padding: 0.7rem; border-radius: 12px; background: #f8fafc; overflow-wrap: anywhere; }
+.error-stack { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0.85rem; border-radius: 12px; background: #111827; color: #e5e7eb; font-size: 0.76rem; }
+
 @media (max-width: 980px) {
+  .error-list { overflow-x: auto; }
+  .error-list-item { min-width: 850px; }
   .main {
     padding: 1.8rem;
   }
@@ -996,6 +1022,7 @@ h1 {
 }
 
 @media (max-width: 640px) {
+  .error-summary-grid, .error-filters, .error-detail-grid { grid-template-columns: 1fr; }
   .login-card {
     padding: 2rem 1.6rem;
   }

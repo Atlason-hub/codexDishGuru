@@ -27,6 +27,7 @@ import type { ContentItem } from "./contentApi";
 import { deleteDishReport, fetchDishReports } from "./dishReportsApi";
 import type { DishReportItem } from "./dishReportsApi";
 import GroupsPage from "./GroupsPage";
+import ErrorMonitoringPage from "./ErrorMonitoringPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -187,6 +188,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           <NavLink to="/companies">Companies</NavLink>
           <NavLink to="/groups">Groups</NavLink>
           <NavLink to="/reports">Dish Reports</NavLink>
+          <NavLink to="/errors">App Errors</NavLink>
         </nav>
         <div className="content">{children}</div>
       </main>
@@ -1649,6 +1651,7 @@ export default function App() {
                   <Route path="/groups" element={<GroupsPage />} />
                   <Route path="/content" element={<ContentPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/errors" element={<ErrorMonitoringPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
               </Layout>

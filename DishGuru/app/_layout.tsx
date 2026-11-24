@@ -20,6 +20,7 @@ import {
 } from '../lib/supabase';
 import { LocaleProvider, useLocale } from '../lib/locale';
 import { RATING_IMAGES } from '../lib/ratings';
+import { installGlobalErrorReporter, reportAppError } from '../lib/errorReporter';
 
 function AppShell() {
   useLocale();
@@ -67,6 +68,10 @@ export default function RootLayout() {
       await startSupabaseAutoRefresh();
     } catch {
       // Let screen-level session recovery continue without surfacing a redbox.
+      void reportAppError(new Error('Foreground authentication recovery failed'), {
+        screen: 'root-layout',
+        action: 'sync-auth-on-foreground',
+      });
     }
   };
 
@@ -75,6 +80,8 @@ export default function RootLayout() {
       'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
     ]);
   }, []);
+
+  useEffect(() => installGlobalErrorReporter(), []);
 
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
