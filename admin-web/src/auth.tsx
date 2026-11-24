@@ -11,6 +11,7 @@ type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   confirmPassword: (password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -184,8 +185,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await verificationClient.auth.signOut();
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    if (newPassword.length < 8) {
+      throw new Error("The new password must contain at least 8 characters.");
+    }
+    if (currentPassword === newPassword) {
+      throw new Error("The new password must be different from the current password.");
+    }
+
+    await confirmPassword(currentPassword);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      throw new Error(error.message);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, confirmPassword, logout }}>
+    <AuthContext.Provider
+      value={{ user, role, loading, login, confirmPassword, changePassword, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

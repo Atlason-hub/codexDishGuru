@@ -114,7 +114,48 @@ function LoginPage() {
 }
 
 function Layout({ children }: { children: React.ReactNode }) {
-  const { logout } = useAuth();
+  const { changePassword, logout } = useAuth();
+  const [passwordModalOpen, setPasswordModalOpen] = React.useState(false);
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = React.useState("");
+  const [passwordError, setPasswordError] = React.useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = React.useState<string | null>(null);
+  const [passwordSaving, setPasswordSaving] = React.useState(false);
+
+  const closePasswordModal = () => {
+    if (passwordSaving) return;
+    setPasswordModalOpen(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setPasswordError(null);
+    setPasswordSuccess(null);
+  };
+
+  const submitPasswordChange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError("New passwords do not match.");
+      return;
+    }
+
+    try {
+      setPasswordSaving(true);
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setPasswordSuccess("Password updated successfully.");
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "Password update failed.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <main className="main">
@@ -130,6 +171,13 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="topbar-actions">
             <div className="topbar-chip">Live</div>
+            <button
+              type="button"
+              className="ghost topbar-password"
+              onClick={() => setPasswordModalOpen(true)}
+            >
+              Change password
+            </button>
             <button type="button" className="ghost topbar-logout" onClick={logout}>
               Logout
             </button>
@@ -142,6 +190,60 @@ function Layout({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="content">{children}</div>
       </main>
+      {passwordModalOpen && (
+        <div className="modal-overlay" onClick={closePasswordModal}>
+          <form
+            className="confirm-modal password-modal"
+            onSubmit={submitPasswordChange}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Change password</h3>
+            <p className="muted">Use at least 8 characters for the new password.</p>
+            <label className="field">
+              <span>Current password</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>New password</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>Confirm new password</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                value={confirmNewPassword}
+                onChange={(event) => setConfirmNewPassword(event.target.value)}
+                required
+              />
+            </label>
+            {passwordError && <div className="error">{passwordError}</div>}
+            {passwordSuccess && <div className="success">{passwordSuccess}</div>}
+            <div className="form-actions confirm-modal-actions">
+              <button type="submit" disabled={passwordSaving}>
+                {passwordSaving ? "Updating..." : "Update password"}
+              </button>
+              <button type="button" className="ghost" onClick={closePasswordModal}>
+                Close
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

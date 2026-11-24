@@ -310,6 +310,27 @@ h1 {
   background: #ffffff;
 }
 
+.topbar-password {
+  background: #ffffff;
+}
+
+.password-modal {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.password-modal .field {
+  gap: 0.35rem;
+}
+
+.success {
+  color: #176b3a;
+  background: rgba(35, 166, 91, 0.1);
+  border: 1px solid rgba(35, 166, 91, 0.2);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
+
 .topbar-chip {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.8rem;
