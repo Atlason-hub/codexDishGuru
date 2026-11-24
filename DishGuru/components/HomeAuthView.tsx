@@ -200,7 +200,7 @@ export default function HomeAuthView({
                     value={groupCode}
                     onChangeText={onGroupCodeChange}
                     placeholder={t('authGroupCodeOptional')}
-                    textAlign="left"
+                    textAlign={isRTL ? 'right' : 'left'}
                     autoCorrect={false}
                     returnKeyType="go"
                     onSubmitEditing={onSignUp}
