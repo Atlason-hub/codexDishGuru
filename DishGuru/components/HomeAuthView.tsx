@@ -78,9 +78,15 @@ export default function HomeAuthView({
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        <View style={styles.authScreen}>
+        <View style={[styles.authScreen, showSignup && styles.authScreenSignup]}>
           <View pointerEvents="none" style={[styles.authGlow, styles.authGlowBottom]} />
-          <View style={[styles.authLanguageRow, !isRTL && styles.authLanguageRowLtr]}>
+          <View
+            style={[
+              styles.authLanguageRow,
+              !isRTL && styles.authLanguageRowLtr,
+              showSignup && styles.authLanguageRowSignup,
+            ]}
+          >
             {([
               ['he', t('accountLanguageHebrew')],
               ['en', t('accountLanguageEnglish')],
@@ -104,13 +110,13 @@ export default function HomeAuthView({
               </Pressable>
             ))}
           </View>
-          <View style={styles.authHeaderWrap}>
-            <Text style={styles.authTitle}>Take Away - The Reality Version</Text>
-            <Text style={styles.authSubtitle}>
-              {showSignup ? t('authCreateAccount') : t('authSignIn')}
+          <View style={[styles.authHeaderWrap, showSignup && styles.authHeaderWrapSignup]}>
+            <Text style={[styles.authTitle, showSignup && styles.authTitleSignup]}>
+              Take Away - The Reality Version
             </Text>
+            {!showSignup ? <Text style={styles.authSubtitle}>{t('authSignIn')}</Text> : null}
           </View>
-          <View style={styles.authCard}>
+          <View style={[styles.authCard, showSignup && styles.authCardSignup]}>
             <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
                 {t('authWorkEmail')}
@@ -324,6 +330,11 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
     overflow: 'hidden',
   },
+  authScreenSignup: {
+    paddingTop: 20,
+    paddingBottom: 20,
+    gap: 4,
+  },
   authGlow: {
     position: 'absolute',
     borderRadius: 999,
@@ -351,17 +362,20 @@ const styles = StyleSheet.create({
     maxWidth: 580,
     flexDirection: 'row-reverse',
     justifyContent: 'flex-start',
-    gap: 10,
+    gap: 6,
     paddingHorizontal: 12,
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  authLanguageRowSignup: {
+    marginBottom: 0,
   },
   authLanguageRowLtr: {
     flexDirection: 'row',
   },
   authLanguageChip: {
-    minWidth: 72,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    minWidth: 58,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -374,7 +388,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,248,240,0.96)',
   },
   authLanguageChipText: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(100,70,44,0.78)',
     fontFamily: theme.typography.semibold,
   },
@@ -385,17 +399,25 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
     paddingHorizontal: 12,
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 14,
+  },
+  authHeaderWrapSignup: {
+    marginTop: 2,
+    marginBottom: 8,
   },
   authTitle: {
-    fontSize: 34,
+    fontSize: 30,
     color: theme.colors.text,
     textAlign: 'center',
     fontFamily: 'Heebo_700Bold',
-    lineHeight: 40,
+    lineHeight: 35,
+  },
+  authTitleSignup: {
+    fontSize: 28,
+    lineHeight: 32,
   },
   authSubtitle: {
     fontSize: 14,
@@ -420,8 +442,12 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 580,
   },
+  authCardSignup: {
+    padding: 16,
+    gap: 10,
+  },
   fieldGroup: {
-    gap: 9,
+    gap: 6,
   },
   fieldLabel: {
     fontSize: 14,
@@ -441,7 +467,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
-    height: 46,
+    height: 42,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 16,
@@ -497,16 +523,12 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   termsRow: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: 'rgba(250,246,241,0.96)',
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    minHeight: 28,
+    paddingHorizontal: 2,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    justifyContent: 'flex-start',
+    gap: 8,
   },
   termsRowLtr: {
     flexDirection: 'row',
@@ -515,16 +537,15 @@ const styles = StyleSheet.create({
     opacity: 0.92,
   },
   termsTextWrap: {
-    flex: 1,
     alignItems: 'flex-end',
   },
   termsTextWrapLtr: {
     alignItems: 'flex-start',
   },
   termsCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
+    width: 21,
+    height: 21,
+    borderRadius: 6,
     borderWidth: 1.5,
     borderColor: theme.colors.accent,
     alignItems: 'center',

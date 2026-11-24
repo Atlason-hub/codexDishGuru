@@ -26,6 +26,8 @@ import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { Locale, useLocale } from '../lib/locale';
 import { setGuestModeEnabled } from '../lib/guestMode';
 import { publishAvatarUpdate, subscribeAvatarUpdates } from '../lib/avatarEvents';
+import { setPendingLocalLogout } from '../lib/logoutGate';
+import { clearUserSessionArtifacts } from '../lib/sessionCleanup';
 
 const extractAvatarStoragePath = (rawUrl: string | null | undefined) => {
   if (!rawUrl) return null;
@@ -47,7 +49,7 @@ const extractAvatarStoragePath = (rawUrl: string | null | undefined) => {
 };
 
 export default function AccountScreen() {
-  const FRAME_SIZE = 180;
+  const FRAME_SIZE = 148;
   const MIN_ZOOM = 1.28;
   const MAX_ZOOM = 5;
 
@@ -232,6 +234,28 @@ export default function AccountScreen() {
       }
     })();
   }, [router]);
+
+  const signOut = useCallback(async () => {
+    if (saving || deletingAccount || redirectingOut) return;
+
+    setPendingLocalLogout(true);
+    setRedirectingOut(true);
+    try {
+      await clearUserSessionArtifacts(currentUserId, email);
+      await setGuestModeEnabled(false);
+      await cacheAvatar(currentUserId, null);
+    } catch (error) {
+      console.warn('[account] sign out cleanup failed', error);
+    }
+
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (error) {
+      console.warn('[account] local sign out failed', error);
+    } finally {
+      routeToLoggedOutHome();
+    }
+  }, [currentUserId, deletingAccount, email, redirectingOut, routeToLoggedOutHome, saving]);
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => Boolean(tempAvatarUrl),
@@ -472,7 +496,7 @@ export default function AccountScreen() {
                     onError={() => setAvatarLoadFailed(true)}
                   />
                 ) : (
-                  <DefaultAvatar size={188} />
+                  <DefaultAvatar size={FRAME_SIZE} />
                 )}
               </View>
 
@@ -639,6 +663,7 @@ export default function AccountScreen() {
               </Pressable>
             </View>
 
+            {pendingAsset ? (
             <Pressable
               style={({ pressed }) => [
                 styles.saveButton,
@@ -728,8 +753,22 @@ export default function AccountScreen() {
             >
               <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
             </Pressable>
+            ) : null}
           </View>
         </View>
+
+        <View style={styles.accountActionsRow}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.signOutButton,
+            pressed && styles.signOutButtonPressed,
+          ]}
+          onPress={() => void signOut()}
+          disabled={saving || deletingAccount || redirectingOut}
+        >
+          <Ionicons name="log-out-outline" size={18} color={theme.colors.accent} />
+          <Text style={styles.signOutButtonText}>{t('headerMenuSignOut')}</Text>
+        </Pressable>
 
         <Pressable
           style={({ pressed }) => [
@@ -788,6 +827,7 @@ export default function AccountScreen() {
           <Text style={styles.deleteAccountButtonText}>{t('accountDeleteAction')}</Text>
         </Pressable>
         </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -807,13 +847,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 48,
+    paddingBottom: 16,
   },
   container: {
     backgroundColor: theme.colors.background,
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 32,
+    paddingTop: 8,
+    paddingBottom: 16,
     alignItems: 'center',
   },
   title: {
@@ -837,14 +877,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     paddingHorizontal: 8,
     paddingTop: 6,
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
   emailSection: {
     width: '100%',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
+    paddingVertical: 7,
+    gap: 2,
   },
   emailSectionLtr: {
     alignItems: 'flex-start',
@@ -855,7 +895,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 6,
-    marginBottom: 10,
+    marginBottom: 6,
   },
   headerRowLtr: {
     flexDirection: 'row-reverse',
@@ -872,15 +912,15 @@ const styles = StyleSheet.create({
   },
   emailValue: {
     width: '100%',
-    fontSize: 17,
+    fontSize: 15,
     color: theme.colors.text,
     textAlign: 'right',
     writingDirection: 'ltr',
-    lineHeight: 24,
+    lineHeight: 20,
   },
   
   emailLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
   },
@@ -892,27 +932,27 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 1,
     backgroundColor: theme.colors.border,
-    marginTop: 4,
-    marginBottom: 18,
+    marginTop: 2,
+    marginBottom: 9,
   },
   languageSection: {
     width: '100%',
     paddingHorizontal: 12,
-    gap: 8,
-    marginBottom: 14,
+    gap: 4,
+    marginBottom: 8,
   },
   languageOptions: {
     flexDirection: 'row-reverse',
-    gap: 10,
+    gap: 6,
     justifyContent: 'flex-start',
   },
   languageOptionsLtr: {
     flexDirection: 'row',
   },
   languageChip: {
-    minWidth: 86,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    minWidth: 68,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -921,7 +961,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   languageChipLtr: {
-    minWidth: 78,
+    minWidth: 64,
   },
   languageChipActive: {
     borderColor: theme.colors.accent,
@@ -940,16 +980,16 @@ const styles = StyleSheet.create({
   },
   avatarSection: {
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingBottom: 2,
   },
   avatarFrame: {
     position: 'relative',
   },
   avatarCircle: {
-    width: 188,
-    height: 188,
-    borderRadius: 94,
+    width: 148,
+    height: 148,
+    borderRadius: 74,
     backgroundColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
@@ -964,27 +1004,27 @@ const styles = StyleSheet.create({
     height: 360,
   },
   zoomRow: {
-    marginTop: 12,
+    marginTop: 8,
     width: '88%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   zoomSlider: {
     flex: 1,
     height: 30,
   },
   actionsRow: {
-    marginTop: 20,
+    marginTop: 10,
     flexDirection: 'row',
-    gap: 22,
+    gap: 12,
   },
   saveButton: {
     alignSelf: 'flex-start',
-    marginTop: 16,
+    marginTop: 10,
     marginLeft: 12,
     paddingHorizontal: 24,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: theme.colors.accent,
@@ -1028,16 +1068,48 @@ const styles = StyleSheet.create({
     opacity: 0.88,
     transform: [{ scale: 0.985 }],
   },
+  accountActionsRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
   deleteAccountButton: {
-    marginTop: 12,
-    marginBottom: 4,
-    alignSelf: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(199, 93, 44, 0.45)',
     backgroundColor: 'rgba(199, 93, 44, 0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutButton: {
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+    backgroundColor: 'rgba(255,248,242,0.96)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  signOutButtonPressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.985 }],
+  },
+  signOutButtonText: {
+    color: theme.colors.accent,
+    fontSize: 14,
+    fontFamily: theme.typography.semibold,
   },
   deleteAccountButtonLtr: {
     alignSelf: 'center',
@@ -1050,11 +1122,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: '500',
+    textAlign: 'center',
   },
   actionButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: theme.colors.cardAlt,
     borderWidth: 1,
     borderColor: theme.colors.border,
