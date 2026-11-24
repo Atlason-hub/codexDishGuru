@@ -193,11 +193,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("The new password must be different from the current password.");
     }
 
-    await confirmPassword(currentPassword);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      throw new Error(error.message);
+    if (!user?.email) {
+      throw new Error("Missing user email. Please log in again.");
     }
+
+    const passwordClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    });
+
+    const { error: verificationError } = await passwordClient.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword
+    });
+    if (verificationError) {
+      throw new Error("Incorrect password.");
+    }
+
+    const { error: updateError } = await passwordClient.auth.updateUser({
+      password: newPassword
+    });
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    await passwordClient.auth.signOut({ scope: "local" });
   };
 
   return (
