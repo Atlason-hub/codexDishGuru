@@ -795,20 +795,12 @@ export default function HomeScreen() {
       normalizedGroupCode = String(authData.user?.user_metadata?.group_code ?? '').trim();
     }
     if (normalizedGroupCode) {
-      const { data: matchedGroups, error: groupError } = await supabase.rpc('resolve_group_code', {
+      const { data: matchedGroups, error: groupError } = await supabase.rpc('assign_my_group_code', {
         p_code: normalizedGroupCode,
       });
       if (groupError) throw groupError;
       const matchedGroup = Array.isArray(matchedGroups) ? matchedGroups[0] : matchedGroups;
       if (!matchedGroup?.id) throw new Error('invalid group code');
-      const profileValues = { user_id: userId, email: normalizedEmail, group_id: matchedGroup.id };
-      if (existingProfile?.user_id) {
-        const { error: updateError } = await supabase.from('AppUsers').update(profileValues).eq('user_id', userId);
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase.from('AppUsers').insert(profileValues);
-        if (insertError) throw insertError;
-      }
       clearUserScopedCaches(userId);
       primeCompanyIdForUser(userId, matchedGroup.id);
       return;
@@ -900,6 +892,12 @@ export default function HomeScreen() {
     async (userId: string, emailAddress: string | null | undefined, accessToken?: string | null) => {
       setAuthHydrating(true);
       try {
+        await withTimeout(ensureAppUserProfile(userId, emailAddress ?? null), 4000, null);
+        await withTimeout(
+          loadSessionCompanyLogo(userId, emailAddress ?? null, { forceRefresh: true }),
+          2500,
+          null
+        );
         let companyIdFromDomain: string | null = null;
         let bootstrapCompanyLogoPath: string | null = null;
         let bootstrapOrderVendor: string | null = null;
@@ -965,12 +963,6 @@ export default function HomeScreen() {
             setOrderVendor(bootstrapOrderVendor);
           }
         }
-        void withTimeout(
-          ensureAppUserProfile(userId, emailAddress ?? null),
-          4000,
-          null
-        ).catch(() => null);
-
         await Promise.all([
           withTimeout(loadFavorites(userId), 1500, null),
           (async () => {

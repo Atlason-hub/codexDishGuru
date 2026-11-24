@@ -65,6 +65,7 @@ export const primeCompanyIdForUser = (userId: string, companyId: string | null) 
 export const clearUserScopedCaches = (userId: string) => {
   companyIdCache.delete(userId);
   orderVendorCache.delete(userId);
+  companyUserIdsCache.clear();
 };
 
 const readTimedCache = <T>(entry: TimedCacheEntry<T> | null | undefined) => {
@@ -428,6 +429,14 @@ export const fetchGlobalDishes = async () => {
 export const fetchVisibleDishes = async (companyId: string | number | null) => {
   if (!companyId) return [];
 
+  const { data: membershipData, error: membershipError } = await supabase.rpc(
+    'get_my_visible_dishes'
+  );
+
+  if (!membershipError && Array.isArray(membershipData)) {
+    return membershipData as any[];
+  }
+
   const { data: visibleData, error: visibleError } = await supabase.rpc('get_visible_dishes', {
     p_company_id: companyId,
   });
@@ -441,6 +450,14 @@ export const fetchVisibleDishes = async (companyId: string | number | null) => {
 
 export const fetchCompanyDishes = async (companyId: string | number | null) => {
   if (!companyId) return [];
+
+  const { data: membershipData, error: membershipError } = await supabase.rpc(
+    'get_my_membership_dishes'
+  );
+
+  if (!membershipError && Array.isArray(membershipData)) {
+    return membershipData as any[];
+  }
 
   const { data: companyData, error: companyError } = await supabase.rpc('get_company_dishes', {
     company_id: companyId,
@@ -461,7 +478,16 @@ export const fetchCompanyUserIds = async (
   }
   const scopedUserIds = new Set<string>();
 
-  if (companyId) {
+  const { data: membershipUsers, error: membershipUsersError } = await supabase.rpc(
+    'get_my_membership_user_ids'
+  );
+  if (!membershipUsersError && Array.isArray(membershipUsers)) {
+    membershipUsers.forEach((row: any) => {
+      if (row?.user_id) scopedUserIds.add(String(row.user_id));
+    });
+  }
+
+  if (companyId && scopedUserIds.size === 0) {
     const { data: companyUsers, error: usersError } = await supabase
       .from('AppUsers')
       .select('user_id')
