@@ -4,6 +4,7 @@ import { searchCities, searchStreets } from "./companiesApi";
 import type { CityOption, OrderVendor, StreetOption } from "./companiesTypes";
 import { createGroup, deleteGroup, fetchGroups, updateGroup, uploadGroupLogo } from "./groupsApi";
 import type { Group } from "./groupsTypes";
+import { apiFetch } from "./apiClient";
 
 const makeCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 const makeKey = () => Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -103,7 +104,7 @@ export default function GroupsPage() {
   const openMembers = async (group: Group) => {
     setMembersGroup(group); setMembers([]);
     try {
-      const response = await fetch(`/api/group-users?groupId=${encodeURIComponent(group.id)}`);
+      const response = await apiFetch(`/api/group-users?groupId=${encodeURIComponent(group.id)}`);
       if (!response.ok) throw new Error(await response.text());
       setMembers(await response.json() as Array<{ user_id?: string; email?: string }>);
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to load members."); }

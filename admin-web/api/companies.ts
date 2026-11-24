@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { requireAdmin } from "./_auth";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -17,6 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const base = `${SUPABASE_URL}/rest/v1/${TABLE}`;
 
   try {
+    if (!await requireAdmin(req, res, { write: req.method !== "GET" })) return;
     if (req.method === "GET") {
       const response = await fetch(`${base}?select=*&group_type=eq.domain`, {
         headers: {
@@ -71,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "Content-Type": "application/json",
           Prefer: "return=representation"
         },
-        body: JSON.stringify(req.body || {})
+        body: JSON.stringify(pickCompanyFields(req.body))
       });
       const text = await response.text();
       return res.status(response.status).send(text);
@@ -90,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "Content-Type": "application/json",
           Prefer: "return=representation"
         },
-        body: JSON.stringify(req.body || {})
+        body: JSON.stringify(pickCompanyFields(req.body))
       });
       const text = await response.text();
       return res.status(response.status).send(text);
@@ -117,4 +119,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     return json(res, 500, { error: err instanceof Error ? err.message : "Server error" });
   }
+}
+
+function pickCompanyFields(value: unknown) {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const allowed = ["id", "company_key", "name", "domain", "order_vendor", "street_id", "street", "number", "city_id", "city_name", "logo_url"];
+  return Object.fromEntries(allowed.filter((key) => key in input).map((key) => [key, input[key]]));
 }

@@ -1,8 +1,10 @@
-import { fetchSupabaseJson, json, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
+import { fetchSupabaseJson, json, requireAdmin, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
 
 const APP_USERS_TABLE = "AppUsers";
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
+  const access = await requireAdmin(env, request);
+  if (access instanceof Response) return access;
   const companyId = searchParam(request, "companyId");
   if (!companyId) {
     return json({ error: "Missing companyId" }, { status: 400 });

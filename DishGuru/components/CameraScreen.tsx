@@ -5,6 +5,7 @@ import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'r
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useLocale } from '../lib/locale';
+import { rememberCapturedPhoto } from '../lib/capturedPhoto';
 
 type Size = { width: number; height: number };
 type Rect = { x: number; y: number; width: number; height: number };
@@ -116,7 +117,7 @@ export default function CameraScreen() {
         },
         { resize: { width: 1200, height: 900 } },
       ],
-      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true }
     );
 
     return result;
@@ -139,12 +140,14 @@ export default function CameraScreen() {
         height: photo.height ?? 0,
       });
       if (!cropped?.uri) return;
+      const photoKey = rememberCapturedPhoto(cropped.uri, cropped.base64);
       if (editId) {
         router.push({
           pathname: '/edit-dish',
           params: {
             id: editId,
-            photoUri: encodeURIComponent(cropped.uri),
+            photoUri: cropped.uri,
+            photoKey,
             returnTo,
             scrollY: returnScroll,
           },
@@ -153,7 +156,8 @@ export default function CameraScreen() {
         router.push({
           pathname: '/camera/details',
           params: {
-            photoUri: encodeURIComponent(cropped.uri),
+            photoUri: cropped.uri,
+            photoKey,
             restaurantId,
             restaurantName,
             dishId,

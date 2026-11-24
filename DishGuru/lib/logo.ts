@@ -126,15 +126,6 @@ export const loadCachedLogo = async (cacheKey?: string | null): Promise<LogoResu
   try {
     const scopedKey = buildScopedLogoCacheKey(cacheKey);
     const raw = await AsyncStorage.getItem(scopedKey);
-    if (!raw && cacheKey) {
-      const fallbackRaw = await AsyncStorage.getItem(LOGO_CACHE_KEY);
-      if (!fallbackRaw) return { logoUrl: null, logoPath: null };
-      const parsed = JSON.parse(fallbackRaw) as LogoResult;
-      return {
-        logoUrl: parsed.logoUrl ? normalizeLogo(parsed.logoUrl).logoUrl : null,
-        logoPath: parsed.logoPath,
-      };
-    }
     if (!raw) return { logoUrl: null, logoPath: null };
     const parsed = JSON.parse(raw) as LogoResult;
     return {
@@ -156,7 +147,9 @@ export const getEmailDomain = (value: string | null | undefined) => {
 
 export const getLogoCacheScope = (userId: string | null, email: string | null, guestModeEnabled: boolean) => {
   if (guestModeEnabled) return 'guest';
-  return getEmailDomain(email) ?? userId ?? null;
+  // A user can belong to a code group that overrides their email-domain
+  // company, so authenticated branding must never be shared by domain.
+  return userId ?? getEmailDomain(email) ?? null;
 };
 
 export const getSessionLogoKey = (userId: string | null, email: string | null) => {

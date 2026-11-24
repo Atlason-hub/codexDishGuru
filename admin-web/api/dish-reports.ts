@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { requireAdmin } from "./_auth";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -27,6 +28,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
   }
 
   if (_req.method === "DELETE") {
+    if (!await requireAdmin(_req, res, { write: true })) return;
     const id = typeof _req.query.id === "string" ? _req.query.id.trim() : "";
     if (!id) {
       return json(res, 400, { error: "Missing report id" });
@@ -58,6 +60,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
   if (_req.method && _req.method !== "GET") {
     return json(res, 405, { error: "Method not allowed" });
   }
+  if (!await requireAdmin(_req, res)) return;
 
   try {
     const reports = (await fetchRest(

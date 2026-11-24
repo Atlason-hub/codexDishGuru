@@ -1,3 +1,5 @@
+import { apiFetch, fetchProtectedAssetUrl } from "./apiClient";
+
 export type DishReportItem = {
   id: string;
   dishAssociationId: string;
@@ -37,9 +39,8 @@ function normalizeDishImageUrl(rawUrl?: string | null, rawPath?: string | null):
 
   return rawUrl;
 }
-
 export async function fetchDishReports(): Promise<DishReportItem[]> {
-  const response = await fetch("/api/dish-reports");
+  const response = await apiFetch("/api/dish-reports");
   const text = await response.text();
   if (!response.ok) {
     throw new Error(text || "Failed to load dish reports");
@@ -47,9 +48,14 @@ export async function fetchDishReports(): Promise<DishReportItem[]> {
 
   try {
     const rows = JSON.parse(text) as DishReportItem[];
-    return rows.map((row) => ({
-      ...row,
-      imageUrl: normalizeDishImageUrl(row.imageUrl, row.imagePath)
+    return await Promise.all(rows.map(async (row) => {
+      const imageUrl = normalizeDishImageUrl(row.imageUrl, row.imagePath);
+      return {
+        ...row,
+        imageUrl: imageUrl?.startsWith("/api/")
+          ? await fetchProtectedAssetUrl(imageUrl).catch(() => undefined)
+          : imageUrl
+      };
     }));
   } catch {
     throw new Error(text || "Invalid JSON response from /api/dish-reports");
@@ -57,7 +63,7 @@ export async function fetchDishReports(): Promise<DishReportItem[]> {
 }
 
 export async function deleteDishReport(reportId: string): Promise<void> {
-  const response = await fetch(`/api/dish-reports?id=${encodeURIComponent(reportId)}`, {
+  const response = await apiFetch(`/api/dish-reports?id=${encodeURIComponent(reportId)}`, {
     method: "DELETE"
   });
   const text = await response.text();

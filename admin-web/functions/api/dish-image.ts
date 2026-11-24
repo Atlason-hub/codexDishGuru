@@ -1,15 +1,18 @@
-import { json, requireSupabase, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
+import { json, requireAdmin, requireSupabase, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
 
 function getCandidateBuckets(env: Env, requestedBucket?: string) {
   const defaultBucket = (env as Env & { DISH_IMAGES_BUCKET?: string }).DISH_IMAGES_BUCKET || "dish-images";
-  return Array.from(new Set([requestedBucket, defaultBucket, "dish-images"].filter(Boolean))) as string[];
+  const allowed = new Set([defaultBucket, "dish-images"]);
+  return Array.from(new Set([requestedBucket && allowed.has(requestedBucket) ? requestedBucket : null, defaultBucket, "dish-images"].filter(Boolean))) as string[];
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
+  const access = await requireAdmin(env, request);
+  if (access instanceof Response) return access;
   const path = searchParam(request, "path");
   const requestedBucket = searchParam(request, "bucket") || undefined;
-  if (!path) {
-    return json({ error: "Missing path" }, { status: 400 });
+  if (!path || path.length > 500 || path.startsWith("/") || path.split("/").includes("..")) {
+    return json({ error: "Invalid path" }, { status: 400 });
   }
 
   try {

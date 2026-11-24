@@ -1,10 +1,12 @@
+import { apiFetch } from "./apiClient";
+
 export type CompanyUserItem = {
   userId: string | null;
   email: string | null;
 };
 
 export async function fetchCompanyUsers(companyId: string): Promise<CompanyUserItem[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/company-users?companyId=${encodeURIComponent(companyId)}`
   );
   const text = await response.text();

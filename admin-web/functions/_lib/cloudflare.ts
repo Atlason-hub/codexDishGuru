@@ -7,6 +7,8 @@ export interface Env {
   GUEST_USER_ID?: string;
 }
 
+export type AdminRole = "admin" | "viewer";
+
 export type PagesFunction<E extends Env = Env> = (context: { env: E; request: Request }) => Response | Promise<Response>;
 
 export function json(body: unknown, init: ResponseInit = {}) {
@@ -64,4 +66,47 @@ export async function fetchSupabaseJson<T>(
 
 export function searchParam(request: Request, key: string): string {
   return new URL(request.url).searchParams.get(key)?.trim() ?? "";
+}
+
+export async function requireAdmin(
+  env: Env,
+  request: Request,
+  options: { write?: boolean } = {}
+): Promise<{ userId: string; role: AdminRole } | Response> {
+  const authorization = request.headers.get("Authorization") ?? "";
+  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
+  if (!token) {
+    return json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const { supabaseUrl, serviceRole } = requireSupabase(env);
+  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: serviceRole,
+      Authorization: `Bearer ${token}`
+    }
+  });
+  if (!userResponse.ok) {
+    return json({ error: "Invalid or expired session" }, { status: 401 });
+  }
+
+  const user = (await userResponse.json()) as { id?: string };
+  if (!user.id) {
+    return json({ error: "Invalid session user" }, { status: 401 });
+  }
+
+  const rows = await fetchSupabaseJson<Array<{ role?: string | null; status?: string | null }>>(
+    env,
+    `admin_users?select=role,status&id=eq.${encodeURIComponent(user.id)}&limit=1`
+  );
+  const row = rows[0];
+  const role: AdminRole | null = row?.role === "admin" || row?.role === "viewer" ? row.role : null;
+  if (!role || row?.status !== "active") {
+    return json({ error: "Admin access denied" }, { status: 403 });
+  }
+  if (options.write && role !== "admin") {
+    return json({ error: "Administrator role required" }, { status: 403 });
+  }
+
+  return { userId: user.id, role };
 }

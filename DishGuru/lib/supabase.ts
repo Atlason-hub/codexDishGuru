@@ -43,7 +43,7 @@ const decodeJwtPayload = (token: string | undefined | null) => {
     const json =
       globalThis.atob?.(padded) ??
       Buffer.from(padded, 'base64').toString('utf8');
-    return JSON.parse(json) as { iss?: string };
+    return JSON.parse(json) as { iss?: string; exp?: number };
   } catch {
     return null;
   }
@@ -196,10 +196,18 @@ export async function getCurrentAuthUser() {
   }
 }
 
-export async function warmSupabaseSession() {
+const runWarmSupabaseSession = async () => {
   const sessionResult = await supabase.auth.getSession();
   const session = sessionResult.data.session;
   if (!session?.refresh_token) {
+    return session;
+  }
+
+  // Supabase auto-refresh already keeps healthy sessions current. Forcing a
+  // refresh every time the camera returns the app to the foreground can rotate
+  // the same refresh token concurrently and incorrectly sign the user out.
+  const expiresAt = session.expires_at ?? decodeJwtPayload(session.access_token)?.exp ?? 0;
+  if (expiresAt > Math.floor(Date.now() / 1000) + 60) {
     return session;
   }
 
@@ -220,6 +228,17 @@ export async function warmSupabaseSession() {
     }
     return session;
   }
+};
+
+let warmSessionPromise: ReturnType<typeof runWarmSupabaseSession> | null = null;
+
+export async function warmSupabaseSession() {
+  if (!warmSessionPromise) {
+    warmSessionPromise = runWarmSupabaseSession().finally(() => {
+      warmSessionPromise = null;
+    });
+  }
+  return warmSessionPromise;
 }
 
 export async function startSupabaseAutoRefresh() {

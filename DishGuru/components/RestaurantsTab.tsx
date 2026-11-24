@@ -299,7 +299,7 @@ function RestaurantAccordionItem({
         router.push({
           pathname: '/dish',
           params: {
-            dishId: dish.key,
+            dishId: dish.dishId !== null ? String(dish.dishId) : '',
             restaurantId: group.restaurantId ? String(group.restaurantId) : '',
             restaurantName: group.restaurantName,
             dishName: dish.name,
@@ -319,7 +319,7 @@ function RestaurantAccordionItem({
         params: {
           restaurantId: group.restaurantId ? String(group.restaurantId) : '',
           restaurantName: group.restaurantName,
-          dishId: dish.key,
+          dishId: dish.dishId !== null ? String(dish.dishId) : '',
           dishName: dish.name,
           defaultImageUrl: dish.imageUrl ?? '',
           lockSelection: '1',

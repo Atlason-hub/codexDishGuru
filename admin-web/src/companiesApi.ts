@@ -1,4 +1,5 @@
 import type { CityOption, Company, CompanyRow, StreetOption } from "./companiesTypes";
+import { apiFetch, fetchProtectedAssetUrl } from "./apiClient";
 
 function unwrapLogoReference(rawUrl: string): { bucket?: string; path: string } | null {
   if (!rawUrl.startsWith("/api/logo?")) return null;
@@ -72,7 +73,7 @@ function serializeLogoUrl(rawUrl?: string): string | null {
 
 
 export async function fetchCompanies(): Promise<Company[]> {
-  const response = await fetch(`/api/companies`);
+  const response = await apiFetch(`/api/companies`);
   const text = await response.text();
   if (!response.ok) {
     throw new Error(text || "Failed to load companies");
@@ -83,8 +84,12 @@ export async function fetchCompanies(): Promise<Company[]> {
   } catch {
     throw new Error(text || "Invalid JSON response from /api/companies");
   }
-  return rows
-    .map((row) => ({
+  const companies = await Promise.all(rows.map(async (row) => {
+      const normalizedLogo = normalizeLogoUrl(row.logo_url);
+      const logoUrl = normalizedLogo?.startsWith("/api/")
+        ? await fetchProtectedAssetUrl(normalizedLogo).catch(() => undefined)
+        : normalizedLogo;
+      return {
       id: row.id,
       companyKey: row.company_key,
       name: row.name,
@@ -97,9 +102,10 @@ export async function fetchCompanies(): Promise<Company[]> {
       number: row.number,
       cityId: row.city_id,
       cityName: row.city_name,
-      logoUrl: normalizeLogoUrl(row.logo_url)
-    }))
-    .sort((left, right) => {
+      logoUrl
+    };
+  }));
+  return companies.sort((left, right) => {
       const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
       const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
       return rightTime - leftTime;
@@ -120,7 +126,7 @@ export async function createCompany(company: Company): Promise<Company[]> {
     city_name: company.cityName,
     logo_url: serializeLogoUrl(company.logoUrl)
   };
-  const response = await fetch(`/api/companies`, {
+  const response = await apiFetch(`/api/companies`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -145,7 +151,7 @@ export async function updateCompany(id: string, updates: Company): Promise<Compa
     city_name: updates.cityName,
     logo_url: serializeLogoUrl(updates.logoUrl)
   };
-  const response = await fetch(`/api/companies?id=${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`/api/companies?id=${encodeURIComponent(id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -158,7 +164,7 @@ export async function updateCompany(id: string, updates: Company): Promise<Compa
 }
 
 export async function deleteCompany(id: string): Promise<Company[]> {
-  const response = await fetch(`/api/companies?id=${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`/api/companies?id=${encodeURIComponent(id)}`, {
     method: "DELETE"
   });
   if (!response.ok) {
@@ -190,7 +196,7 @@ export async function uploadCompanyLogo(companyId: string, file: File): Promise<
     reader.readAsDataURL(file);
   });
 
-  const response = await fetch(`/api/logo`, {
+  const response = await apiFetch(`/api/logo`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

@@ -2,14 +2,14 @@
   "expo": {
     "name": "DishGuru",
     "slug": "hello-world-app",
-    "version": "7.7.5",
+    "version": "7.7.6",
     "orientation": "portrait",
     "icon": "./assets/images/app-store-icon.png",
     "scheme": "dishguru",
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.dishguru.app",
-      "buildNumber": "22",
+      "buildNumber": "23",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,

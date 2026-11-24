@@ -361,7 +361,7 @@ export default function RestaurantScreen() {
         router.push({
           pathname: '/dish',
           params: {
-            dishId: dish.key,
+            dishId: dish.dishId !== null ? String(dish.dishId) : '',
             restaurantId: restaurantId ? String(restaurantId) : '',
             restaurantName,
             dishName: dish.name,
@@ -376,7 +376,7 @@ export default function RestaurantScreen() {
         params: {
           restaurantId: restaurantId ? String(restaurantId) : '',
           restaurantName,
-          dishId: dish.key,
+          dishId: dish.dishId !== null ? String(dish.dishId) : '',
           dishName: dish.name,
           defaultImageUrl: dish.imageUrl ?? '',
           lockSelection: '1',

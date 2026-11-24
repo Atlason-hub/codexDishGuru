@@ -1,4 +1,4 @@
-import { fetchSupabase, fetchSupabaseJson, json, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
+import { fetchSupabase, fetchSupabaseJson, json, requireAdmin, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
 
 const TABLE = "companies";
 const APP_USERS_TABLE = "AppUsers";
@@ -7,6 +7,8 @@ export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
   const base = TABLE;
 
   try {
+    const access = await requireAdmin(env, request, { write: request.method !== "GET" });
+    if (access instanceof Response) return access;
     if (request.method === "GET") {
       const companies = await fetchSupabaseJson<Array<Record<string, unknown>>>(env, `${base}?select=*&group_type=eq.domain`);
       const appUsers = await fetchSupabaseJson<Array<{ company_id?: string | null }>>(
@@ -31,7 +33,7 @@ export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
     }
 
     if (request.method === "POST") {
-      const body = await request.json();
+      const body = pickCompanyFields(await request.json());
       const response = await fetchSupabase(env, base, {
         method: "POST",
         headers: {
@@ -48,7 +50,7 @@ export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
       if (!id) {
         return json({ error: "Missing id" }, { status: 400 });
       }
-      const body = await request.json();
+      const body = pickCompanyFields(await request.json());
       const response = await fetchSupabase(env, `${base}?id=eq.${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: {
@@ -79,3 +81,9 @@ export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
     return json({ error: error instanceof Error ? error.message : "Server error" }, { status: 500 });
   }
 };
+
+function pickCompanyFields(value: unknown) {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const allowed = ["id", "company_key", "name", "domain", "order_vendor", "street_id", "street", "number", "city_id", "city_name", "logo_url"];
+  return Object.fromEntries(allowed.filter((key) => key in input).map((key) => [key, input[key]]));
+}

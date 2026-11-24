@@ -7,7 +7,7 @@ export default function CameraResultScreen() {
   const router = useRouter();
   const { t } = useLocale();
   const params = useLocalSearchParams();
-  const rawValue = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
+  const rawValue = typeof params.photoUri === 'string' ? params.photoUri : null;
 
   return (
     <View style={styles.screen}>
@@ -24,7 +24,7 @@ export default function CameraResultScreen() {
           onPress={() => {
             router.push({
               pathname: '/camera/details',
-              params: { photoUri: params.photoUri ?? '' },
+              params: { photoUri: rawValue ?? '' },
             });
           }}
         >

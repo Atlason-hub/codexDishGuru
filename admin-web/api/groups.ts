@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { requireAdmin } from "./_auth";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -8,6 +9,7 @@ const select = "id,company_key,name,join_code,order_vendor,street_id,street,numb
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!SUPABASE_URL || !SERVICE_ROLE) return res.status(500).json({ error: "Missing Supabase settings" });
   try {
+    if (!await requireAdmin(req, res, { write: req.method !== "GET" })) return;
     if (req.method === "GET") {
       const [groupsResponse, usersResponse] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/companies?select=${select}&group_type=eq.code`, { headers }),
@@ -30,7 +32,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(response.status).send(await response.text());
     }
     if (req.method === "POST" || req.method === "PUT") {
-      const body = { ...(req.body || {}), group_type: "code", domain: `group:${String(req.body?.id ?? id)}` };
+      const input = pickGroupFields(req.body);
+      const entityId = String(input.id ?? id);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(entityId)) {
+        return res.status(400).json({ error: "Invalid group id" });
+      }
+      const body = { ...input, group_type: "code", domain: `group:${entityId}` };
       const response = await fetch(
         req.method === "POST" ? `${SUPABASE_URL}/rest/v1/companies` : `${SUPABASE_URL}/rest/v1/companies?id=eq.${encodeURIComponent(id)}&group_type=eq.code`,
         {
@@ -45,5 +52,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     return res.status(500).json({ error: error instanceof Error ? error.message : "Server error" });
   }
+}
+
+function pickGroupFields(value: unknown) {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const allowed = ["id", "company_key", "name", "join_code", "order_vendor", "street_id", "street", "number", "city_id", "city_name", "logo_url"];
+  return Object.fromEntries(allowed.filter((key) => key in input).map((key) => [key, input[key]]));
 }
 

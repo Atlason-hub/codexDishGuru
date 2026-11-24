@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { requireAdmin } from "./_auth";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -16,6 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {
     return json(res, 405, { error: "Method not allowed" });
   }
+  if (!await requireAdmin(req, res)) return;
 
   const companyId = typeof req.query.companyId === "string" ? req.query.companyId : "";
   if (!companyId) {

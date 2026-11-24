@@ -1,6 +1,8 @@
-import { fetchSupabaseJson, json, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
+import { fetchSupabaseJson, json, requireAdmin, searchParam, type Env, type PagesFunction } from "../_lib/cloudflare";
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
+  const access = await requireAdmin(env, request);
+  if (access instanceof Response) return access;
   const groupId = searchParam(request, "groupId");
   if (!groupId) return json({ error: "Missing groupId" }, { status: 400 });
   try {

@@ -1,4 +1,5 @@
 import type { Group, GroupRow } from "./groupsTypes";
+import { apiFetch, fetchProtectedAssetUrl } from "./apiClient";
 
 function normalizeLogoUrl(rawUrl?: string | null): string | undefined {
   if (!rawUrl) return undefined;
@@ -40,10 +41,17 @@ const toGroup = (row: GroupRow): Group => ({
 });
 
 export async function fetchGroups(): Promise<Group[]> {
-  const response = await fetch("/api/groups");
+  const response = await apiFetch("/api/groups");
   const text = await response.text();
   if (!response.ok) throw new Error(text || "Failed to load groups");
-  return (JSON.parse(text) as GroupRow[]).map(toGroup).sort((a, b) =>
+  const groups = await Promise.all((JSON.parse(text) as GroupRow[]).map(async (row) => {
+    const group = toGroup(row);
+    if (group.logoUrl?.startsWith("/api/")) {
+      group.logoUrl = await fetchProtectedAssetUrl(group.logoUrl).catch(() => undefined);
+    }
+    return group;
+  }));
+  return groups.sort((a, b) =>
     new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
   );
 }
@@ -65,7 +73,7 @@ function payload(group: Group): GroupRow {
 }
 
 export async function createGroup(group: Group) {
-  const response = await fetch("/api/groups", {
+  const response = await apiFetch("/api/groups", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload(group))
@@ -76,7 +84,7 @@ export async function createGroup(group: Group) {
 
 export async function updateGroup(id: string, group: Group) {
   const body = payload(group);
-  const response = await fetch(`/api/groups?id=${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`/api/groups?id=${encodeURIComponent(id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -86,7 +94,7 @@ export async function updateGroup(id: string, group: Group) {
 }
 
 export async function deleteGroup(id: string) {
-  const response = await fetch(`/api/groups?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const response = await apiFetch(`/api/groups?id=${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!response.ok) throw new Error((await response.text()) || "Delete group failed.");
   return fetchGroups();
 }
@@ -102,7 +110,7 @@ export async function uploadGroupLogo(groupId: string, file: File): Promise<stri
     reader.readAsDataURL(file);
   });
   const extension = file.name.split(".").pop() || "png";
-  const response = await fetch("/api/logo", {
+  const response = await apiFetch("/api/logo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

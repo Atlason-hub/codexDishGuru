@@ -70,9 +70,13 @@ export default function DishScreen() {
   const dishName = typeof params.dishName === 'string' ? params.dishName : '';
   const dishQuery = typeof params.dishQuery === 'string' ? params.dishQuery : '';
   const refreshParam = typeof params.refresh === 'string' ? params.refresh : '';
-  const dishIdParam =
+  const parsedDishId =
     typeof params.dishId === 'string' && params.dishId.length > 0
       ? Number(params.dishId)
+      : null;
+  const dishIdParam =
+    typeof parsedDishId === 'number' && Number.isFinite(parsedDishId)
+      ? parsedDishId
       : null;
   const restaurantIdParam =
     typeof params.restaurantId === 'string' ? Number(params.restaurantId) : null;

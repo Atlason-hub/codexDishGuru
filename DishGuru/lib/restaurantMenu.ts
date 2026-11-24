@@ -11,6 +11,7 @@ export type MenuCategory = {
 
 export type DishSummary = {
   key: string;
+  dishId: number | null;
   name: string;
   imageUrl: string | null;
   imagePath?: string | null;
@@ -218,6 +219,7 @@ export const summarizeMenuDishes = <T extends DishAssociationLike>(categories: M
 
     return {
       key: String(resolvedDishId ?? menuDish.primaryId),
+      dishId: resolvedDishId,
       name: menuDish.name,
       imageUrl,
       imagePath,
@@ -284,6 +286,7 @@ export const buildRowsFromMenu = (
         id: `${cat.id}-${dish.id}`,
         dish: {
           key: summary?.key ?? String(dish.id),
+          dishId: summary ? summary.dishId : dish.id,
           name: dish.name,
           imageUrl: summary?.imageUrl ?? null,
           imagePath: summary?.imagePath ?? null,

@@ -18,15 +18,15 @@ type AuthContextValue = {
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
 
 async function fetchAdminAccess(
-  userId: string | null
+  accessToken: string | null
 ): Promise<{ role: Role | null; allowed: boolean }> {
-  if (!userId) {
+  if (!accessToken) {
     return { role: null, allowed: false };
   }
 
-  const response = await fetch(
-    `/api/admin-access?userId=${encodeURIComponent(userId)}`
-  );
+  const response = await fetch("/api/admin-access", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
   const payload = (await response.json()) as {
     allowed?: boolean;
     role?: Role | null;
@@ -44,20 +44,20 @@ async function fetchAdminAccess(
 }
 
 async function resolveAdminSession(
-  sessionUser: { id: string; email?: string | null } | null
+  session: { user: { id: string; email?: string | null }; access_token: string } | null
 ): Promise<{ user: { id: string; email: string | null } | null; role: Role | null }> {
-  if (!sessionUser) {
+  if (!session) {
     return { user: null, role: null };
   }
 
-  const email = sessionUser.email ?? null;
-  const adminAccess = await fetchAdminAccess(sessionUser.id);
+  const email = session.user.email ?? null;
+  const adminAccess = await fetchAdminAccess(session.access_token);
   if (!adminAccess.allowed) {
     return { user: null, role: null };
   }
 
   return {
-    user: { id: sessionUser.id, email },
+    user: { id: session.user.id, email },
     role: adminAccess.role
   };
 }
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data } = await supabase.auth.getSession();
         const session = data.session;
         if (mounted && session?.user) {
-          const resolved = await resolveAdminSession(session.user);
+          const resolved = await resolveAdminSession(session);
           if (resolved.user) {
             setUser(resolved.user);
             setRole(resolved.role);
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
-          const resolved = await resolveAdminSession(session.user);
+          const resolved = await resolveAdminSession(session);
           if (resolved.user) {
             setUser(resolved.user);
             setRole(resolved.role);
@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(error.message);
     }
 
-    const resolved = await resolveAdminSession(data.user ?? null);
+    const resolved = await resolveAdminSession(data.session);
     if (!resolved.user) {
       await supabase.auth.signOut({ scope: "local" });
       throw new Error("This user is not allowed to access the admin website.");

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   PanResponder,
   Platform,
@@ -122,6 +123,16 @@ export default function AccountScreen() {
 
   const ensureAvatarSavedToProfile = useCallback(
     async (userId: string, emailAddress: string | null, avatarUrlToSave: string) => {
+      const { data: savedAvatarUrl, error: saveAvatarError } = await supabase.rpc(
+        'set_my_avatar_url',
+        { p_avatar_url: avatarUrlToSave }
+      );
+      if (!saveAvatarError) {
+        return typeof savedAvatarUrl === 'string' && savedAvatarUrl
+          ? savedAvatarUrl
+          : avatarUrlToSave;
+      }
+
       const { data: updatedProfiles, error: updateError } = await supabase
         .from('AppUsers')
         .update({ avatar_url: avatarUrlToSave })
@@ -332,43 +343,42 @@ export default function AccountScreen() {
         setAvatarUrl(null);
       }
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (!session) {
-        setEmail(null);
-        setCurrentUserId(null);
-        setAvatarUrl(null);
-        setTempAvatarUrl(null);
-        setPendingAsset(null);
-        routeToLoggedOutHome();
+        // Returning from the native camera can briefly produce an empty auth
+        // notification while the persisted session is being restored.
+        if (event === 'SIGNED_OUT') {
+          setEmail(null);
+          setCurrentUserId(null);
+          setAvatarUrl(null);
+          setTempAvatarUrl(null);
+          setPendingAsset(null);
+          routeToLoggedOutHome();
+        }
         return;
       }
-      const authUser = (await getCurrentAuthUser()) ?? session.user ?? null;
-      setEmail(authUser?.email ?? session.user?.email ?? null);
-      setCurrentUserId(authUser?.id ?? session.user?.id ?? null);
-      authUserIdRef.current = authUser?.id ?? null;
-      const resolvedAvatar = await hydrateAvatarForUser(
-        authUser?.id ?? null,
-        (authUser?.user_metadata as any)?.avatar_url ?? null
-      );
-      if (!mounted) return;
-      const normalizedMetaAvatar = normalizeAvatarUrl(
-        (authUser?.user_metadata as any)?.avatar_url ?? null
-      );
-      if (resolvedAvatar !== normalizedMetaAvatar) {
-        await syncAuthAvatarMetadata(resolvedAvatar);
-      }
-      if (!mounted) return;
-      await cacheAvatar(authUser?.id ?? null, resolvedAvatar);
-      if (!mounted) return;
-      if (authUser?.id) {
-        publishAvatarUpdate(authUser.id, resolvedAvatar);
-      }
-      if (resolvedAvatar) {
-        setAvatarUrl(resolvedAvatar);
-      } else {
-        setAvatarUrl(null);
-      }
+      const authUser = session.user;
+      setEmail(authUser.email ?? null);
+      setCurrentUserId(authUser.id);
+      authUserIdRef.current = authUser.id;
+
+      // Supabase warns against awaiting auth methods from inside this callback.
+      // Defer profile hydration so token refreshes cannot deadlock avatar saving.
+      setTimeout(() => {
+        void hydrateAvatarForUser(
+          authUser.id,
+          (authUser.user_metadata as any)?.avatar_url ?? null
+        ).then(async (resolvedAvatar) => {
+          if (!mounted) return;
+          await cacheAvatar(authUser.id, resolvedAvatar);
+          if (!mounted) return;
+          publishAvatarUpdate(authUser.id, resolvedAvatar);
+          setAvatarUrl(resolvedAvatar);
+        }).catch((error) => {
+          console.warn('[account] avatar hydration after auth change failed', error);
+        });
+      }, 0);
     });
     const unsubscribeAvatarUpdates = subscribeAvatarUpdates(({ userId, avatarUrl: nextAvatarUrl }) => {
       if (!userId || userId !== authUserIdRef.current) return;
@@ -381,18 +391,6 @@ export default function AccountScreen() {
     };
   }, [routeToLoggedOutHome, syncAuthAvatarMetadata]);
 
-  useEffect(() => {
-    void getCurrentAuthUser().then((user) => {
-      authUserIdRef.current = user?.id ?? null;
-    });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      authUserIdRef.current = session?.user?.id ?? null;
-    });
-    return () => {
-      subscription.subscription.unsubscribe();
-    };
-  }, []);
-
   if (redirectingOut) {
     return <View style={styles.redirectPlaceholder} />;
   }
@@ -404,7 +402,7 @@ export default function AccountScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
     >
       <AppHeader
-        isAuthenticatedOverride={Boolean(currentUserId)}
+        isAuthenticatedOverride
         currentUserIdOverride={currentUserId}
         currentUserEmailOverride={email}
       />
@@ -509,45 +507,51 @@ export default function AccountScreen() {
                   disabled={saving}
                   onPress={() => {
                     if (saving) return;
-                    showAppDialog({
-                      title: t('accountRemoveAvatarTitle'),
-                      message: t('accountRemoveAvatarMessage'),
-                      actions: [
+                    Alert.alert(
+                      t('accountRemoveAvatarTitle'),
+                      t('accountRemoveAvatarMessage'),
+                      [
                         { text: t('commonCancel'), style: 'cancel' },
                         {
                           text: t('accountRemoveAvatarAction'),
                           style: 'destructive',
                           onPress: async () => {
+                            const userId = currentUserId ?? authUserIdRef.current;
+                            const previousAvatarUrl = avatarUrl;
                             try {
                               setSaving(true);
-                              const { data: userData, error: userError } = await supabase.auth.getUser();
-                              const userId = userData.user?.id ?? null;
-                              if (userError) throw userError;
                               if (!userId) {
-                                showAppAlert(t('accountUnauthorized'), t('accountUploadFailed'));
-                                return;
+                                throw new Error(t('accountUnauthorized'));
                               }
 
-                              const { error: updateError } = await supabase
-                                .from('AppUsers')
-                                .update({ avatar_url: null })
-                                .eq('user_id', userId);
-                              if (updateError) throw updateError;
-
-                              await syncAuthAvatarMetadata(null);
-                              const previousAvatarPath = extractAvatarStoragePath(avatarUrl);
-                              if (previousAvatarPath) {
-                                await supabase.storage.from('avatars').remove([previousAvatarPath]);
-                              }
-                              await cacheAvatar(userId, null);
-                              publishAvatarUpdate(userId, null);
                               setAvatarUrl(null);
                               setTempAvatarUrl(null);
                               setPendingAsset(null);
                               setAvatarOffset({ x: 0, y: 0 });
                               setZoom(MIN_ZOOM);
+                              publishAvatarUpdate(userId, null);
+
+                              const { error: updateError } = await supabase.rpc(
+                                'set_my_avatar_url',
+                                { p_avatar_url: null }
+                              );
+                              if (updateError) throw updateError;
+
                               showAppAlert(t('accountSaveSuccessTitle'), t('accountRemoveAvatarSuccess'));
+
+                              void syncAuthAvatarMetadata(null).catch((error) => {
+                                console.warn('[account] avatar metadata cleanup failed', error);
+                              });
+                              void cacheAvatar(userId, null);
+                              const previousAvatarPath = extractAvatarStoragePath(previousAvatarUrl);
+                              if (previousAvatarPath) {
+                                void supabase.storage.from('avatars').remove([previousAvatarPath]);
+                              }
                             } catch (error) {
+                              if (userId) {
+                                setAvatarUrl(previousAvatarUrl);
+                                publishAvatarUpdate(userId, previousAvatarUrl);
+                              }
                               showAppAlert(
                                 t('accountRemoveAvatarFailed'),
                                 error instanceof Error ? error.message : t('accountRemoveAvatarFailed')
@@ -558,7 +562,8 @@ export default function AccountScreen() {
                           },
                         },
                       ],
-                    });
+                      { cancelable: true }
+                    );
                   }}
                 >
                   <Ionicons name="trash-outline" size={14} color={theme.colors.accent} />
@@ -607,17 +612,11 @@ export default function AccountScreen() {
                     setTempAvatarUrl(asset.uri);
                     setAvatarOffset({ x: 0, y: 0 });
                     setZoom(MIN_ZOOM);
-                    setSaving(true);
-                    const { data } = await supabase.auth.getSession();
-                    const userId = data.session?.user?.id;
-                    if (!userId) return;
                   } catch (error) {
                     showAppAlert(
                       t('accountUploadFailed'),
                       error instanceof Error ? error.message : t('accountUploadFailed')
                     );
-                  } finally {
-                    setSaving(false);
                   }
                 }}
               >
@@ -645,17 +644,11 @@ export default function AccountScreen() {
                     setTempAvatarUrl(asset.uri);
                     setAvatarOffset({ x: 0, y: 0 });
                     setZoom(MIN_ZOOM);
-                    setSaving(true);
-                    const { data } = await supabase.auth.getSession();
-                    const userId = data.session?.user?.id;
-                    if (!userId) return;
                   } catch (error) {
                     showAppAlert(
                       t('accountCameraFailed'),
                       error instanceof Error ? error.message : t('accountUploadFailed')
                     );
-                  } finally {
-                    setSaving(false);
                   }
                 }}
               >
@@ -675,18 +668,18 @@ export default function AccountScreen() {
                 if (!pendingAsset || saving) return;
                 try {
                   setSaving(true);
-                  const { data: userData, error: userError } = await supabase.auth.getUser();
-                  const userId = userData.user?.id;
-                  const userEmail = userData.user?.email ?? email;
-                  if (userError) throw userError;
-                  if (!userId) return;
+                  const userId = currentUserId ?? authUserIdRef.current;
+                  const userEmail = email;
+                  if (!userId) {
+                    throw new Error(t('accountUnauthorized'));
+                  }
                   const imageLeft = FRAME_SIZE / 2 - displayWidth / 2 + avatarOffset.x;
                   const imageTop = FRAME_SIZE / 2 - displayHeight / 2 + avatarOffset.y;
-                  const cropX = Math.max(0, (0 - imageLeft) / scaleFactor);
-                  const cropY = Math.max(0, (0 - imageTop) / scaleFactor);
+                  const cropX = Math.floor(Math.max(0, (0 - imageLeft) / scaleFactor));
+                  const cropY = Math.floor(Math.max(0, (0 - imageTop) / scaleFactor));
                   const cropSize = FRAME_SIZE / scaleFactor;
-                  const cropWidth = Math.min(pendingAsset.width - cropX, cropSize);
-                  const cropHeight = Math.min(pendingAsset.height - cropY, cropSize);
+                  const cropWidth = Math.max(1, Math.floor(Math.min(pendingAsset.width - cropX, cropSize)));
+                  const cropHeight = Math.max(1, Math.floor(Math.min(pendingAsset.height - cropY, cropSize)));
 
                   const cropped = await ImageManipulator.manipulateAsync(
                     pendingAsset.uri,
@@ -699,9 +692,9 @@ export default function AccountScreen() {
                           height: cropHeight,
                         },
                       },
-                      { resize: { width: 512, height: 512 } },
+                      { resize: { width: 320, height: 320 } },
                     ],
-                    { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+                    { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG, base64: true }
                   );
                   if (!cropped.base64) {
                     throw new Error(t('accountImageProcessingFailed'));
@@ -723,17 +716,21 @@ export default function AccountScreen() {
                   const url = publicData?.publicUrl ?? null;
                   if (url) {
                     const previousAvatarPath = extractAvatarStoragePath(avatarUrl);
+                    setAvatarUrl(url);
+                    publishAvatarUpdate(userId, url);
                     const persistedAvatarUrl = await ensureAvatarSavedToProfile(userId, userEmail, url);
-                    await syncAuthAvatarMetadata(persistedAvatarUrl);
                     setAvatarUrl(persistedAvatarUrl);
-                    await cacheAvatar(userId, persistedAvatarUrl);
                     publishAvatarUpdate(userId, persistedAvatarUrl);
+                    void cacheAvatar(userId, persistedAvatarUrl);
+                    void syncAuthAvatarMetadata(persistedAvatarUrl).catch((error) => {
+                      console.warn('[account] avatar metadata sync failed', error);
+                    });
                     const nextAvatarPath = extractAvatarStoragePath(persistedAvatarUrl);
                     if (
                       previousAvatarPath &&
                       previousAvatarPath !== nextAvatarPath
                     ) {
-                      await supabase.storage.from('avatars').remove([previousAvatarPath]);
+                      void supabase.storage.from('avatars').remove([previousAvatarPath]);
                     }
                     setPendingAsset(null);
                     setTempAvatarUrl(null);

@@ -25,6 +25,7 @@ import { showAppAlert, showAppDialog } from '../lib/appDialog';
 import { useLocale } from '../lib/locale';
 import { loadGuestMode } from '../lib/guestMode';
 import { subscribeAvatarUpdates } from '../lib/avatarEvents';
+import { publishDishDeleted } from '../lib/dishEvents';
 
 type DishAssociation = {
   id: string;
@@ -150,6 +151,7 @@ export default function MyDishesScreen() {
           text: t('commonDelete'),
           style: 'default',
           onPress: async () => {
+            const wasFavorite = Boolean(favorites[dish.id]);
             try {
               if (!currentUserId) {
                 showAppAlert(t('accountUnauthorized'), t('accountReloginToDelete'));
@@ -159,10 +161,16 @@ export default function MyDishesScreen() {
                 showAppAlert(t('accountUnauthorized'), t('dishDeleteUnauthorized'));
                 return;
               }
-              if (dish.image_path) {
-                await supabase.storage.from('dish-images').remove([dish.image_path]);
-              }
-              await supabase.from('dish_favorites').delete().eq('dish_association_id', dish.id);
+
+              // Remove the card immediately; remote cleanup should not make the
+              // user wait for storage and favorites requests to finish.
+              setDishAssociations((prev) => prev.filter((item) => item.id !== dish.id));
+              setFavorites((prev) => {
+                const next = { ...prev };
+                delete next[dish.id];
+                return next;
+              });
+
               const { error } = await supabase
                 .from('dish_associations')
                 .delete()
@@ -170,21 +178,36 @@ export default function MyDishesScreen() {
                 .eq('user_id', currentUserId);
               if (error) throw error;
 
-              setDishAssociations((prev) => prev.filter((item) => item.id !== dish.id));
-              setFavorites((prev) => {
-                const next = { ...prev };
-                delete next[dish.id];
-                return next;
+              publishDishDeleted({ dishId: dish.id, userId: currentUserId });
+
+              void Promise.all([
+                dish.image_path
+                  ? supabase.storage.from('dish-images').remove([dish.image_path])
+                  : Promise.resolve(),
+                supabase.from('dish_favorites').delete().eq('dish_association_id', dish.id),
+              ]).catch((cleanupError) => {
+                console.warn('[my-dishes] post-delete cleanup failed', cleanupError);
               });
-              await loadMyDishesRef.current?.(currentUserId, { showLoading: false });
             } catch {
+              setDishAssociations((prev) =>
+                prev.some((item) => item.id === dish.id)
+                  ? prev
+                  : [...prev, dish].sort(
+                      (a, b) =>
+                        new Date(b.created_at ?? 0).getTime() -
+                        new Date(a.created_at ?? 0).getTime()
+                    )
+              );
+              if (wasFavorite) {
+                setFavorites((prev) => ({ ...prev, [dish.id]: true }));
+              }
               showAppAlert(t('accountDeleteFailed'), t('accountDeleteFailed'));
             }
           },
         },
       ],
     });
-  }, [currentUserId, t]);
+  }, [currentUserId, favorites, t]);
 
   const loadMyDishes = useCallback(async (userId: string, options?: { showLoading?: boolean }) => {
     try {

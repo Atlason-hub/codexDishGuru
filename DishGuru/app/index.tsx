@@ -37,6 +37,7 @@ import {
   normalizeAvatarUrl,
   resolveAvatarForUser,
 } from '../lib/avatar';
+import { subscribeDishDeleted } from '../lib/dishEvents';
 import DishCard from '../components/DishCard';
 import StaggeredEntrance from '../components/StaggeredEntrance';
 import LegalModal from '../components/LegalModal';
@@ -161,22 +162,22 @@ const fetchBootstrapCompanyById = async (companyId: string, accessToken?: string
   return rows[0] ?? null;
 };
 
-const fetchBootstrapVisibleRows = async (companyId: string, accessToken?: string | null) => {
-  const response = await fetch(`${BOOTSTRAP_SUPABASE_URL}/rest/v1/rpc/get_visible_dishes`, {
+const fetchBootstrapVisibleRows = async (_companyId: string, accessToken?: string | null) => {
+  const response = await fetch(`${BOOTSTRAP_SUPABASE_URL}/rest/v1/rpc/get_my_visible_dishes`, {
     method: 'POST',
     headers: buildBootstrapHeaders(accessToken),
-    body: JSON.stringify({ p_company_id: companyId }),
+    body: JSON.stringify({}),
   });
   if (!response.ok) return [];
   const rows = await response.json();
   return Array.isArray(rows) ? rows : [];
 };
 
-const fetchBootstrapCompanyRows = async (companyId: string, accessToken?: string | null) => {
-  const response = await fetch(`${BOOTSTRAP_SUPABASE_URL}/rest/v1/rpc/get_company_dishes`, {
+const fetchBootstrapCompanyRows = async (_companyId: string, accessToken?: string | null) => {
+  const response = await fetch(`${BOOTSTRAP_SUPABASE_URL}/rest/v1/rpc/get_my_membership_dishes`, {
     method: 'POST',
     headers: buildBootstrapHeaders(accessToken),
-    body: JSON.stringify({ company_id: companyId }),
+    body: JSON.stringify({}),
   });
   if (!response.ok) return [];
   const rows = await response.json();
@@ -291,6 +292,7 @@ export default function HomeScreen() {
   const dishAssociationsRef = useRef<DishAssociation[]>(rememberedHomeFeed?.items ?? []);
   const cacheHydratedRef = useRef(false);
   const lastRefreshRef = useRef(0);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const guestActivationInFlightRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const bootstrapRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -539,10 +541,10 @@ export default function HomeScreen() {
             setHasLoaded(true);
             setLoading(false);
             if (userId) {
-              await AsyncStorage.setItem(
+              void AsyncStorage.setItem(
                 getHomeCacheKey(userId),
                 JSON.stringify({ updatedAt: Date.now(), items: resolvedFeed.rows })
-              );
+              ).catch(() => {});
             }
           };
 
@@ -579,10 +581,10 @@ export default function HomeScreen() {
           setHasLoaded(true);
           setLoading(false);
           if (userId) {
-            await AsyncStorage.setItem(
+            void AsyncStorage.setItem(
               getHomeCacheKey(userId),
               JSON.stringify({ updatedAt: Date.now(), items: fallbackCompanyRows })
-            );
+            ).catch(() => {});
           }
           return;
         }
@@ -615,6 +617,25 @@ export default function HomeScreen() {
     dishAssociationsRef.current = dishAssociations;
     dishAssociationsCountRef.current = dishAssociations.length;
   }, [dishAssociations]);
+
+  useEffect(() => {
+    return subscribeDishDeleted(({ dishId, userId }) => {
+      if (currentUserId !== userId) return;
+      setDishAssociations((current) => current.filter((item) => item.id !== dishId));
+      setFavorites((current) => {
+        if (!(dishId in current)) return current;
+        const next = { ...current };
+        delete next[dishId];
+        return next;
+      });
+      if (rememberedHomeFeed?.userId === userId) {
+        rememberedHomeFeed = {
+          userId,
+          items: rememberedHomeFeed.items.filter((item) => item.id !== dishId),
+        };
+      }
+    });
+  }, [currentUserId]);
 
   useEffect(() => {
     if (isAuthenticated && currentUserId && dishAssociations.length > 0) {
@@ -967,16 +988,18 @@ export default function HomeScreen() {
           withTimeout(loadFavorites(userId), 1500, null),
           (async () => {
             if (companyIdFromDomain && accessToken) {
-              const visibleRows = await withTimeout(
-                fetchBootstrapVisibleRows(companyIdFromDomain, accessToken),
-                5000,
-                [] as DishAssociation[]
-              );
-              const companyRows = await withTimeout(
-                fetchBootstrapCompanyRows(companyIdFromDomain, accessToken),
-                5000,
-                [] as DishAssociation[]
-              );
+              const [visibleRows, companyRows] = await Promise.all([
+                withTimeout(
+                  fetchBootstrapVisibleRows(companyIdFromDomain, accessToken),
+                  5000,
+                  [] as DishAssociation[]
+                ),
+                withTimeout(
+                  fetchBootstrapCompanyRows(companyIdFromDomain, accessToken),
+                  5000,
+                  [] as DishAssociation[]
+                ),
+              ]);
               const bootstrapRows = mergeCompanyVisibleRows(
                 visibleRows as DishAssociation[],
                 companyRows as DishAssociation[],
@@ -1008,10 +1031,10 @@ export default function HomeScreen() {
               setHasLoaded(true);
               setLoading(false);
               skipNextSignedInAutoLoadUserRef.current = userId;
-              await AsyncStorage.setItem(
+              void AsyncStorage.setItem(
                 getHomeCacheKey(userId),
                 JSON.stringify({ updatedAt: Date.now(), items: bootstrapRows })
-              );
+              ).catch(() => {});
               return;
             }
             await withTimeout(
@@ -1204,8 +1227,20 @@ export default function HomeScreen() {
         }
       }
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+
+      // Returning from a native camera can briefly emit an empty session while
+      // the persisted session is restored. Only an explicit sign-out should
+      // replace the already-authenticated home screen with the login screen.
+      if (!session && event !== 'SIGNED_OUT') return;
+
+      // Run Supabase reads after the auth callback returns. Awaiting them inside
+      // the callback can hold the auth lock and make session restoration stall.
+      setTimeout(() => {
+        if (!mounted) return;
+        void (async () => {
+          try {
         setAuthHydrating(Boolean(session?.user?.id));
         setSessionChecked(true);
         setIsAuthenticated(Boolean(session));
@@ -1272,10 +1307,12 @@ export default function HomeScreen() {
             rememberedHomeFeed = null;
           }
         }
-      } catch (authSyncError) {
-        console.warn('[home] auth state sync failed', authSyncError);
-        setAuthHydrating(false);
-      }
+          } catch (authSyncError) {
+            console.warn('[home] auth state sync failed', authSyncError);
+            setAuthHydrating(false);
+          }
+        })();
+      }, 0);
     });
     return () => {
       mounted = false;
@@ -1350,11 +1387,16 @@ export default function HomeScreen() {
       return;
     }
     if (currentUserId) {
-      if (skipNextSignedInAutoLoadUserRef.current === currentUserId) {
+      // A save route carries a fresh refresh token. Never let the initial
+      // bootstrap guard or persisted feed cache hide the newly inserted dish.
+      if (!refreshParam && skipNextSignedInAutoLoadUserRef.current === currentUserId) {
         skipNextSignedInAutoLoadUserRef.current = null;
         return;
       }
-      loadDishAssociations({ useCache: true, showLoading: false });
+      if (refreshParam) {
+        skipNextSignedInAutoLoadUserRef.current = null;
+      }
+      loadDishAssociations({ useCache: !refreshParam, showLoading: false });
     } else if (isGuestMode) {
       loadDishAssociations({ showLoading: false });
     }
@@ -1495,31 +1537,44 @@ export default function HomeScreen() {
   const refreshContent = useCallback(
     async (options?: { force?: boolean; showSpinner?: boolean }) => {
       if (!currentUserId && !isGuestMode) return;
+      if (refreshInFlightRef.current) {
+        return refreshInFlightRef.current;
+      }
       const force = options?.force ?? false;
       const showSpinner = options?.showSpinner ?? false;
       const now = Date.now();
-      if (!force && now - lastRefreshRef.current < 60000) {
+      if (!force && now - lastRefreshRef.current < 15000) {
         return;
       }
       lastRefreshRef.current = now;
       const shouldShowRefreshSpinner = Boolean(
         showSpinner && currentUserId && hasLoaded && (dishAssociations.length > 0 || error)
       );
-      try {
-        if (currentUserId) {
-          if (shouldShowRefreshSpinner) {
-            setIsRefreshing(true);
+      const refreshPromise = (async () => {
+        try {
+          if (currentUserId) {
+            if (shouldShowRefreshSpinner) {
+              setIsRefreshing(true);
+            }
+            await Promise.all([
+              loadDishAssociations({ showLoading: false }),
+              loadFavorites(currentUserId),
+            ]);
+          } else {
+            await loadDishAssociations({ showLoading: false });
           }
-          await Promise.all([
-            loadDishAssociations({ showLoading: false }),
-            loadFavorites(currentUserId),
-          ]);
-        } else {
-          await loadDishAssociations({ showLoading: false });
+        } finally {
+          if (shouldShowRefreshSpinner) {
+            setIsRefreshing(false);
+          }
         }
+      })();
+      refreshInFlightRef.current = refreshPromise;
+      try {
+        await refreshPromise;
       } finally {
-        if (shouldShowRefreshSpinner) {
-          setIsRefreshing(false);
+        if (refreshInFlightRef.current === refreshPromise) {
+          refreshInFlightRef.current = null;
         }
       }
     },
@@ -1734,52 +1789,31 @@ export default function HomeScreen() {
       setAuthError(null);
       const normalizedGroupCode = groupCode.trim().toUpperCase();
       let companyMatch: { id: string } | null = null;
-      if (normalizedGroupCode) {
-        const { data: matchedGroups, error: groupError } = await supabase.rpc('resolve_group_code', { p_code: normalizedGroupCode });
-        if (groupError) throw groupError;
-        companyMatch = (Array.isArray(matchedGroups) ? matchedGroups[0] : matchedGroups) ?? null;
-        if (!companyMatch?.id) {
-          setAuthError(t('authGroupCodeInvalid'));
-          return;
-        }
-      } else {
+      if (!normalizedGroupCode) {
         const { data, error: companyError } = await supabase.from('companies').select('id').ilike('domain', domainPart).eq('group_type', 'domain').limit(1).maybeSingle();
         if (companyError) throw companyError;
         companyMatch = data;
-      }
-      if (!companyMatch?.id) {
-        setAuthError(t('authEmailDomainUnknown'));
-        showAppDialog({
-          title: t('authRequestCompanyTitle'),
-          message: t('authRequestCompanyMessage'),
-          actions: [
-            { text: t('commonCancel'), style: 'cancel' },
-            {
-              text: t('authRequestCompanyAction'),
-              onPress: async () => {
-                try {
-                  await Linking.openURL(buildCompanyRequestUrl(trimmedEmail, locale));
-                } catch {
-                  showAppAlert(t('authRequestCompanyTitle'), t('authRequestCompanyOpenFailed'));
-                }
+        if (!companyMatch?.id) {
+          setAuthError(t('authEmailDomainUnknown'));
+          showAppDialog({
+            title: t('authRequestCompanyTitle'),
+            message: t('authRequestCompanyMessage'),
+            actions: [
+              { text: t('commonCancel'), style: 'cancel' },
+              {
+                text: t('authRequestCompanyAction'),
+                onPress: async () => {
+                  try {
+                    await Linking.openURL(buildCompanyRequestUrl(trimmedEmail, locale));
+                  } catch {
+                    showAppAlert(t('authRequestCompanyTitle'), t('authRequestCompanyOpenFailed'));
+                  }
+                },
               },
-            },
-          ],
-        });
-        return;
-      }
-      const { data: existingByEmail, error: existingByEmailError } = await supabase
-        .from('AppUsers')
-        .select('user_id, email')
-        .ilike('email', trimmedEmail)
-        .limit(1)
-        .maybeSingle();
-      if (existingByEmailError) {
-        throw existingByEmailError;
-      }
-      if (existingByEmail?.email) {
-        setAuthError(t('authUserExists'));
-        return;
+            ],
+          });
+          return;
+        }
       }
       const redirectTo = buildAuthRedirectUrl(locale);
       const { data, error } = await supabase.auth.signUp({

@@ -34,6 +34,7 @@ import {
   useEnableAndroidLayoutAnimation,
   useKeyboardInset,
 } from '../../lib/uiHooks';
+import { getCapturedPhoto } from '../../lib/capturedPhoto';
 
 type Restaurant = {
   RestaurantId: number;
@@ -87,6 +88,24 @@ const isSystemEntry = (value: string) => value.toLowerCase().includes('system');
 const DEFAULT_CITY_ID = 14;
 const DEFAULT_STREET_ID = 54730;
 const SEARCH_FIELD_TOP_GUTTER = 24;
+
+const decodePhotoUriParam = (raw: string | null) => {
+  if (!raw) return null;
+  let value = raw;
+  // Older camera routes encoded the URI before Expo Router encoded the route.
+  // Decode up to two layers so both old and new navigation payloads render.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (!/%[0-9a-f]{2}/i.test(value)) break;
+    try {
+      const decoded = decodeURIComponent(value);
+      if (decoded === value) break;
+      value = decoded;
+    } catch {
+      break;
+    }
+  }
+  return value;
+};
 
 const mapMenuToCategories = (data: any): DishCategory[] => {
   const categories: any[] = Array.isArray(data?.Data)
@@ -263,8 +282,14 @@ export default function CameraDetailsScreen() {
   const draftSubmissionKeyRef = useRef(
     `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
   );
-  const photoUri = typeof params.photoUri === 'string' ? decodeURIComponent(params.photoUri) : null;
-  const photoBase64 = typeof params.photoBase64 === 'string' ? params.photoBase64 : '';
+  const photoKey = typeof params.photoKey === 'string' ? params.photoKey : null;
+  const capturedPhoto = getCapturedPhoto(photoKey);
+  const photoUri =
+    capturedPhoto?.uri ??
+    decodePhotoUriParam(typeof params.photoUri === 'string' ? params.photoUri : null);
+  const photoBase64 =
+    capturedPhoto?.base64 ??
+    (typeof params.photoBase64 === 'string' ? params.photoBase64 : '');
   const presetRestaurantId =
     typeof params.restaurantId === 'string' && params.restaurantId
       ? Number(params.restaurantId)
@@ -320,9 +345,13 @@ export default function CameraDetailsScreen() {
   const allDishCategoriesCollapsed =
     dishCategories.length > 0 &&
     dishCategories.every((cat) => collapsedDishCategories.has(cat.id));
+  const typedRestaurantName = search.trim();
+  const typedDishName = dishSearch.trim();
   const hasDisplayImage = Boolean(photoUri || storedImageUrl);
-  const canFinalizeSave = hasDisplayImage && Boolean(selectedRestaurantId && selectedDish && selectedDish.id > 0);
+  const canFinalizeSave =
+    hasDisplayImage && Boolean(selectedName?.trim() && selectedDish?.name.trim());
   const canSaveDraft = hasDisplayImage && !disableDrafts;
+  const pickerOpen = dropdownOpen || dishDropdownOpen;
 
   useEnableAndroidLayoutAnimation();
 
@@ -363,6 +392,8 @@ export default function CameraDetailsScreen() {
         setStoredImagePath(draft.image_path ?? null);
         if (!presetRestaurantId && draft.restaurant_id) {
           setSelectedRestaurantId(Number(draft.restaurant_id));
+        } else if (!presetRestaurantId && draft.restaurant_name) {
+          setSelectedRestaurantId(-1);
         }
         if (!presetRestaurantName && draft.restaurant_name) {
           setSelectedName(draft.restaurant_name);
@@ -426,7 +457,11 @@ export default function CameraDetailsScreen() {
   });
 
   useEffect(() => {
-    if (!selectedRestaurantId) return;
+    if (!selectedRestaurantId || selectedRestaurantId <= 0) {
+      setDishCategories([]);
+      setMenuLoading(false);
+      return;
+    }
     const requestId = ++menuRequestIdRef.current;
     const fetchMenu = async () => {
       try {
@@ -660,6 +695,9 @@ export default function CameraDetailsScreen() {
     if (presetRestaurantId) {
       setSelectedRestaurantId(presetRestaurantId);
       setSelectedName(presetRestaurantName);
+    } else if (presetRestaurantName) {
+      setSelectedRestaurantId(-1);
+      setSelectedName(presetRestaurantName);
     }
   }, [currentUserId, fetchCompanyRestaurants, presetRestaurantId, presetRestaurantName]);
 
@@ -669,11 +707,11 @@ export default function CameraDetailsScreen() {
       showAppAlert(t('cameraMissingImageTitle'), t('cameraTakePhotoFirst'));
       return;
     }
-    if (!selectedRestaurantId) {
+    if (!selectedName?.trim()) {
       showAppAlert(t('cameraMissingRestaurantTitle'), t('cameraChooseRestaurant'));
       return;
     }
-    if (!selectedDish || selectedDish.id <= 0) {
+    if (!selectedDish?.name.trim()) {
       showAppAlert(t('cameraMissingDishTitle'), t('cameraChooseDish'));
       return;
     }
@@ -710,10 +748,10 @@ export default function CameraDetailsScreen() {
       }
       const insert = await supabase.from('dish_associations').insert({
         user_id: authenticatedUserId,
-        restaurant_id: selectedRestaurantId,
+        restaurant_id: selectedRestaurantId && selectedRestaurantId > 0 ? selectedRestaurantId : null,
         restaurant_name: selectedName ?? null,
         cuisine: selectedRestaurantCuisine,
-        dish_id: selectedDish.id,
+        dish_id: selectedDish.id > 0 ? selectedDish.id : null,
         dish_name: selectedDish.name,
         review_text: reviewText,
         tasty_score: starsToScore(tastyScore),
@@ -765,7 +803,7 @@ export default function CameraDetailsScreen() {
         user_id: authenticatedUserId,
         image_url: imageUrl,
         image_path: imagePath,
-        restaurant_id: selectedRestaurantId,
+        restaurant_id: selectedRestaurantId && selectedRestaurantId > 0 ? selectedRestaurantId : null,
         restaurant_name: selectedName ?? null,
         dish_id: selectedDish && selectedDish.id > 0 ? selectedDish.id : null,
         dish_name: selectedDish?.name ?? null,
@@ -891,8 +929,12 @@ export default function CameraDetailsScreen() {
             style={[styles.dropdownHeader, lockSelection && styles.dropdownHeaderLocked]}
             onPress={() => {
               if (lockSelection) return;
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setDropdownOpen((prev) => !prev);
+              Keyboard.dismiss();
+              setDishDropdownOpen(false);
+              // Use the render-time value rather than a functional toggle.
+              // Some Android builds dispatch this nested press twice while the
+              // ScrollView is settling; two identical assignments stay open.
+              setDropdownOpen(!dropdownOpen);
             }}
             disabled={loading || lockSelection}
           >
@@ -911,7 +953,28 @@ export default function CameraDetailsScreen() {
           </Pressable>
           {dropdownOpen && !lockSelection && (
             <View style={styles.dropdownList}>
-              <View style={[styles.dropdownControlsRow, !isRTL && styles.dropdownControlsRowLtr]}>
+              <View style={[styles.dropdownToolbar, !isRTL && styles.dropdownToolbarLtr]}>
+                <View style={[styles.searchRow, !isRTL && styles.searchRowLtr]}>
+                  <Ionicons name="search" size={16} color={theme.colors.textMuted} />
+                  <TextInput
+                    style={[styles.searchInput, !isRTL && styles.searchInputLtr]}
+                    placeholder={t('cameraSearchRestaurantPlaceholder')}
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={search}
+                    onChangeText={setSearch}
+                    onFocus={() => {
+                      restaurantSearchFocusedRef.current = true;
+                      dishSearchFocusedRef.current = false;
+                      const targetY = Math.max(0, restaurantDropdownYRef.current - SEARCH_FIELD_TOP_GUTTER);
+                      scrollRef.current?.scrollTo({ y: targetY, animated: true });
+                    }}
+                    onBlur={() => {
+                      hasNudgedRestaurantSearchRef.current = false;
+                      restaurantSearchFocusedRef.current = false;
+                    }}
+                  />
+                </View>
+                <View style={[styles.dropdownControlsRow, !isRTL && styles.dropdownControlsRowLtr]}>
                 <Pressable
                   style={[
                     styles.dropdownControlButton,
@@ -948,31 +1011,34 @@ export default function CameraDetailsScreen() {
                     {t('searchCollapseAll')}
                   </Text>
                 </Pressable>
+                </View>
               </View>
-              <View style={[styles.searchRow, !isRTL && styles.searchRowLtr]}>
-                <Ionicons name="search" size={16} color={theme.colors.textMuted} />
-                <TextInput
-                  style={[styles.searchInput, !isRTL && styles.searchInputLtr]}
-                  placeholder={t('cameraSearchRestaurantPlaceholder')}
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={search}
-                  onChangeText={(text) => setSearch(text)}
-                  onFocus={() => {
-                    restaurantSearchFocusedRef.current = true;
-                    dishSearchFocusedRef.current = false;
-                    const targetY = Math.max(0, restaurantDropdownYRef.current - SEARCH_FIELD_TOP_GUTTER);
-                    scrollRef.current?.scrollTo({ y: targetY, animated: true });
+              {typedRestaurantName ? (
+                <Pressable
+                  style={[styles.manualEntryAction, !isRTL && styles.manualEntryActionLtr]}
+                  onPress={() => {
+                    setSelectedName(typedRestaurantName);
+                    setSelectedRestaurantId(-1);
+                    setSelectedRestaurantCuisine(null);
+                    setSelectedDish(null);
+                    setDishCategories([]);
+                    setSearch('');
+                    setDropdownOpen(false);
                   }}
-                  onBlur={() => {
-                    hasNudgedRestaurantSearchRef.current = false;
-                    restaurantSearchFocusedRef.current = false;
-                  }}
-                />
-              </View>
+                >
+                  <View style={styles.manualEntryIcon}>
+                    <Ionicons name="add" size={16} color={theme.colors.accent} />
+                  </View>
+                  <Text style={[styles.manualEntryText, !isRTL && styles.manualEntryTextLtr]} numberOfLines={1}>
+                    {t('cameraUseTypedRestaurant')}: “{typedRestaurantName}”
+                  </Text>
+                </Pressable>
+              ) : null}
               {restaurants.length === 0 ? (
                 <Text style={styles.dropdownEmpty}>{t('cameraNoRestaurantsFound')}</Text>
               ) : (
                 <ScrollView
+                  style={styles.dropdownResults}
                   nestedScrollEnabled
                   showsVerticalScrollIndicator
                   contentContainerStyle={styles.dropdownScroll}
@@ -1048,8 +1114,9 @@ export default function CameraDetailsScreen() {
             style={[styles.dropdownHeader, lockSelection && styles.dropdownHeaderLocked]}
             onPress={() => {
               if (lockSelection) return;
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setDishDropdownOpen((prev) => !prev);
+              Keyboard.dismiss();
+              setDropdownOpen(false);
+              setDishDropdownOpen(!dishDropdownOpen);
             }}
             disabled={loading || !selectedRestaurantId || lockSelection}
           >
@@ -1070,7 +1137,30 @@ export default function CameraDetailsScreen() {
           </Pressable>
           {dishDropdownOpen && !lockSelection && (
             <View style={styles.dropdownList}>
-              <View style={[styles.dropdownControlsRow, !isRTL && styles.dropdownControlsRowLtr]}>
+              <View style={[styles.dropdownToolbar, !isRTL && styles.dropdownToolbarLtr]}>
+                <View style={[styles.searchRow, !isRTL && styles.searchRowLtr]}>
+                  <Ionicons name="search" size={16} color={theme.colors.textMuted} />
+                  <TextInput
+                    style={[styles.searchInput, !isRTL && styles.searchInputLtr]}
+                    placeholder={t('cameraSearchDishPlaceholder')}
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={dishSearch}
+                    onChangeText={setDishSearch}
+                    onFocus={() => {
+                      dishSearchFocusedRef.current = true;
+                      restaurantSearchFocusedRef.current = false;
+                      const targetY = Math.max(0, dishDropdownYRef.current - SEARCH_FIELD_TOP_GUTTER);
+                      scrollRef.current?.scrollTo({ y: targetY, animated: true });
+                      if (hasNudgedDishSearchRef.current) return;
+                      hasNudgedDishSearchRef.current = true;
+                    }}
+                    onBlur={() => {
+                      hasNudgedDishSearchRef.current = false;
+                      dishSearchFocusedRef.current = false;
+                    }}
+                  />
+                </View>
+                <View style={[styles.dropdownControlsRow, !isRTL && styles.dropdownControlsRowLtr]}>
                 <Pressable
                   style={[
                     styles.dropdownControlButton,
@@ -1105,29 +1195,25 @@ export default function CameraDetailsScreen() {
                     {t('searchCollapseAll')}
                   </Text>
                 </Pressable>
+                </View>
               </View>
-              <View style={[styles.searchRow, !isRTL && styles.searchRowLtr]}>
-                <Ionicons name="search" size={16} color={theme.colors.textMuted} />
-                <TextInput
-                  style={[styles.searchInput, !isRTL && styles.searchInputLtr]}
-                  placeholder={t('searchDishPlaceholder')}
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={dishSearch}
-                  onChangeText={(text) => setDishSearch(text)}
-                  onFocus={() => {
-                    dishSearchFocusedRef.current = true;
-                    restaurantSearchFocusedRef.current = false;
-                    const targetY = Math.max(0, dishDropdownYRef.current - SEARCH_FIELD_TOP_GUTTER);
-                    scrollRef.current?.scrollTo({ y: targetY, animated: true });
-                    if (hasNudgedDishSearchRef.current) return;
-                    hasNudgedDishSearchRef.current = true;
+              {typedDishName ? (
+                <Pressable
+                  style={[styles.manualEntryAction, !isRTL && styles.manualEntryActionLtr]}
+                  onPress={() => {
+                    setSelectedDish({ id: -1, name: typedDishName });
+                    setDishSearch('');
+                    setDishDropdownOpen(false);
                   }}
-                  onBlur={() => {
-                    hasNudgedDishSearchRef.current = false;
-                    dishSearchFocusedRef.current = false;
-                  }}
-                />
-              </View>
+                >
+                  <View style={styles.manualEntryIcon}>
+                    <Ionicons name="add" size={16} color={theme.colors.accent} />
+                  </View>
+                  <Text style={[styles.manualEntryText, !isRTL && styles.manualEntryTextLtr]} numberOfLines={1}>
+                    {t('cameraUseTypedDish')}: “{typedDishName}”
+                  </Text>
+                </Pressable>
+              ) : null}
               {menuLoading ? (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator size="small" color={theme.colors.text} />
@@ -1137,6 +1223,7 @@ export default function CameraDetailsScreen() {
                 <Text style={styles.dropdownEmpty}>{t('searchNoDishesFound')}</Text>
               ) : (
                 <ScrollView
+                  style={styles.dropdownResults}
                   nestedScrollEnabled
                   showsVerticalScrollIndicator
                   contentContainerStyle={styles.dropdownScroll}
@@ -1201,7 +1288,7 @@ export default function CameraDetailsScreen() {
             <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
           </View>
           <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
-            <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
+            <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={38} />
           </View>
         </View>
         <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
@@ -1209,13 +1296,14 @@ export default function CameraDetailsScreen() {
             <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingSize')}</Text>
           </View>
           <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
-            <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
+            <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={38} />
           </View>
         </View>
 
         </Pressable>
       </ScrollView>
-      <View style={[styles.saveFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      {!pickerOpen ? (
+        <View style={[styles.saveFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         {!canFinalizeSave ? (
           <Text style={styles.saveHintText}>{t('cameraAssociationRequiredToSave')}</Text>
         ) : null}
@@ -1252,7 +1340,8 @@ export default function CameraDetailsScreen() {
           )}
         </Pressable>
         </View>
-      </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1447,39 +1536,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 12,
-    maxHeight: 220,
+    maxHeight: 500,
     backgroundColor: theme.colors.card,
+  },
+  dropdownToolbar: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownToolbarLtr: {
+    flexDirection: 'row',
   },
   dropdownControlsRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 8,
-    alignSelf: 'flex-end',
-    paddingHorizontal: 6,
-    paddingTop: 10,
-    paddingBottom: 4,
+    gap: 5,
   },
   dropdownControlsRowLtr: {
     flexDirection: 'row',
-    alignSelf: 'flex-start',
   },
   dropdownControlButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.30)',
     backgroundColor: 'rgba(255,248,242,0.70)',
-    minWidth: 88,
+    minWidth: 58,
   },
   dropdownControlButtonActive: {
     borderColor: 'rgba(244,135,34,0.40)',
     backgroundColor: 'rgba(255,241,224,0.96)',
   },
   dropdownControlText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: theme.typography.semibold,
     color: theme.colors.textMuted,
   },
@@ -1489,14 +1585,23 @@ const styles = StyleSheet.create({
   dropdownScroll: {
     paddingBottom: 6,
   },
+  dropdownResults: {
+    maxHeight: 450,
+  },
   searchRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+    height: 32,
+    maxHeight: 32,
+    paddingHorizontal: 9,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    backgroundColor: theme.colors.cardAlt,
   },
   searchRowLtr: {
     flexDirection: 'row',
@@ -1504,6 +1609,11 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
+    lineHeight: 18,
+    height: 26,
+    paddingVertical: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
     color: theme.colors.text,
     textAlign: 'right',
   },
@@ -1513,6 +1623,40 @@ const styles = StyleSheet.create({
   dropdownEmpty: {
     padding: 12,
     color: theme.colors.textMuted,
+  },
+  manualEntryAction: {
+    minHeight: 42,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.accentSoft,
+  },
+  manualEntryActionLtr: {
+    flexDirection: 'row',
+  },
+  manualEntryIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.card,
+  },
+  manualEntryText: {
+    flex: 1,
+    color: theme.colors.accent,
+    fontSize: 13,
+    fontFamily: theme.typography.semibold,
+    textAlign: 'right',
+  },
+  manualEntryTextLtr: {
+    textAlign: 'left',
   },
   dropdownItem: {
     paddingVertical: 10,
@@ -1624,8 +1768,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ratingHeader: {
-    marginTop: 28,
-    fontSize: 16,
+    marginTop: 20,
+    fontSize: 15,
     color: theme.colors.text,
     textAlign: 'right',
     fontWeight: '600',
@@ -1637,7 +1781,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: Platform.OS === 'ios' ? 4 : 0,
-    marginBottom: 12,
+    marginBottom: 7,
     justifyContent: Platform.OS === 'ios' ? 'flex-start' : 'flex-end',
     width: '100%',
     paddingRight: Platform.OS === 'ios' ? 20 : 32,

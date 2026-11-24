@@ -1,6 +1,8 @@
-import { fetchSupabaseJson, json, type Env, type PagesFunction } from "../_lib/cloudflare";
+import { fetchSupabaseJson, json, requireAdmin, type Env, type PagesFunction } from "../_lib/cloudflare";
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
+  const access = await requireAdmin(env, request);
+  if (access instanceof Response) return access;
   try {
     const reports = await fetchSupabaseJson<
       Array<{
@@ -90,6 +92,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
 };
 
 export const onRequestDelete: PagesFunction<Env> = async ({ env, request }) => {
+  const access = await requireAdmin(env, request, { write: true });
+  if (access instanceof Response) return access;
   const id = new URL(request.url).searchParams.get("id")?.trim() ?? "";
   if (!id) {
     return json({ error: "Missing report id" }, { status: 400 });

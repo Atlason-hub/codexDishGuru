@@ -187,7 +187,6 @@ export default function AppHeader({
       if (snapshot?.logoUrl && !cancelled) {
         setSessionLogo(snapshot);
         setResolvedSessionLogoUrl(snapshot.logoUrl);
-        return;
       }
 
       const resolved = await loadSessionCompanyLogo(effectiveCurrentUserId, effectiveCurrentUserEmail, {
@@ -240,7 +239,7 @@ export default function AppHeader({
 
   useEffect(() => {
     setLogoLoadFailed(false);
-  }, [companyLogoUrl, sessionLogo?.logoUrl]);
+  }, [companyLogoUrl, resolvedSessionLogoUrl, sessionLogo?.logoUrl]);
 
   const syncHeaderState = useCallback(async (sessionOverride?: any, options?: {
     useCachedAssets?: boolean;
@@ -576,6 +575,15 @@ export default function AppHeader({
 
   const goHome = () => {
     setResolvedMenuVisible(false);
+
+    // Account is opened from the existing home screen. Pop back to that
+    // mounted screen so returning from the native camera cannot briefly render
+    // the signed-out state while a fresh root route restores its session.
+    if (pathname === '/account' && router.canGoBack()) {
+      router.back();
+      return;
+    }
+
     const isPlainHomeRoute =
       pathname === '/' &&
       favoritesParam !== '1' &&
@@ -593,6 +601,7 @@ export default function AppHeader({
         headerSync: String(Date.now()),
         guestMode: isGuestMode ? '1' : '0',
         homeTab: 'dishes',
+        skipLaunch: '1',
       },
     });
   };
@@ -677,10 +686,10 @@ export default function AppHeader({
       : null;
   const effectiveCompanyLogoUrl = hasSignedInSession
     ? (
-        normalizedOverrideLogoUrl ??
         resolvedSessionLogoUrl ??
         sessionLogo?.logoUrl ??
         sessionLogoSnapshot?.logoUrl ??
+        normalizedOverrideLogoUrl ??
         companyLogoUrl ??
         null
       )

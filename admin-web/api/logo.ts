@@ -1,12 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { requireAdmin } from "./_auth";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const DEFAULT_BUCKET = process.env.COMPANY_LOGOS_BUCKET || "company-logos";
 
 function getCandidateBuckets(requestedBucket?: string) {
+  const allowed = new Set([DEFAULT_BUCKET, "companies", "company-logos"]);
   return Array.from(
-    new Set([requestedBucket, DEFAULT_BUCKET, "companies", "company-logos"].filter(Boolean))
+    new Set([requestedBucket && allowed.has(requestedBucket) ? requestedBucket : null, DEFAULT_BUCKET, "companies", "company-logos"].filter(Boolean))
   ) as string[];
 }
 
@@ -14,11 +16,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!SUPABASE_URL || !SERVICE_ROLE) {
     return res.status(500).json({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" });
   }
+  if (!await requireAdmin(req, res, { write: req.method === "POST" })) return;
   if (req.method === "GET") {
     const path = typeof req.query.path === "string" ? req.query.path : "";
     const requestedBucket = typeof req.query.bucket === "string" ? req.query.bucket : undefined;
-    if (!path) {
-      return res.status(400).json({ error: "Missing path" });
+    if (!path || path.length > 500 || path.startsWith("/") || path.split("/").includes("..")) {
+      return res.status(400).json({ error: "Invalid path" });
     }
 
     try {
@@ -55,12 +58,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "POST") {
     const { companyId, entityType, filename, contentType, dataBase64 } = req.body || {};
-    if (!companyId || !filename || !dataBase64) {
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+    const safeFilename = typeof filename === "string" && /^[a-zA-Z0-9._-]{1,120}$/.test(filename) ? filename : "";
+    const isUuid = typeof companyId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(companyId);
+    if (!isUuid || !safeFilename || typeof dataBase64 !== "string") {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+    if (typeof contentType !== "string" || !allowedTypes.has(contentType)) {
+      return res.status(415).json({ error: "Unsupported image type" });
+    }
+    if (dataBase64.length > 4_200_000) {
+      return res.status(413).json({ error: "Image is too large" });
     }
 
     const folder = entityType === "groups" ? "groups" : "companies";
-    const path = `${folder}/${companyId}/${filename}`;
+    const path = `${folder}/${companyId}/${safeFilename}`;
     const buffer = Buffer.from(dataBase64, "base64");
 
     try {

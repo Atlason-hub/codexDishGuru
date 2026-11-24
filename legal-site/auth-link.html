@@ -128,6 +128,7 @@
         const params = new URLSearchParams(window.location.search);
         const tokenHash = params.get('token_hash');
         const redirectTo = params.get('redirect_to');
+        const safeRedirectTo = redirectTo?.startsWith('dishguru://auth-callback') ? redirectTo : null;
         const type = params.get('type');
         const button = document.getElementById('continueButton');
         const errorBox = document.getElementById('errorBox');
@@ -138,7 +139,7 @@
             errorBox.style.display = 'block';
         };
 
-        if (tokenHash && redirectTo && type) {
+        if (tokenHash && safeRedirectTo && type) {
             button.disabled = false;
             button.addEventListener('click', async () => {
                 button.disabled = true;
@@ -162,14 +163,14 @@
                 if (!session) {
                     successBox.style.display = 'block';
                     if (type === 'email') {
-                        window.location.href = `${redirectTo}#type=${encodeURIComponent(type)}&confirmed=1`;
+                        window.location.href = `${safeRedirectTo}#type=${encodeURIComponent(type)}&confirmed=1`;
                         return;
                     }
-                    window.location.href = redirectTo;
+                    window.location.href = safeRedirectTo;
                     return;
                 }
 
-                const deepLink = `${redirectTo}#access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}&type=${encodeURIComponent(type)}`;
+                const deepLink = `${safeRedirectTo}#access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}&type=${encodeURIComponent(type)}`;
                 successBox.style.display = 'block';
                 window.location.href = deepLink;
             });
