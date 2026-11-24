@@ -161,24 +161,6 @@ export default function HomeAuthView({
                 </Pressable>
               </View>
             </View>
-            <View style={styles.fieldGroup}>
-              <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
-                {t('authGroupCode')}
-              </Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={styles.inputField}
-                  autoCapitalize="characters"
-                  value={groupCode}
-                  onChangeText={onGroupCodeChange}
-                  placeholder={t('authGroupCodeOptional')}
-                  textAlign="left"
-                  autoCorrect={false}
-                  selectionColor={theme.colors.accent}
-                  cursorColor={theme.colors.accent}
-                />
-              </View>
-            </View>
             {showSignup ? (
               <View style={styles.fieldGroup}>
                 <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
@@ -191,8 +173,7 @@ export default function HomeAuthView({
                     secureTextEntry={!showConfirmPass}
                     value={confirmPass}
                     onChangeText={onConfirmPassChange}
-                    returnKeyType="go"
-                    onSubmitEditing={onSignUp}
+                    returnKeyType="next"
                     textAlign="left"
                     selectionColor={theme.colors.accent}
                     cursorColor={theme.colors.accent}
@@ -204,6 +185,28 @@ export default function HomeAuthView({
                       color={theme.colors.textMuted}
                     />
                   </Pressable>
+                </View>
+              </View>
+            ) : null}
+            {showSignup ? (
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, !isRTL && styles.fieldLabelLtr]}>
+                  {t('authGroupCode')}
+                </Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.inputField}
+                    autoCapitalize="characters"
+                    value={groupCode}
+                    onChangeText={onGroupCodeChange}
+                    placeholder={t('authGroupCodeOptional')}
+                    textAlign="left"
+                    autoCorrect={false}
+                    returnKeyType="go"
+                    onSubmitEditing={onSignUp}
+                    selectionColor={theme.colors.accent}
+                    cursorColor={theme.colors.accent}
+                  />
                 </View>
               </View>
             ) : null}
