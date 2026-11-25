@@ -334,6 +334,7 @@ function RestaurantAccordionItem({
       <Pressable
         style={({ pressed }) => [
           styles.restaurantCard,
+          expanded && styles.restaurantCardExpanded,
           !isRTL && styles.restaurantCardLtr,
           pressed && styles.restaurantCardPressed,
         ]}
@@ -347,13 +348,13 @@ function RestaurantAccordionItem({
             {group.items.length} {t('homeTabDishes')} • {ratedCount} {t('restaurantWithReviews')}
           </Text>
         </View>
-        <View style={styles.restaurantCardChevron}>
+        <View style={[styles.restaurantCardChevron, expanded && styles.restaurantCardChevronExpanded]}>
           <SectionChevron collapsed={!expanded} />
         </View>
       </Pressable>
 
       {expanded ? (
-        <View style={styles.restaurantPanel}>
+        <View style={[styles.restaurantPanel, !isRTL && styles.restaurantPanelLtr]}>
           {loading && menuCategories.length === 0 ? (
             <RestaurantScreenSkeleton />
           ) : error ? (
@@ -693,7 +694,7 @@ const styles = StyleSheet.create({
     marginBottom: -1,
   },
   accordionWrap: {
-    gap: 10,
+    gap: 0,
   },
   restaurantSeparator: {
     marginTop: 14,
@@ -705,13 +706,20 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(217, 193, 170, 0.72)',
-    backgroundColor: 'rgba(255, 250, 246, 0.96)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: 'rgba(255, 250, 246, 0.98)',
+    paddingHorizontal: 17,
+    paddingVertical: 16,
     shadowColor: '#9a6b3f',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04,
     shadowRadius: 16,
+  },
+  restaurantCardExpanded: {
+    borderColor: 'rgba(200, 79, 24, 0.48)',
+    backgroundColor: 'rgba(255, 246, 237, 1)',
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 2,
   },
   restaurantCardLtr: {
     flexDirection: 'row',
@@ -727,8 +735,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   restaurantCardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 19,
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',
   },
@@ -736,8 +744,8 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   restaurantCardMeta: {
-    marginTop: 4,
-    fontSize: 12,
+    marginTop: 5,
+    fontSize: 11,
     color: theme.colors.textMuted,
     textAlign: 'right',
   },
@@ -745,23 +753,45 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   restaurantCardChevron: {
-    width: 28,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(200, 79, 24, 0.08)',
+  },
+  restaurantCardChevronExpanded: {
+    backgroundColor: 'rgba(200, 79, 24, 0.16)',
   },
   restaurantPanel: {
-    paddingTop: 2,
+    marginTop: 8,
+    marginHorizontal: 9,
+    paddingTop: 12,
+    paddingBottom: 14,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.5)',
+    borderRightWidth: 3,
+    borderRightColor: 'rgba(200, 79, 24, 0.42)',
+    backgroundColor: 'rgba(255, 252, 248, 0.72)',
+  },
+  restaurantPanelLtr: {
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(219, 197, 176, 0.5)',
+    borderLeftWidth: 3,
+    borderLeftColor: 'rgba(200, 79, 24, 0.42)',
   },
   panelRows: {
-    gap: 14,
+    gap: 9,
   },
   panelControlsRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     alignSelf: 'flex-end',
     gap: 8,
-    marginBottom: 4,
-    paddingHorizontal: 6,
+    marginBottom: 2,
+    paddingHorizontal: 2,
   },
   panelControlsRowLtr: {
     flexDirection: 'row',
@@ -791,22 +821,23 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
   },
   sectionHeader: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(219, 197, 176, 0.60)',
-    backgroundColor: 'rgba(255, 250, 245, 0.92)',
+    borderRadius: 10,
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(219, 197, 176, 0.72)',
+    backgroundColor: 'rgba(251, 235, 220, 0.72)',
   },
   sectionHeaderLtr: {
     flexDirection: 'row',
   },
   sectionHeaderText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontFamily: theme.typography.bold,
     color: theme.colors.accent,
     textAlign: 'right',
   },
@@ -816,12 +847,13 @@ const styles = StyleSheet.create({
   dishCard: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 12,
-    padding: 12,
+    gap: 10,
+    padding: 10,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 14,
-    backgroundColor: theme.colors.card,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    marginHorizontal: 4,
   },
   dishCardLtr: {
     flexDirection: 'row',
@@ -834,8 +866,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   dishName: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontFamily: theme.typography.semibold,
     color: theme.colors.text,
     textAlign: 'right',
     marginBottom: 6,
@@ -915,9 +947,9 @@ const styles = StyleSheet.create({
     minWidth: 48,
   },
   imageWrap: {
-    width: 110,
-    height: 76,
-    borderRadius: 12,
+    width: 96,
+    height: 70,
+    borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: theme.colors.cardAlt,
     borderWidth: 1,

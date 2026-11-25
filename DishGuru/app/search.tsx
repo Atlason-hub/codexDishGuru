@@ -721,6 +721,7 @@ export default function SearchScreen() {
         <View style={styles.titleWrap}>
           <Text style={[styles.titleText, !isRTL && styles.titleTextLtr]}>{t('searchTitle')}</Text>
         </View>
+        <View style={[styles.searchCard, !isRTL && styles.searchCardLtr]}>
         <View style={[styles.modeRow, !isRTL && styles.modeRowLtr]}>
         <Pressable
           style={[styles.modeButton, mode === 'api' && styles.modeButtonActive]}
@@ -750,22 +751,27 @@ export default function SearchScreen() {
             setRestaurantDropdownOpen((prev) => !prev);
           }}
         >
-          <Text
-            style={[
-              styles.dropdownText,
-              !isRTL && styles.dropdownTextLtr,
-              !restaurantQuery.trim() && !selectedApiRestaurantName && styles.dropdownPlaceholder,
-            ]}
-          >
-            {mode === 'api'
-              ? ((selectedApiRestaurantName ?? restaurantQuery.trim()) || t('searchChooseRestaurant'))
-              : restaurantQuery.trim() || t('searchChooseRestaurant')}
-          </Text>
+          <View style={[styles.dropdownTitleWrap, !isRTL && styles.dropdownTitleWrapLtr]}>
+            <View style={[styles.dropdownTypeIcon, Boolean(restaurantQuery.trim() || selectedApiRestaurantName) && styles.dropdownTypeIconSelected]}>
+              <Ionicons name="restaurant-outline" size={17} color={theme.colors.accent} />
+            </View>
+            <Text
+              style={[
+                styles.dropdownText,
+                !isRTL && styles.dropdownTextLtr,
+                !restaurantQuery.trim() && !selectedApiRestaurantName && styles.dropdownPlaceholder,
+              ]}
+            >
+              {mode === 'api'
+                ? ((selectedApiRestaurantName ?? restaurantQuery.trim()) || t('searchChooseRestaurant'))
+                : restaurantQuery.trim() || t('searchChooseRestaurant')}
+            </Text>
+          </View>
           <View style={styles.chevronCircle}>
             <Ionicons
               name={restaurantDropdownOpen ? 'chevron-up' : 'chevron-down'}
               size={16}
-              color="theme.colors.accent"
+              color={theme.colors.accent}
             />
           </View>
         </Pressable>
@@ -940,25 +946,30 @@ export default function SearchScreen() {
           }}
           disabled={mode === 'api' && !selectedApiRestaurantId}
         >
-          <Text
-            style={[
-              styles.dropdownText,
-              !isRTL && styles.dropdownTextLtr,
-              !dishQuery.trim() && styles.dropdownPlaceholder,
-            ]}
-          >
-            {dishQuery.trim() ||
-              (mode === 'api'
-                ? !selectedApiRestaurantId
-                  ? t('searchChooseRestaurantFirst')
-                  : t('searchDishPrompt')
-                : t('searchDishPrompt'))}
-          </Text>
+          <View style={[styles.dropdownTitleWrap, !isRTL && styles.dropdownTitleWrapLtr]}>
+            <View style={[styles.dropdownTypeIcon, Boolean(dishQuery.trim()) && styles.dropdownTypeIconSelected]}>
+              <Ionicons name="fast-food-outline" size={17} color={theme.colors.accent} />
+            </View>
+            <Text
+              style={[
+                styles.dropdownText,
+                !isRTL && styles.dropdownTextLtr,
+                !dishQuery.trim() && styles.dropdownPlaceholder,
+              ]}
+            >
+              {dishQuery.trim() ||
+                (mode === 'api'
+                  ? !selectedApiRestaurantId
+                    ? t('searchChooseRestaurantFirst')
+                    : t('searchDishPrompt')
+                  : t('searchDishPrompt'))}
+            </Text>
+          </View>
           <View style={styles.chevronCircle}>
             <Ionicons
               name={dishDropdownOpen ? 'chevron-up' : 'chevron-down'}
               size={16}
-              color="theme.colors.accent"
+              color={theme.colors.accent}
             />
           </View>
         </Pressable>
@@ -1210,6 +1221,7 @@ export default function SearchScreen() {
           </View>
         ) : null}
       </View>
+      </View>
 
       {headerText && !restaurantDropdownOpen && !dishDropdownOpen ? (
         <View style={styles.resultsHeaderWrap}>
@@ -1274,76 +1286,126 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   titleWrap: {
-    marginTop: 8,
-    marginBottom: 10,
-    paddingHorizontal: 4,
+    marginTop: 10,
+    marginBottom: 12,
+    paddingHorizontal: 2,
   },
   titleText: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 22,
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',
   },
   titleTextLtr: {
     textAlign: 'left',
   },
+  searchCard: {
+    width: '100%',
+    padding: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.58)',
+    borderRightWidth: 3,
+    borderRightColor: 'rgba(200, 79, 24, 0.42)',
+    backgroundColor: 'rgba(255, 252, 248, 0.76)',
+    gap: 8,
+  },
+  searchCardLtr: {
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(219, 197, 176, 0.58)',
+    borderLeftWidth: 3,
+    borderLeftColor: 'rgba(200, 79, 24, 0.42)',
+  },
   dropdownContainer: {
     width: '100%',
-    marginTop: 10,
+    borderRadius: 13,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   dropdownHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.card,
+    minHeight: 58,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.7)',
+    borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.96)',
   },
   dropdownHeaderLtr: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
   },
   dropdownText: {
-    fontSize: 18,
+    fontSize: 15,
+    fontFamily: theme.typography.semibold,
     color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
-    marginRight: 8,
   },
   dropdownTextLtr: {
     textAlign: 'left',
-    marginRight: 0,
-    marginLeft: 8,
+  },
+  dropdownTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dropdownTitleWrapLtr: {
+    flexDirection: 'row',
+  },
+  dropdownTypeIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(200, 79, 24, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(200, 79, 24, 0.14)',
+  },
+  dropdownTypeIconSelected: {
+    backgroundColor: 'rgba(200, 79, 24, 0.16)',
+    borderColor: 'rgba(200, 79, 24, 0.28)',
   },
   dropdownPlaceholder: {
     color: theme.colors.textMuted,
   },
   chevronCircle: {
-    height: 28,
-    width: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.accent,
+    height: 32,
+    width: 32,
+    borderRadius: 16,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(200, 79, 24, 0.1)',
   },
   searchRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 6,
+    height: 36,
+    margin: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    backgroundColor: theme.colors.cardAlt,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: theme.colors.border,
   },
   searchRowLtr: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
+    height: 28,
+    paddingVertical: 0,
     color: theme.colors.text,
     textAlign: 'right',
   },
@@ -1357,32 +1419,38 @@ const styles = StyleSheet.create({
   modeRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    alignSelf: 'flex-end',
-    gap: 8,
-    marginTop: 6,
-    marginBottom: 16,
+    alignSelf: 'stretch',
+    gap: 4,
+    marginTop: 0,
+    marginBottom: 2,
+    padding: 4,
+    borderRadius: 13,
+    backgroundColor: 'rgba(236, 229, 220, 0.88)',
   },
   modeRowLtr: {
     flexDirection: 'row',
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
   },
   modeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.30)',
-    backgroundColor: 'rgba(255,248,242,0.70)',
-    minWidth: 104,
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   modeButtonActive: {
-    borderColor: 'rgba(244,135,34,0.40)',
-    backgroundColor: 'rgba(255,241,224,0.96)',
+    backgroundColor: '#ffffff',
+    shadowColor: '#75452d',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 1,
   },
   modeText: {
-    fontSize: 10,
+    fontSize: 11,
     color: theme.colors.textMuted,
     fontFamily: theme.typography.semibold,
   },
@@ -1406,9 +1474,9 @@ const styles = StyleSheet.create({
   dropdownList: {
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 12,
-    backgroundColor: theme.colors.card,
-    marginTop: 10,
+    borderRadius: 13,
+    backgroundColor: '#ffffff',
+    marginTop: 6,
     overflow: 'hidden',
   },
   dropdownControlsRow: {
@@ -1416,8 +1484,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     alignSelf: 'flex-end',
-    paddingHorizontal: 6,
-    paddingTop: 6,
+    paddingHorizontal: 8,
+    paddingTop: 3,
     paddingBottom: 4,
     backgroundColor: theme.colors.card,
   },
@@ -1449,7 +1517,7 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
   },
   dropdownItem: {
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
@@ -1463,9 +1531,9 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   categoryHeader: {
-    paddingVertical: 8,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    backgroundColor: theme.colors.cardAlt,
+    backgroundColor: 'rgba(251, 235, 220, 0.72)',
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     flexDirection: 'row-reverse',
@@ -1476,9 +1544,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   categoryHeaderText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontFamily: theme.typography.bold,
+    color: theme.colors.accent,
     textAlign: 'right',
   },
   categoryHeaderTextLtr: {
@@ -1531,10 +1599,10 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: theme.colors.cardAlt,
-    marginTop: 12,
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: 'rgba(255, 252, 248, 0.86)',
+    marginTop: 14,
   },
   listContent: {
     paddingBottom: 120,

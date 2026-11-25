@@ -333,8 +333,8 @@ export default function CameraDetailsScreen() {
   const [collapsedRestaurantCategories, setCollapsedRestaurantCategories] = useState<Set<string>>(
     () => new Set()
   );
-  const [tastyScore, setTastyScore] = useState(hasTastyScoreParam ? tastyScoreParam : 2.5);
-  const [fillingScore, setFillingScore] = useState(hasFillingScoreParam ? fillingScoreParam : 2.5);
+  const [tastyScore, setTastyScore] = useState(hasTastyScoreParam ? tastyScoreParam : 0);
+  const [fillingScore, setFillingScore] = useState(hasFillingScoreParam ? fillingScoreParam : 0);
   const [reviewText, setReviewText] = useState(reviewTextParam);
   const [saving, setSaving] = useState(false);
   const [storedImageUrl, setStoredImageUrl] = useState<string | null>(defaultImageUrl);
@@ -348,8 +348,9 @@ export default function CameraDetailsScreen() {
   const typedRestaurantName = search.trim();
   const typedDishName = dishSearch.trim();
   const hasDisplayImage = Boolean(photoUri || storedImageUrl);
+  const hasRequiredRatings = tastyScore > 0 && fillingScore > 0;
   const canFinalizeSave =
-    hasDisplayImage && Boolean(selectedName?.trim() && selectedDish?.name.trim());
+    hasDisplayImage && Boolean(selectedName?.trim() && selectedDish?.name.trim()) && hasRequiredRatings;
   const canSaveDraft = hasDisplayImage && !disableDrafts;
   const pickerOpen = dropdownOpen || dishDropdownOpen;
 
@@ -715,6 +716,10 @@ export default function CameraDetailsScreen() {
       showAppAlert(t('cameraMissingDishTitle'), t('cameraChooseDish'));
       return;
     }
+    if (!hasRequiredRatings) {
+      showAppAlert(t('cameraMissingRatingTitle'), t('cameraChooseRatings'));
+      return;
+    }
     try {
       saveInFlightRef.current = true;
       setSaving(true);
@@ -919,14 +924,15 @@ export default function CameraDetailsScreen() {
           }}
         />
 
+        <View style={[styles.associationCard, !isRTL && styles.associationCardLtr]}>
         <View
-          style={styles.dropdownContainer}
+          style={[styles.dropdownContainer, styles.associationField]}
           onLayout={(event) => {
             restaurantDropdownYRef.current = event.nativeEvent.layout.y;
           }}
         >
           <Pressable
-            style={[styles.dropdownHeader, lockSelection && styles.dropdownHeaderLocked]}
+            style={[styles.dropdownHeader, !isRTL && styles.dropdownHeaderLtr, lockSelection && styles.dropdownHeaderLocked]}
             onPress={() => {
               if (lockSelection) return;
               Keyboard.dismiss();
@@ -938,15 +944,20 @@ export default function CameraDetailsScreen() {
             }}
             disabled={loading || lockSelection}
           >
-            <Text style={[styles.dropdownText, !selectedName && styles.dropdownPlaceholder]}>
-              {loading ? t('cameraLoadingRestaurants') : selectedName ?? t('searchChooseRestaurant')}
-            </Text>
+            <View style={[styles.dropdownTitleWrap, !isRTL && styles.dropdownTitleWrapLtr]}>
+              <View style={[styles.dropdownTypeIcon, selectedName && styles.dropdownTypeIconSelected]}>
+                <Ionicons name="restaurant-outline" size={17} color={theme.colors.accent} />
+              </View>
+              <Text style={[styles.dropdownText, !selectedName && styles.dropdownPlaceholder]}>
+                {loading ? t('cameraLoadingRestaurants') : selectedName ?? t('searchChooseRestaurant')}
+              </Text>
+            </View>
             {!lockSelection ? (
               <View style={styles.chevronCircle}>
                 <Ionicons
                   name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
                   size={16}
-                  color="theme.colors.accent"
+                  color={theme.colors.accent}
                 />
               </View>
             ) : null}
@@ -1105,13 +1116,13 @@ export default function CameraDetailsScreen() {
         </View>
 
         <View
-          style={styles.dropdownContainer}
+          style={[styles.dropdownContainer, styles.associationField, styles.associationFieldLast]}
           onLayout={(event) => {
             dishDropdownYRef.current = event.nativeEvent.layout.y;
           }}
         >
           <Pressable
-            style={[styles.dropdownHeader, lockSelection && styles.dropdownHeaderLocked]}
+            style={[styles.dropdownHeader, !isRTL && styles.dropdownHeaderLtr, lockSelection && styles.dropdownHeaderLocked]}
             onPress={() => {
               if (lockSelection) return;
               Keyboard.dismiss();
@@ -1120,17 +1131,22 @@ export default function CameraDetailsScreen() {
             }}
             disabled={loading || !selectedRestaurantId || lockSelection}
           >
-            <Text style={[styles.dropdownText, !selectedDish && styles.dropdownPlaceholder]}>
-              {!selectedRestaurantId
-                ? t('cameraChooseRestaurantFirst')
-                : selectedDish?.name ?? t('searchDishPrompt')}
-            </Text>
+            <View style={[styles.dropdownTitleWrap, !isRTL && styles.dropdownTitleWrapLtr]}>
+              <View style={[styles.dropdownTypeIcon, selectedDish && styles.dropdownTypeIconSelected]}>
+                <Ionicons name="fast-food-outline" size={17} color={theme.colors.accent} />
+              </View>
+              <Text style={[styles.dropdownText, !selectedDish && styles.dropdownPlaceholder]}>
+                {!selectedRestaurantId
+                  ? t('cameraChooseRestaurantFirst')
+                  : selectedDish?.name ?? t('searchDishPrompt')}
+              </Text>
+            </View>
             {!lockSelection ? (
               <View style={styles.chevronCircle}>
                 <Ionicons
                   name={dishDropdownOpen ? 'chevron-up' : 'chevron-down'}
                   size={16}
-                  color="theme.colors.accent"
+                  color={theme.colors.accent}
                 />
               </View>
             ) : null}
@@ -1281,8 +1297,12 @@ export default function CameraDetailsScreen() {
             </View>
           )}
         </View>
+        </View>
 
-        <Text style={[styles.ratingHeader, !isRTL && styles.ratingHeaderLtr]}>{t('cameraRateDish')}</Text>
+        <View style={styles.ratingCard}>
+        <Text style={[styles.ratingHeader, !isRTL && styles.ratingHeaderLtr]}>
+          {t('cameraRateDish')} <Text style={styles.requiredMark}>*</Text>
+        </Text>
         <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
           <View style={[styles.sliderLabelRow, !isRTL && styles.sliderLabelRowLtr]}>
             <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
@@ -1298,6 +1318,7 @@ export default function CameraDetailsScreen() {
           <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
             <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={38} />
           </View>
+        </View>
         </View>
 
         </Pressable>
@@ -1334,7 +1355,7 @@ export default function CameraDetailsScreen() {
           disabled={saving || saveInFlightRef.current || !canFinalizeSave}
         >
           {saving ? (
-            <ActivityIndicator color={theme.colors.accent} />
+            <ActivityIndicator color={theme.colors.white} />
           ) : (
             <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
           )}
@@ -1354,7 +1375,7 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 36,
+    paddingTop: 28,
     gap: 12,
   },
   bodyContent: {
@@ -1362,10 +1383,15 @@ const styles = StyleSheet.create({
   },
   saveFooter: {
     paddingHorizontal: 16,
-    paddingTop: 10,
-    backgroundColor: theme.colors.background,
+    paddingTop: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+    shadowColor: '#5f321e',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 8,
   },
   saveHintText: {
     fontSize: 12,
@@ -1429,30 +1455,37 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 21,
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
   },
   photoRow: {
     alignItems: 'center',
   },
   photo: {
-    width: 260,
-    height: 180,
-    borderRadius: 8,
+    width: '100%',
+    height: 220,
+    borderRadius: 20,
     backgroundColor: theme.colors.cardAlt,
   },
   photoPressable: {
-    width: 260,
-    height: 180,
-    borderRadius: 8,
+    width: '100%',
+    height: 220,
+    borderRadius: 20,
     overflow: 'hidden',
     marginTop: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 193, 170, 0.7)',
+    shadowColor: '#75452d',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 3,
   },
   photoPlaceholder: {
-    width: 260,
-    height: 180,
-    borderRadius: 8,
+    width: '100%',
+    height: 220,
+    borderRadius: 20,
     backgroundColor: theme.colors.cardAlt,
     overflow: 'hidden',
     alignItems: 'center',
@@ -1476,8 +1509,8 @@ const styles = StyleSheet.create({
     right: 0,
     left: 0,
     bottom: 0,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingVertical: 10,
+    backgroundColor: 'rgba(43,25,16,0.68)',
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1496,48 +1529,108 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   reviewInput: {
-    minHeight: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    fontSize: 16,
+    minHeight: 72,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 193, 170, 0.72)',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 252, 248, 0.94)',
+    fontSize: 15,
     color: theme.colors.text,
-    paddingVertical: 6,
-    marginTop: 6,
-    marginBottom: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 10,
+    marginBottom: 6,
+    textAlignVertical: 'top',
+  },
+  associationCard: {
+    width: '100%',
+    marginTop: 4,
+    padding: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.58)',
+    borderRightWidth: 3,
+    borderRightColor: 'rgba(200, 79, 24, 0.42)',
+    backgroundColor: 'rgba(255, 252, 248, 0.76)',
+    gap: 8,
+  },
+  associationCardLtr: {
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(219, 197, 176, 0.58)',
+    borderLeftWidth: 3,
+    borderLeftColor: 'rgba(200, 79, 24, 0.42)',
+  },
+  associationField: {
+    borderRadius: 13,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  associationFieldLast: {
+    marginBottom: 0,
   },
   dropdownContainer: {
     width: '100%',
   },
   dropdownHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.card,
+    minHeight: 58,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.7)',
+    borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+  },
+  dropdownHeaderLtr: {
+    flexDirection: 'row',
   },
   dropdownHeaderLocked: {
     opacity: 0.9,
   },
   dropdownText: {
-    fontSize: 18,
+    fontSize: 15,
+    fontFamily: theme.typography.semibold,
     color: theme.colors.text,
     textAlign: 'right',
     flex: 1,
-    marginRight: 8,
+  },
+  dropdownTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dropdownTitleWrapLtr: {
+    flexDirection: 'row',
+  },
+  dropdownTypeIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(200, 79, 24, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(200, 79, 24, 0.14)',
+  },
+  dropdownTypeIconSelected: {
+    backgroundColor: 'rgba(200, 79, 24, 0.16)',
+    borderColor: 'rgba(200, 79, 24, 0.28)',
   },
   dropdownPlaceholder: {
     color: theme.colors.textMuted,
   },
   dropdownList: {
-    marginTop: 8,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 12,
+    borderRadius: 13,
     maxHeight: 500,
-    backgroundColor: theme.colors.card,
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
   },
   dropdownToolbar: {
     flexDirection: 'row-reverse',
@@ -1727,9 +1820,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   categoryHeader: {
-    paddingVertical: 8,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    backgroundColor: theme.colors.cardAlt,
+    backgroundColor: 'rgba(251, 235, 220, 0.72)',
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     flexDirection: 'row-reverse',
@@ -1737,9 +1830,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   categoryHeaderText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontFamily: theme.typography.bold,
+    color: theme.colors.accent,
     textAlign: 'right',
   },
   categoryChevronCircle: {
@@ -1759,32 +1852,46 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   chevronCircle: {
-    height: 28,
-    width: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.accent,
+    height: 32,
+    width: 32,
+    borderRadius: 16,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(200, 79, 24, 0.1)',
+  },
+  ratingCard: {
+    marginTop: 4,
+    paddingTop: 14,
+    paddingBottom: 8,
+    paddingHorizontal: 13,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.58)',
+    backgroundColor: 'rgba(255, 252, 248, 0.76)',
   },
   ratingHeader: {
-    marginTop: 20,
-    fontSize: 15,
+    marginTop: 0,
+    marginBottom: 8,
+    fontSize: 16,
     color: theme.colors.text,
     textAlign: 'right',
-    fontWeight: '600',
+    fontFamily: theme.typography.bold,
   },
   ratingHeaderLtr: {
     textAlign: 'left',
+  },
+  requiredMark: {
+    color: theme.colors.accent,
   },
   sliderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: Platform.OS === 'ios' ? 4 : 0,
-    marginBottom: 7,
+    marginBottom: 4,
     justifyContent: Platform.OS === 'ios' ? 'flex-start' : 'flex-end',
     width: '100%',
-    paddingRight: Platform.OS === 'ios' ? 20 : 32,
+    paddingRight: Platform.OS === 'ios' ? 6 : 12,
   },
   sliderRowLtr: {
     flexDirection: 'row',
@@ -1813,7 +1920,7 @@ const styles = StyleSheet.create({
     width: Platform.OS === 'ios' ? 74 : 92,
     justifyContent: 'flex-end',
     marginLeft: 2,
-    paddingRight: Platform.OS === 'ios' ? 4 : 20,
+    paddingRight: Platform.OS === 'ios' ? 4 : 8,
     height: 44,
   },
   sliderLabelRowLtr: {
@@ -1842,10 +1949,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF4E8',
+    backgroundColor: theme.colors.accent,
   },
   saveButtonLtr: {
     alignSelf: 'auto',
@@ -1862,8 +1969,8 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 16,
-    color: theme.colors.text,
-    fontWeight: '600',
+    color: theme.colors.white,
+    fontFamily: theme.typography.bold,
   },
   secondarySaveButton: {
     flex: 1,

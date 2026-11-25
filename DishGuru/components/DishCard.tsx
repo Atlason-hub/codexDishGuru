@@ -287,6 +287,8 @@ function DishCard({
           >
             <Pressable
               style={styles.cameraBadgePressable}
+              accessibilityRole="button"
+              accessibilityLabel={isRTL ? 'הוספת תמונה למנה' : 'Add a photo to this dish'}
               hitSlop={10}
               pressRetentionOffset={18}
               onPress={() => {
@@ -296,7 +298,7 @@ function DishCard({
                 }
               }}
             >
-              <Ionicons name="camera" size={18} color={dishActionColor} />
+              <Ionicons name="camera-outline" size={15} color={dishActionColor} />
             </Pressable>
           </Animated.View>
         </View>
@@ -316,6 +318,8 @@ function DishCard({
             <Animated.View style={[styles.heartBadge, { transform: [{ scale: heartScale }] }]}>
               <Pressable
                 style={styles.badgePressable}
+                accessibilityRole="button"
+                accessibilityLabel={isRTL ? 'הוספה למועדפים' : 'Add to favorites'}
                 hitSlop={12}
                 onStartShouldSetResponder={() => true}
                 onStartShouldSetResponderCapture={() => true}
@@ -328,7 +332,7 @@ function DishCard({
               >
                 <Ionicons
                   name={currentItem?.id && favorites[currentItem.id] ? 'heart' : 'heart-outline'}
-                  size={18}
+                  size={15}
                   color={dishActionColor}
                 />
               </Pressable>
@@ -337,13 +341,15 @@ function DishCard({
               <Animated.View style={[styles.editBadge, { transform: [{ scale: editScale }] }]}>
                 <Pressable
                   style={styles.badgePressable}
+                  accessibilityRole="button"
+                  accessibilityLabel={isRTL ? 'עריכת המנה' : 'Edit dish'}
                   hitSlop={12}
                   onPress={() => {
                     onEdit(currentItem);
                     bouncePress(editScale);
                   }}
                 >
-                  <Ionicons name="create-outline" size={18} color={dishActionColor} />
+                  <Ionicons name="create-outline" size={15} color={dishActionColor} />
                 </Pressable>
               </Animated.View>
             ) : null}
@@ -351,6 +357,8 @@ function DishCard({
               <Animated.View style={[styles.trashBadge, { transform: [{ scale: trashScale }] }]}>
                 <Pressable
                   style={styles.badgePressable}
+                  accessibilityRole="button"
+                  accessibilityLabel={isRTL ? 'מחיקת המנה' : 'Delete dish'}
                   hitSlop={12}
                   onPress={() => {
                     if (currentItem) {
@@ -359,7 +367,7 @@ function DishCard({
                     }
                   }}
                 >
-                  <Ionicons name="trash-outline" size={16} color={theme.colors.white} />
+                  <Ionicons name="trash-outline" size={15} color={theme.colors.danger} />
                 </Pressable>
               </Animated.View>
             ) : null}
@@ -381,6 +389,8 @@ function DishCard({
           >
             <Pressable
               style={styles.badgePressable}
+              accessibilityRole="button"
+              accessibilityLabel={isRTL ? 'פרופיל המשתמש' : 'User profile'}
               onPress={() => {
                 if (onAvatarPress) {
                   onAvatarPress(resolvedAvatarUrl ?? null, avatarLabel ?? null);
@@ -411,6 +421,8 @@ function DishCard({
             >
               <Pressable
                 style={styles.badgePressable}
+                accessibilityRole="button"
+                accessibilityLabel={isRTL ? 'דיווח על המנה' : 'Report dish'}
                 onPress={() => {
                   if (currentItem) {
                     onReport?.(currentItem);
@@ -418,7 +430,7 @@ function DishCard({
                   }
                 }}
               >
-                <Ionicons name="flag-outline" size={16} color={dishActionColor} />
+                <Ionicons name="flag-outline" size={14} color={dishActionColor} />
               </Pressable>
             </Animated.View>
           ) : null}
@@ -757,18 +769,18 @@ const styles = StyleSheet.create({
   },
   leftButtonStack: {
     position: 'absolute',
-    top: 54,
-    width: 36,
-    height: 220,
+    top: 92,
+    width: 32,
+    height: 116,
     justifyContent: 'flex-start',
     alignItems: 'center',
     zIndex: 6,
   },
   cameraTapTarget: {
     position: 'absolute',
-    top: 44,
-    width: 64,
-    height: 64,
+    top: 50,
+    width: 54,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 11,
@@ -781,21 +793,26 @@ const styles = StyleSheet.create({
     right: 0,
   },
   overlayActionStackRtl: {
-    left: 12,
+    left: 11,
   },
   overlayActionStackLtr: {
-    right: 12,
+    right: 11,
   },
   cameraBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.52)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
+    shadowColor: '#52210f',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   },
   badgePressable: {
     width: '100%',
@@ -809,33 +826,43 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
+    borderRadius: 16,
   },
   heartBadge: {
     position: 'absolute',
-    top: 54,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    top: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.52)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
+    shadowColor: '#321b10',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   },
   editBadge: {
     position: 'absolute',
-    top: 108,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    top: 42,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.52)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
+    shadowColor: '#321b10',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   },
   imageDateText: {
     position: 'absolute',
@@ -844,9 +871,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: dishActionColor,
     fontFamily: theme.typography.bold,
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.30)',
+    borderColor: 'rgba(255,255,255,0.64)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 15,
@@ -867,13 +894,18 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     zIndex: 7,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.34)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.78)',
+    shadowColor: '#321b10',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   avatarBadgeRtl: {
     right: 16,
@@ -884,12 +916,12 @@ const styles = StyleSheet.create({
   reportBadge: {
     position: 'absolute',
     bottom: 52,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.52)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 7,
@@ -906,14 +938,21 @@ const styles = StyleSheet.create({
   },
   trashBadge: {
     position: 'absolute',
-    top: 162,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: dishActionColor,
+    top: 84,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.52)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
+    shadowColor: '#321b10',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   },
   imageTextBlock: {
     position: 'absolute',

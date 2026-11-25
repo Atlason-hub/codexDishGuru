@@ -60,6 +60,7 @@ export default function EditDishScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const hasRequiredRatings = tastyScore > 0 && fillingScore > 0;
 
   const decodedPhotoUri = useMemo(() => {
     if (!photoUriParam) return '';
@@ -135,6 +136,10 @@ export default function EditDishScreen() {
 
   const handleSave = async () => {
     if (!dish || !associationId) return;
+    if (!hasRequiredRatings) {
+      showAppAlert(t('cameraMissingRatingTitle'), t('cameraChooseRatings'));
+      return;
+    }
     const { data: authData, error: authError } = await supabase.auth.getUser();
     const authenticatedUserId = authData.user?.id ?? null;
     if (authError || !authenticatedUserId) {
@@ -380,13 +385,16 @@ export default function EditDishScreen() {
               }}
             />
 
-            <Text style={[styles.ratingHeader, !isRTL && styles.ratingHeaderLtr]}>{t('cameraRateDish')}</Text>
+            <View style={styles.ratingCard}>
+            <Text style={[styles.ratingHeader, !isRTL && styles.ratingHeaderLtr]}>
+              {t('cameraRateDish')}
+            </Text>
             <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
               <View style={[styles.sliderLabelRow, !isRTL && styles.sliderLabelRowLtr]}>
                 <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingTasty')}</Text>
               </View>
               <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
-                <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={44} />
+                <EmojiRatingInput value={tastyScore} onChange={setTastyScore} size={38} />
               </View>
             </View>
             <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
@@ -394,25 +402,36 @@ export default function EditDishScreen() {
                 <Text style={[styles.sliderText, !isRTL && styles.sliderTextLtr]}>{t('ratingSize')}</Text>
               </View>
               <View style={[styles.starInputWrap, !isRTL && styles.starInputWrapLtr]}>
-                <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={44} />
+                <EmojiRatingInput value={fillingScore} onChange={setFillingScore} size={38} />
               </View>
             </View>
-
-            <Pressable
-              style={[styles.saveButton, !isRTL && styles.saveButtonLtr]}
-              onPress={handleSave}
-              hitSlop={8}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color={theme.colors.accent} />
-              ) : (
-                <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
-              )}
-            </Pressable>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {keyboardInset === 0 ? (
+        <View style={styles.saveFooter}>
+          {!hasRequiredRatings ? (
+            <Text style={styles.saveHintText}>{t('cameraChooseRatings')}</Text>
+          ) : null}
+          <Pressable
+            style={({ pressed }) => [
+              styles.saveButton,
+              pressed && !saving && hasRequiredRatings && styles.saveButtonPressed,
+              (saving || !hasRequiredRatings) && styles.saveButtonDisabled,
+            ]}
+            onPress={handleSave}
+            hitSlop={8}
+            disabled={saving || !hasRequiredRatings}
+          >
+            {saving ? (
+              <ActivityIndicator color={theme.colors.white} />
+            ) : (
+              <Text style={styles.saveButtonText}>{t('commonSave')}</Text>
+            )}
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -441,10 +460,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.card,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
     zIndex: 10,
     elevation: 10,
   },
@@ -488,8 +507,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontFamily: theme.typography.bold,
     color: theme.colors.text,
     textAlign: 'right',
   },
@@ -497,8 +516,8 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   headerSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
+    marginTop: 3,
+    fontSize: 11,
     color: theme.colors.textMuted,
     textAlign: 'right',
   },
@@ -507,8 +526,8 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 16,
-    paddingTop: 72,
-    gap: 12,
+    paddingTop: 82,
+    gap: 14,
   },
   bodyKeyboardAvoiding: {
     flex: 1,
@@ -518,15 +537,22 @@ const styles = StyleSheet.create({
   },
   bodyScrollContent: {
     flexGrow: 1,
-    paddingBottom: 28,
+    paddingBottom: 24,
   },
   photoPressable: {
-    width: 260,
-    height: 180,
-    borderRadius: 10,
+    width: '100%',
+    height: 220,
+    borderRadius: 20,
     overflow: 'hidden',
     alignSelf: 'center',
     marginTop: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 193, 170, 0.7)',
+    shadowColor: '#75452d',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 3,
   },
   photo: {
     width: '100%',
@@ -548,8 +574,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 32,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    height: 42,
+    backgroundColor: 'rgba(43,25,16,0.68)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -561,21 +587,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   input: {
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    paddingVertical: 10,
-    fontSize: 14,
+    minHeight: 82,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 193, 170, 0.72)',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 252, 248, 0.94)',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
     color: theme.colors.text,
     textAlign: 'right',
-    minHeight: 90,
+    textAlignVertical: 'top',
+  },
+  ratingCard: {
+    paddingTop: 14,
+    paddingBottom: 8,
+    paddingHorizontal: 13,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 197, 176, 0.58)',
+    backgroundColor: 'rgba(255, 252, 248, 0.76)',
   },
   ratingHeader: {
-    marginTop: 28,
-    marginBottom: 6,
+    marginTop: 0,
+    marginBottom: 8,
     fontSize: 16,
     color: theme.colors.text,
     textAlign: 'right',
-    fontWeight: '600',
+    fontFamily: theme.typography.bold,
   },
   ratingHeaderLtr: {
     textAlign: 'left',
@@ -583,10 +622,10 @@ const styles = StyleSheet.create({
   sliderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: Platform.OS === 'ios' ? 16 : 2,
+    gap: Platform.OS === 'ios' ? 6 : 0,
     justifyContent: 'flex-start',
     width: '100%',
-    paddingRight: Platform.OS === 'ios' ? 0 : 6,
+    paddingRight: Platform.OS === 'ios' ? 6 : 12,
   },
   sliderRowLtr: {
     flexDirection: 'row',
@@ -596,7 +635,6 @@ const styles = StyleSheet.create({
   },
   starInputWrap: {
     flex: 0,
-    width: 230,
     alignItems: 'flex-end',
     marginRight: 0,
   },
@@ -610,8 +648,8 @@ const styles = StyleSheet.create({
   sliderLabelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    width: 64,
-    justifyContent: 'flex-start',
+    width: 70,
+    justifyContent: 'flex-end',
     marginLeft: Platform.OS === 'ios' ? 0 : 2,
     paddingRight: 0,
     height: 44,
@@ -623,7 +661,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   sliderText: {
-    fontSize: 14,
+    fontSize: 12,
     color: theme.colors.textMuted,
     textAlign: 'right',
     lineHeight: 44,
@@ -632,21 +670,46 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   saveButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 24,
+    width: '100%',
+    minHeight: 48,
+    paddingHorizontal: 28,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.accent,
-    zIndex: 10,
-    marginTop: 24,
-  },
-  saveButtonLtr: {
-    alignSelf: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.accent,
   },
   saveButtonText: {
-    color: theme.colors.accent,
-    fontSize: 14,
-    fontWeight: '700',
+    color: theme.colors.white,
+    fontSize: 16,
+    fontFamily: theme.typography.bold,
+  },
+  saveButtonPressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.99 }],
+  },
+  saveButtonDisabled: {
+    opacity: 0.55,
+  },
+  saveFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    shadowColor: '#5f321e',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  saveHintText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 8,
   },
 });

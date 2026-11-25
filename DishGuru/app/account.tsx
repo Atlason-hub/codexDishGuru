@@ -51,7 +51,8 @@ const extractAvatarStoragePath = (rawUrl: string | null | undefined) => {
 
 export default function AccountScreen() {
   const FRAME_SIZE = 148;
-  const MIN_ZOOM = 1.28;
+  // Start at the widest crop that still fully covers the circular avatar frame.
+  const MIN_ZOOM = 1;
   const MAX_ZOOM = 5;
 
   const router = useRouter();
