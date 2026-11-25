@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabase';
 import { theme } from '../../lib/theme';
 import { scoreToStars, starsToScore } from '../../lib/ratings';
 import EmojiRatingInput from '../../components/EmojiRatingInput';
+import AppHeader from '../../components/AppHeader';
 import { showAppAlert } from '../../lib/appDialog';
 import { useLocale } from '../../lib/locale';
 import {
@@ -835,6 +836,7 @@ export default function CameraDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['left', 'right', 'bottom']}>
+      <AppHeader />
       <ScrollView
         ref={scrollRef}
         style={styles.body}
@@ -1301,7 +1303,8 @@ export default function CameraDetailsScreen() {
 
         <View style={styles.ratingCard}>
         <Text style={[styles.ratingHeader, !isRTL && styles.ratingHeaderLtr]}>
-          {t('cameraRateDish')} <Text style={styles.requiredMark}>*</Text>
+          {t('cameraRateDish')}
+          {!hasRequiredRatings ? <Text style={styles.requiredMark}> *</Text> : null}
         </Text>
         <View style={[styles.sliderRow, !isRTL && styles.sliderRowLtr]}>
           <View style={[styles.sliderLabelRow, !isRTL && styles.sliderLabelRowLtr]}>
@@ -1375,7 +1378,7 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 28,
+    paddingTop: 0,
     gap: 12,
   },
   bodyContent: {
@@ -1428,7 +1431,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 6,
-    marginTop: 14,
+    marginTop: 8,
     marginBottom: 10,
   },
   backButton: {

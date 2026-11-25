@@ -24,6 +24,7 @@ import EmojiRatingInput from '../components/EmojiRatingInput';
 import { showAppAlert } from '../lib/appDialog';
 import { getImageContentType, loadImageBytesFromUri } from '../lib/localImage';
 import { useLocale } from '../lib/locale';
+import AppHeader from '../components/AppHeader';
 
 type DishAssociation = {
   id: string;
@@ -255,6 +256,7 @@ export default function EditDishScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <AppHeader />
       <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]} pointerEvents="box-none">
         <View style={styles.backButtonWrap}>
           <Pressable
@@ -452,10 +454,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   headerRow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -464,8 +462,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    zIndex: 10,
-    elevation: 10,
   },
   headerRowLtr: {
     flexDirection: 'row-reverse',
@@ -526,7 +522,7 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 16,
-    paddingTop: 82,
+    paddingTop: 16,
     gap: 14,
   },
   bodyKeyboardAvoiding: {
