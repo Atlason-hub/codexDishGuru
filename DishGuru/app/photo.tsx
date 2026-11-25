@@ -118,7 +118,7 @@ export default function PhotoScreen() {
   }, [id]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <View style={styles.headerRow}>
         <Pressable
           style={styles.backButton}

@@ -297,6 +297,18 @@ export const fetchOrderVendorForUser = async (userId: string) => {
   if (cached.hit) {
     return cached.value;
   }
+  const { data: profile } = await supabase
+    .from('AppUsers')
+    .select('order_vendor_override')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const override = profile?.order_vendor_override ?? null;
+  if (override) {
+    orderVendorCache.set(userId, writeTimedCache(override));
+    return override;
+  }
   const companyId = await fetchCompanyIdForUser(userId);
   if (!companyId) {
     return null;
@@ -312,6 +324,35 @@ export const fetchOrderVendorForUser = async (userId: string) => {
   const orderVendor = company?.order_vendor ?? null;
   orderVendorCache.set(userId, writeTimedCache(orderVendor));
   return orderVendor;
+};
+
+export type OrderVendorSettings = {
+  eligible: boolean;
+  groupDefault: string | null;
+  userOverride: string | null;
+  effectiveVendor: string | null;
+};
+
+export const fetchMyOrderVendorSettings = async (): Promise<OrderVendorSettings> => {
+  const { data, error } = await supabase.rpc('get_my_order_vendor_settings');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    eligible: Boolean(row?.eligible),
+    groupDefault: row?.group_default ?? null,
+    userOverride: row?.user_override ?? null,
+    effectiveVendor: row?.effective_vendor ?? null,
+  };
+};
+
+export const setMyOrderVendorOverride = async (vendor: string | null) => {
+  const { data, error } = await supabase.rpc('set_my_order_vendor_override', {
+    p_vendor: vendor,
+  });
+  if (error) throw error;
+  const user = await getCurrentAuthUser();
+  if (user?.id) orderVendorCache.delete(user.id);
+  return typeof data === 'string' ? data : null;
 };
 
 export const fetchGlobalCompanyContext = async () => {

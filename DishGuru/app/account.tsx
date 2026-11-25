@@ -29,6 +29,11 @@ import { setGuestModeEnabled } from '../lib/guestMode';
 import { publishAvatarUpdate, subscribeAvatarUpdates } from '../lib/avatarEvents';
 import { setPendingLocalLogout } from '../lib/logoutGate';
 import { clearUserSessionArtifacts } from '../lib/sessionCleanup';
+import {
+  fetchMyOrderVendorSettings,
+  setMyOrderVendorOverride,
+} from '../lib/appData';
+import { loadSessionCompanyLogo } from '../lib/logo';
 
 const extractAvatarStoragePath = (rawUrl: string | null | undefined) => {
   if (!rawUrl) return null;
@@ -66,6 +71,10 @@ export default function AccountScreen() {
   const [saving, setSaving] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [redirectingOut, setRedirectingOut] = useState(false);
+  const [vendorEligible, setVendorEligible] = useState(false);
+  const [groupDefaultVendor, setGroupDefaultVendor] = useState<string | null>(null);
+  const [vendorOverride, setVendorOverride] = useState<string | null>(null);
+  const [savingVendor, setSavingVendor] = useState(false);
   const [pendingAsset, setPendingAsset] = useState<{
     uri: string;
     width: number;
@@ -95,7 +104,7 @@ export default function AccountScreen() {
     y: Math.min(maxOffsetY, Math.max(-maxOffsetY, value.y)),
   });
 
-  const getErrorMessage = (error: unknown) => {
+  const getErrorMessage = useCallback((error: unknown) => {
     if (error instanceof Error) return error.message;
     if (error && typeof error === 'object') {
       const maybeMessage = (error as { message?: unknown }).message;
@@ -108,7 +117,39 @@ export default function AccountScreen() {
     }
     if (typeof error === 'string' && error.trim()) return error;
     return t('commonUnexpectedError');
-  };
+  }, [t]);
+
+  const loadVendorSettings = useCallback(async () => {
+    try {
+      const settings = await fetchMyOrderVendorSettings();
+      setVendorEligible(settings.eligible);
+      setGroupDefaultVendor(settings.groupDefault);
+      setVendorOverride(settings.userOverride);
+    } catch (error) {
+      console.warn('[account] order vendor settings failed', error);
+      setVendorEligible(false);
+    }
+  }, []);
+
+  const chooseVendor = useCallback(async (nextVendor: string | null) => {
+    if (savingVendor || nextVendor === vendorOverride) return;
+    const previousVendor = vendorOverride;
+    setVendorOverride(nextVendor);
+    setSavingVendor(true);
+    try {
+      await setMyOrderVendorOverride(nextVendor);
+      const userId = currentUserId ?? authUserIdRef.current;
+      if (userId) {
+        await loadSessionCompanyLogo(userId, email, { forceRefresh: true });
+      }
+      showAppAlert(t('accountOrderVendorSavedTitle'), t('accountOrderVendorSavedMessage'));
+    } catch (error) {
+      setVendorOverride(previousVendor);
+      showAppAlert(t('accountOrderVendorSaveFailed'), getErrorMessage(error));
+    } finally {
+      setSavingVendor(false);
+    }
+  }, [currentUserId, email, getErrorMessage, savingVendor, t, vendorOverride]);
 
   const syncAuthAvatarMetadata = useCallback(async (nextAvatarUrl: string | null) => {
     const { error } = await supabase.auth.updateUser({
@@ -323,6 +364,7 @@ export default function AccountScreen() {
       setEmail(authUser.email ?? session.user?.email ?? null);
       setCurrentUserId(authUser.id ?? null);
       authUserIdRef.current = authUser.id ?? null;
+      void loadVendorSettings();
       const resolvedAvatar = await hydrateAvatarForUser(
         authUser.id,
         (authUser.user_metadata as any)?.avatar_url ?? null
@@ -363,6 +405,7 @@ export default function AccountScreen() {
       setEmail(authUser.email ?? null);
       setCurrentUserId(authUser.id);
       authUserIdRef.current = authUser.id;
+      void loadVendorSettings();
 
       // Supabase warns against awaiting auth methods from inside this callback.
       // Defer profile hydration so token refreshes cannot deadlock avatar saving.
@@ -390,7 +433,7 @@ export default function AccountScreen() {
       subscription.subscription.unsubscribe();
       unsubscribeAvatarUpdates();
     };
-  }, [routeToLoggedOutHome, syncAuthAvatarMetadata]);
+  }, [loadVendorSettings, routeToLoggedOutHome, syncAuthAvatarMetadata]);
 
   if (redirectingOut) {
     return <View style={styles.redirectPlaceholder} />;
@@ -431,6 +474,54 @@ export default function AccountScreen() {
             <Text style={[styles.emailLabel, !isRTL && styles.emailLabelLtr]}>{t('accountEmailLabel')}</Text>
             <Text style={styles.emailValue}>{email ?? ''}</Text>
           </View>
+
+          {vendorEligible ? (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.vendorSection}>
+                <View style={[styles.vendorHeadingRow, !isRTL && styles.vendorHeadingRowLtr]}>
+                  <Ionicons name="bag-handle-outline" size={17} color={theme.colors.accent} />
+                  <View style={styles.vendorHeadingCopy}>
+                    <Text style={[styles.vendorTitle, !isRTL && styles.vendorTitleLtr]}>
+                      {t('accountOrderVendorTitle')}
+                    </Text>
+                    <Text style={[styles.vendorDescription, !isRTL && styles.vendorDescriptionLtr]}>
+                      {t('accountOrderVendorDescription')}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.vendorOptions, !isRTL && styles.vendorOptionsLtr]}>
+                  {[
+                    { value: null, label: `${t('accountOrderVendorDefault')} (${groupDefaultVendor ?? t('accountOrderVendorNone')})` },
+                    { value: '10bis', label: '10bis' },
+                    { value: 'Cibus', label: 'Cibus' },
+                    { value: 'Wolt', label: 'Wolt' },
+                  ].map((option) => {
+                    const selected = vendorOverride === option.value;
+                    return (
+                      <Pressable
+                        key={option.value ?? 'default'}
+                        style={[
+                          styles.vendorChip,
+                          selected && styles.vendorChipActive,
+                          savingVendor && styles.vendorChipDisabled,
+                        ]}
+                        disabled={savingVendor}
+                        onPress={() => void chooseVendor(option.value)}
+                      >
+                        {selected ? (
+                          <Ionicons name="checkmark-circle" size={15} color={theme.colors.accent} />
+                        ) : null}
+                        <Text style={[styles.vendorChipText, selected && styles.vendorChipTextActive]}>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </>
+          ) : null}
 
           <View style={styles.divider} />
 
@@ -974,6 +1065,76 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   languageChipTextActive: {
+    color: theme.colors.accent,
+  },
+  vendorSection: {
+    width: '100%',
+    paddingHorizontal: 12,
+    paddingBottom: 9,
+    gap: 9,
+  },
+  vendorHeadingRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  vendorHeadingRowLtr: {
+    flexDirection: 'row',
+  },
+  vendorHeadingCopy: {
+    flex: 1,
+  },
+  vendorTitle: {
+    color: theme.colors.text,
+    fontFamily: theme.typography.semibold,
+    fontSize: 13,
+    textAlign: 'right',
+  },
+  vendorTitleLtr: {
+    textAlign: 'left',
+  },
+  vendorDescription: {
+    marginTop: 2,
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  vendorDescriptionLtr: {
+    textAlign: 'left',
+  },
+  vendorOptions: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  vendorOptionsLtr: {
+    flexDirection: 'row',
+  },
+  vendorChip: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardAlt,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  vendorChipActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
+  vendorChipDisabled: {
+    opacity: 0.55,
+  },
+  vendorChipText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontFamily: theme.typography.medium,
+  },
+  vendorChipTextActive: {
     color: theme.colors.accent,
   },
   avatarSection: {

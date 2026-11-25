@@ -745,7 +745,7 @@ export default function DishScreen() {
   const headerRestaurantTarget =
     dishAssociations.find((item) => item.restaurant_id || item.restaurant_name) ?? null;
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
           style={styles.backButton}

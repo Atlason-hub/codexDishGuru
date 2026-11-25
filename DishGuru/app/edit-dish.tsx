@@ -255,7 +255,7 @@ export default function EditDishScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <AppHeader />
       <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]} pointerEvents="box-none">
         <View style={styles.backButtonWrap}>

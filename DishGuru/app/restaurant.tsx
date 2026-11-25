@@ -387,7 +387,7 @@ export default function RestaurantScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <View style={[styles.headerRow, !isRTL && styles.headerRowLtr]}>
         <Pressable
           style={styles.backButton}
@@ -403,7 +403,7 @@ export default function RestaurantScreen() {
         <Ionicons name="search" size={16} color={theme.colors.accent} />
         <TextInput
           style={styles.searchInput}
-          placeholder={t('homeSearchPlaceholder')}
+          placeholder={t('restaurantDishSearchPlaceholder')}
           placeholderTextColor={theme.colors.textMuted}
           value={dishSearch}
           onChangeText={setDishSearch}

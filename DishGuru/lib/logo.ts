@@ -230,14 +230,18 @@ export const resolveCompanyLogoForUser = async (
 
   const { data: profile } = await supabase
     .from('AppUsers')
-    .select('group_id,company_id')
+    .select('group_id,company_id,order_vendor_override')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   const groupId = profile?.group_id ?? null;
   if (groupId) {
-    return toCompanyLogo(await fetchCompanyById(groupId), email, 'company_id', groupId);
+    const groupLogo = await toCompanyLogo(await fetchCompanyById(groupId), email, 'company_id', groupId);
+    return {
+      ...groupLogo,
+      orderVendor: profile?.order_vendor_override ?? groupLogo.orderVendor,
+    };
   }
 
   const domain = getEmailDomain(email);

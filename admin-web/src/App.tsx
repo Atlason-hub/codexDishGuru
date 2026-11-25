@@ -28,7 +28,6 @@ import { deleteDishReport, fetchDishReports } from "./dishReportsApi";
 import type { DishReportItem } from "./dishReportsApi";
 import GroupsPage from "./GroupsPage";
 import ErrorMonitoringPage from "./ErrorMonitoringPage";
-import HomePrototype from "./HomePrototype";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -1639,7 +1638,6 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/prototype/home" element={<HomePrototype />} />
         <Route
           path="/*"
           element={

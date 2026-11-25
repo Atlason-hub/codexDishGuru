@@ -923,7 +923,7 @@ export default function HomeScreen() {
         let bootstrapCompanyLogoPath: string | null = null;
         let bootstrapOrderVendor: string | null = null;
         const groupLookup = await withTimeout(
-          (async () => await supabase.from('AppUsers').select('group_id').eq('user_id', userId).not('group_id', 'is', null).order('updated_at', { ascending: false }).limit(1).maybeSingle())(),
+          (async () => await supabase.from('AppUsers').select('group_id,order_vendor_override').eq('user_id', userId).not('group_id', 'is', null).order('updated_at', { ascending: false }).limit(1).maybeSingle())(),
           2000,
           { data: null, error: null } as any
         );
@@ -933,7 +933,7 @@ export default function HomeScreen() {
           primeCompanyIdForUser(userId, savedGroupId);
           const bootstrapGroup = await withTimeout(fetchBootstrapCompanyById(savedGroupId, accessToken), HOME_FEED_COMPANY_LOOKUP_TIMEOUT_MS, null);
           bootstrapCompanyLogoPath = bootstrapGroup?.logo_url ?? null;
-          bootstrapOrderVendor = bootstrapGroup?.order_vendor ?? null;
+          bootstrapOrderVendor = groupLookup.data?.order_vendor_override ?? bootstrapGroup?.order_vendor ?? null;
           setCompanyLogoPath(bootstrapCompanyLogoPath);
           setCompanyLogoUrl(resolveLogoUrl(bootstrapCompanyLogoPath));
           setOrderVendor(bootstrapOrderVendor);
@@ -960,7 +960,7 @@ export default function HomeScreen() {
             (async () =>
               await supabase
                 .from('AppUsers')
-                .select('group_id,company_id')
+                .select('group_id,company_id,order_vendor_override')
                 .or(`user_id.eq.${userId},email.ilike.${(emailAddress ?? '').trim().toLowerCase()}`)
                 .order('updated_at', { ascending: false })
                 .limit(1)
@@ -978,7 +978,7 @@ export default function HomeScreen() {
               null
             );
             bootstrapCompanyLogoPath = bootstrapCompany?.logo_url ?? null;
-            bootstrapOrderVendor = bootstrapCompany?.order_vendor ?? null;
+            bootstrapOrderVendor = appUserLookup.data?.order_vendor_override ?? bootstrapCompany?.order_vendor ?? null;
             setCompanyLogoPath(bootstrapCompanyLogoPath);
             setCompanyLogoUrl(resolveLogoUrl(bootstrapCompanyLogoPath));
             setOrderVendor(bootstrapOrderVendor);
@@ -1584,10 +1584,19 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!currentUserId || !hasLoaded) return;
+      void loadSessionCompanyLogo(currentUserId, currentUserEmail ?? null, { forceRefresh: true })
+        .then((resolvedLogo) => {
+          setCompanyLogoUrl(resolvedLogo.logoUrl);
+          setCompanyLogoPath(resolvedLogo.logoPath);
+          setOrderVendor(resolvedLogo.orderVendor);
+        })
+        .catch((brandingError) => {
+          console.warn('[home] focus branding refresh failed', brandingError);
+        });
       void refreshContent().catch((refreshError) => {
         console.warn('[home] focus refresh failed', refreshError);
       });
-    }, [currentUserId, hasLoaded, refreshContent])
+    }, [currentUserEmail, currentUserId, hasLoaded, refreshContent])
   );
 
   useEffect(() => {
