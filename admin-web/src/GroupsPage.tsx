@@ -8,6 +8,7 @@ import { apiFetch } from "./apiClient";
 
 const makeCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 const makeKey = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+const normalizeAddressValue = (value: string) => value.trim().toLocaleLowerCase();
 
 export default function GroupsPage() {
   const { confirmPassword } = useAuth();
@@ -63,17 +64,43 @@ export default function GroupsPage() {
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!name.trim() || !joinCode.trim() || !cityId || !streetId || !street.trim() || !number.trim()) {
-      setError("Complete all fields and select the city and street from the suggestions.");
+    if (!name.trim() || !joinCode.trim() || !cityName.trim() || !street.trim() || !number.trim()) {
+      setError("Complete all required fields.");
       return;
     }
     setSaving(true); setError(null);
     const id = editingId ?? crypto.randomUUID();
     try {
+      let resolvedCityId = cityId;
+      if (!resolvedCityId) {
+        const candidates = await searchCities(cityName.trim());
+        const exact = candidates.find(
+          (city) => normalizeAddressValue(city.Name) === normalizeAddressValue(cityName)
+        );
+        resolvedCityId = exact?.Id ?? null;
+        if (resolvedCityId) setCityId(resolvedCityId);
+      }
+      if (!resolvedCityId) {
+        throw new Error("Select a city from the suggestions.");
+      }
+
+      let resolvedStreetId = streetId;
+      if (!resolvedStreetId) {
+        const candidates = await searchStreets(street.trim(), resolvedCityId);
+        const exact = candidates.find(
+          (candidate) => normalizeAddressValue(candidate.Name) === normalizeAddressValue(street)
+        );
+        resolvedStreetId = exact?.Id ?? null;
+        if (resolvedStreetId) setStreetId(resolvedStreetId);
+      }
+      if (!resolvedStreetId) {
+        throw new Error("Select a street from the suggestions.");
+      }
+
       const finalLogo = logoFile ? await uploadGroupLogo(id, logoFile) : logoUrl;
       const group: Group = {
         id, groupKey, name: name.trim(), joinCode: joinCode.trim().toUpperCase(), usersCount: groups.find((g) => g.id === id)?.usersCount ?? 0,
-        orderVendor, cityId, cityName: cityName.trim(), streetId, street: street.trim(), number: number.trim(), logoUrl: finalLogo
+        orderVendor, cityId: resolvedCityId, cityName: cityName.trim(), streetId: resolvedStreetId, street: street.trim(), number: number.trim(), logoUrl: finalLogo
       };
       setGroups(editingId ? await updateGroup(id, group) : await createGroup(group));
       reset();
